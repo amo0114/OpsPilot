@@ -3,13 +3,13 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。依赖全部 DONE 才 READY；FROZEN 只表示规格定稿，不表示任务完成。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-25（TASK-001）
+> 最近更新：2026-09-25（TASK-002 提交）
 
 | Task | 名称 | 状态 | 交付定位 | 验证摘要 |
 |---|---|---|---|---|
-| TASK-001 | 导入已合并 Frozen Spec 并验证仓库落位 | DONE | 未提交（main 尚无 commit）：交付包文件原样落位；另有本轮授权修改 AGENTS.md、CLAUDE.md，新增 docs/dev/PROGRESS.md、docs/dev/CURRENT.md | 2026-09-25 实测：SHA256SUMS 16/16 字节与哈希一致（改 AGENTS/CLAUDE 前，`sha256sum -c` exit 0；此后这两份按授权修改，与清单不同属预期）；链接 506 个 0 缺失、Manifest § 引用 95 个 0 未解析；TASK 001～109 唯一有序，前置依赖按 068→074～076→067→069 顺序 0 违例；Manifest 与 00～09 均 FROZEN/0.1；Incident 8 状态与 7 能力跨文件一致；4 类旧规则只以禁止语句出现；无 archive/旧补丁/业务代码 |
-| TASK-002 | 创建 Monorepo 工程骨架 | READY | — | NOT RUN |
-| TASK-003 | 建立工程约束 | TODO | — | NOT RUN |
+| TASK-001 | 导入已合并 Frozen Spec 并验证仓库落位 | DONE | commit 758d127（交付包原样落位＋授权修改 AGENTS.md、CLAUDE.md＋docs/dev 两份进度文件） | 2026-09-25 实测：SHA256SUMS 16/16 字节与哈希一致（改 AGENTS/CLAUDE 前，`sha256sum -c` exit 0；此后这两份按授权修改，与清单不同属预期）；链接 506 个 0 缺失、Manifest § 引用 95 个 0 未解析；TASK 001～109 唯一有序，前置依赖按 068→074～076→067→069 顺序 0 违例；Manifest 与 00～09 均 FROZEN/0.1；Incident 8 状态与 7 能力跨文件一致；4 类旧规则只以禁止语句出现；无 archive/旧补丁/业务代码 |
+| TASK-002 | 创建 Monorepo 工程骨架 | DONE | TASK-002 commit（紧随 758d127）：.gitignore；backend/（父 POM＋5 Module＋mvnw 3.9.16）；ai-runtime/（uv＋FastAPI health，uv.lock 按 pypi.org 生成）；web/（npm＋Vite React TS 壳）；contracts/ai-runtime/v1、deploy、scripts 占位 | 独立 Review：PASS AFTER PATCH → 复核 PASS（P1-01 uv.lock 规范索引、P1-02 .env 忽略均关闭；mvnw.cmd NOT VERIFIED）。2026-09-25 修复后实测：backend `./mvnw -B clean verify` exit 0，boot jar `/actuator/health` 200 UP；ai-runtime 清除 UV_/PIP_ 索引变量后 `uv sync --locked`、`ruff format --check`、`ruff check`、`pytest`（1 passed）exit 0，uvicorn `/internal/v1/health` 200；web `npm ci`、`typecheck`、`build` exit 0；`git check-ignore` 根及 ai-runtime/backend/web 的 .env 均忽略 |
+| TASK-003 | 建立工程约束 | READY | — | NOT RUN |
 | TASK-004 | 建立配置与错误模型基础 | TODO | — | NOT RUN |
 | TASK-005 | 创建系统接入数据库结构 | TODO | — | NOT RUN |
 | TASK-006 | 实现 ManagedSystem / ManagedResource 领域模型 | TODO | — | NOT RUN |
@@ -122,4 +122,5 @@
 | 发现 | 位置 | 影响与建议 | 所属 |
 |---|---|---|---|
 | 07 §120 与 TASK-003 红线中“不增加数据库核心表”“不引入新框架/依赖解决局部问题”“不允许通用 updateStatus”在 AGENTS.md 无逐字条目 | AGENTS.md；07 §120；08 TASK-003 | 现有“唯一转换入口”“禁止扩大范围”只部分覆盖；TASK-003 编码红线时逐条核对补齐，本轮未改 | TASK-003 |
-| 用户放入的 Windows 下载元数据文件，未被 Git 忽略 | OpsPilot-START-HERE.md:Zone.Identifier | 非交付包内容；提交时建议不纳入，是否删除由用户决定 | 用户 |
+| 用户放入的 Windows 下载元数据文件 | OpsPilot-START-HERE.md:Zone.Identifier | TASK-002 的 .gitignore 已忽略 `*:Zone.Identifier`；文件本身未删，是否删除由用户决定 | 用户 |
+| Boot 4.1.1 父 POM 默认 java.version=17，本工程覆盖为 21；尚无 Enforcer/Spotless 阻止改回 | backend/pom.xml | 按 08 由 TASK-003 加 Enforcer（Java/Maven 版本、依赖收敛）与 Spotless | TASK-003 |

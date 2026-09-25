@@ -1,0 +1,9 @@
+spring:
+  application:
+    name: opspilot-server
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

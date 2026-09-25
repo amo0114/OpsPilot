@@ -1,0 +1,21 @@
+# Local environment / secrets (any directory)
+.env
+.env.*
+!.env.example
+
+# Java
+target/
+
+# Python
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+
+# Web
+node_modules/
+dist/
+
+# Windows download metadata
+*:Zone.Identifier
+.ace-tool/
