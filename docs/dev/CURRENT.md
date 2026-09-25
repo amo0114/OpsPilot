@@ -1,31 +1,28 @@
 # 当前工作
 
 更新时间：2026-09-26（本地）
-仓库/分支：/root/projects/OpsPilot-V0.1-IMPLEMENTATION，main；HEAD d68c953（TASK-002）；无 remote
-当前任务：TASK-003 DONE（独立 Review PASS，已提交）；TASK-004 READY，未开始
-任务内位置：等待用户指示开始 TASK-004
-本轮允许修改：backend/pom.xml、backend/opspilot-web/pom.xml、AGENTS.md、docs/dev/
-本轮明确不做：MyBatis/Flyway/MySQL 进入模块（TASK-005/007，按用户确认方案）；ErrorCode/配置（TASK-004）；业务代码与表
+仓库/分支：/root/projects/OpsPilot-V0.1-IMPLEMENTATION，main；HEAD 04560f9（TASK-003）；无 remote
+当前任务：TASK-004 DONE（独立 Review 复核 PASS，已提交）；TASK-005 READY，未开始
+任务内位置：等待用户指示开始 TASK-005
+本轮允许修改：backend 五模块中错误/请求标识/配置基础代码及 POM、docs/dev/
+本轮明确不做：具体 Incident/System 等业务错误码与异常；具体 @ConfigurationProperties 类；成功响应包络（首个产品 API 的 Task 建）；数据库
 
 已完成：
-- 父 POM Enforcer 3.6.3（validate）：JDK [21,22)；maven.compiler.release=21（java.version 会被 JVM 系统属性遮蔽，故检查实际编译目标）；Maven [3.9,)；dependencyConvergence；banDynamicVersions（忽略本工程 SNAPSHOT）；bannedDependencies（07 §6：MyBatis-Plus、Hibernate ORM/JPA、Lombok、Spring Cloud/Nacos、Kafka/RabbitMQ、Quartz、Batch、StateMachine、Modulith、Spring Data Elasticsearch、MCP SDK；保留 hibernate-validator）
-- Spotless 3.10.2＋palantir-java-format 2.99.0，verify 阶段 check
-- dependencyManagement：mybatis 3.5.19、mybatis-spring 4.1.0、mybatis-spring-boot-starter 4.1.0、springdoc-openapi-starter-webmvc-api 3.1.1；Flyway 12.4.0、mysql-connector-j 9.7.0 沿用 Boot 4.1.1 BOM
-- opspilot-web 加 springdoc-openapi-starter-webmvc-api（无 UI）
-- AGENTS.md 硬边界补 5 行：Specs 优先、不改 8 状态/无通用 updateStatus、不加核心表、不为局部问题加依赖、完成即验证且不跳过门禁
+- domain.error：ErrorCategory（8 类语义，不含 HTTP）；ErrorCode（REQUEST_VALIDATION_FAILED、RESOURCE_NOT_FOUND、兜底 INTERNAL_ERROR，带面向用户的固定文案）；OpsPilotException（code＋不可变 details）；DomainException
+- application：ApplicationException（可携带 cause，作基础设施错误翻译目标）；Correlation（MDC correlationId、newId()＝corr_＋32hex、可恢复先前值的 Scope，供后台 Worker 使用）；POM 加 slf4j-api
+- web：RequestIdFilter（最高优先级；合法 X-Request-Id 沿用，缺失或非法生成 req_＋32hex；写响应头、MDC requestId，且作为 correlationId）；ApiExceptionHandler（OpsPilotException 按 05 §94 类别→HTTP；未预期异常→500 INTERNAL_ERROR；MVC 标准异常保留状态、替换为 05 §9 包络；message 只用固定文案；日志只记 code/status、requestId、异常链类型＋首个栈帧，不记 message/cause 文本）；POM 加 spring-boot-starter-validation、spring-boot-starter-webmvc-test(test)
+- boot：@ConfigurationPropertiesScan；logging.pattern.correlation 输出 [requestId correlationId]
 
-已执行验证（2026-09-26，WSL，JDK 21.0.10，mvnw 3.9.16，基线 d68c953＋未提交工作树）：见 PROGRESS TASK-003 行（clean verify exit 0；JDK 11、java.version=17、未格式化文件三项负向均 BUILD FAILURE；探针验证 banned/dynamic 规则与数据访问依赖解析收敛；health 200 UP；/v3/api-docs 200）
-- 探针 `mvnw install` 把本工程 0.1.0-SNAPSHOT 装入本机 ~/.m2（仅本地缓存）；探针目录已删除
+已执行验证：见 PROGRESS TASK-004 行（clean verify exit 0、10 个契约测试含 3 个日志不泄露断言、变异检查、构建输出敏感串 0 命中、boot jar 冒烟）
+未执行验证：具体配置类绑定（尚无配置类）NOT RUN；Windows mvnw.cmd NOT RUN
 
-未执行验证：Windows 原生 mvnw.cmd：NOT RUN；真实 MySQL 连接/Flyway 迁移：NOT RUN（TASK-005 范围）
-
-未提交修改：无（TASK-003 已提交；按用户要求 .gitignore 的 `.claude` 规则并入同一提交）
+未提交修改：无（TASK-004 已提交）
 当前阻塞：无
 
 下一步具体动作：
-1. TASK-004：ErrorCode、DomainException/ApplicationException、API Error Mapping、@ConfigurationProperties、RequestId/CorrelationId
+1. TASK-005 创建系统接入数据库结构（届时加入 MyBatis/Flyway/MySQL 驱动，需要可用 MySQL）
 
-本任务需要读取的规格章节（TASK-004）：08 TASK-004；07 §88～§90、§98～§99、§103～§105；05 错误响应章节
+本任务需要读取的规格章节（TASK-005）：08 TASK-005；04 系统接入相关表；07 §91～§93
 
 后续 UI 约定（TASK-096/099 实施）：
 - 底座 React＋TypeScript＋Vite＋Tailwind CSS＋shadcn/ui；Motion 仅在需要布局动画时引入；单一图标库；单一锁文件（npm）
