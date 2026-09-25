@@ -28,10 +28,38 @@
     <properties>
         <java.version>21</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <!-- 07 §5：MyBatis Core 3.x / MyBatis-Spring 4.x / starter 4.x 是三个不同组件 -->
+        <mybatis.version>3.5.19</mybatis.version>
+        <mybatis-spring.version>4.1.0</mybatis-spring.version>
+        <mybatis-spring-boot.version>4.1.0</mybatis-spring-boot.version>
+        <springdoc.version>3.1.1</springdoc.version>
+        <spotless.version>3.10.2</spotless.version>
+        <palantir-java-format.version>2.99.0</palantir-java-format.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>org.mybatis</groupId>
+                <artifactId>mybatis</artifactId>
+                <version>${mybatis.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.mybatis</groupId>
+                <artifactId>mybatis-spring</artifactId>
+                <version>${mybatis-spring.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.mybatis.spring.boot</groupId>
+                <artifactId>mybatis-spring-boot-starter</artifactId>
+                <version>${mybatis-spring-boot.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.springdoc</groupId>
+                <artifactId>springdoc-openapi-starter-webmvc-api</artifactId>
+                <version>${springdoc.version}</version>
+            </dependency>
             <dependency>
                 <groupId>io.github.ismoyuan.opspilot</groupId>
                 <artifactId>opspilot-domain</artifactId>
@@ -54,4 +82,88 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>enforce-engineering-baseline</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <requireJavaVersion>
+                                    <version>[21,22)</version>
+                                    <message>OpsPilot 构建必须使用 JDK 21（07 §5、§118）</message>
+                                </requireJavaVersion>
+                                <requireProperty>
+                                    <property>maven.compiler.release</property>
+                                    <regex>21</regex>
+                                    <regexMessage>编译目标必须为 Java 21，不得修改 java.version（07 §118）</regexMessage>
+                                </requireProperty>
+                                <requireMavenVersion>
+                                    <version>[3.9,)</version>
+                                    <message>使用 backend/mvnw（Maven 3.9+，07 §5）</message>
+                                </requireMavenVersion>
+                                <dependencyConvergence/>
+                                <banDynamicVersions>
+                                    <ignores>
+                                        <ignore>io.github.ismoyuan.opspilot:*</ignore>
+                                    </ignores>
+                                </banDynamicVersions>
+                                <bannedDependencies>
+                                    <message>07 §6 明确排除的技术不得引入</message>
+                                    <excludes>
+                                        <exclude>com.baomidou</exclude>
+                                        <exclude>org.hibernate.orm</exclude>
+                                        <exclude>org.hibernate:hibernate-core</exclude>
+                                        <exclude>jakarta.persistence</exclude>
+                                        <exclude>org.projectlombok</exclude>
+                                        <exclude>org.springframework.cloud</exclude>
+                                        <exclude>com.alibaba.cloud</exclude>
+                                        <exclude>com.alibaba.nacos</exclude>
+                                        <exclude>org.apache.kafka</exclude>
+                                        <exclude>org.springframework.kafka</exclude>
+                                        <exclude>com.rabbitmq</exclude>
+                                        <exclude>org.springframework.amqp</exclude>
+                                        <exclude>org.quartz-scheduler</exclude>
+                                        <exclude>org.springframework.batch</exclude>
+                                        <exclude>org.springframework.statemachine</exclude>
+                                        <exclude>org.springframework.modulith</exclude>
+                                        <exclude>org.springframework.data:spring-data-elasticsearch</exclude>
+                                        <exclude>io.modelcontextprotocol.sdk</exclude>
+                                    </excludes>
+                                </bannedDependencies>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>com.diffplug.spotless</groupId>
+                <artifactId>spotless-maven-plugin</artifactId>
+                <version>${spotless.version}</version>
+                <configuration>
+                    <java>
+                        <palantirJavaFormat>
+                            <version>${palantir-java-format.version}</version>
+                        </palantirJavaFormat>
+                    </java>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>check-format</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 </project>

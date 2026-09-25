@@ -36,6 +36,11 @@ Evidence关系不可变；Diagnosis版本化；不得复制Observation绕过关�
 CHANGE不重放；只有受控只读reconciliation有界重试。
 Recovery采用FAILED优先的三值矩阵，不调用AI。
 Ground Truth不得进入调查请求或目标业务日志流。
+Frozen Specs优先于代码；代码与规格冲突时不得用代码改写需求。
+不修改Incident 8个状态；不允许通用updateStatus或绕过转换入口的CRUD状态更新。
+不增加数据库核心表，除非Task明确要求。
+不引入新框架/依赖解决局部问题，除非Task明确要求；新增前回答07 §125三问。
+每个Task完成后运行其对应验证；不得用-Denforcer.skip、-Dspotless.check.skip等跳过工程门禁。
 
 ## 必须保护的组合规则
 

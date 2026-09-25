@@ -3,14 +3,14 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。依赖全部 DONE 才 READY；FROZEN 只表示规格定稿，不表示任务完成。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-25（TASK-002 提交）
+> 最近更新：2026-09-26（TASK-003 提交）
 
 | Task | 名称 | 状态 | 交付定位 | 验证摘要 |
 |---|---|---|---|---|
 | TASK-001 | 导入已合并 Frozen Spec 并验证仓库落位 | DONE | commit 758d127（交付包原样落位＋授权修改 AGENTS.md、CLAUDE.md＋docs/dev 两份进度文件） | 2026-09-25 实测：SHA256SUMS 16/16 字节与哈希一致（改 AGENTS/CLAUDE 前，`sha256sum -c` exit 0；此后这两份按授权修改，与清单不同属预期）；链接 506 个 0 缺失、Manifest § 引用 95 个 0 未解析；TASK 001～109 唯一有序，前置依赖按 068→074～076→067→069 顺序 0 违例；Manifest 与 00～09 均 FROZEN/0.1；Incident 8 状态与 7 能力跨文件一致；4 类旧规则只以禁止语句出现；无 archive/旧补丁/业务代码 |
 | TASK-002 | 创建 Monorepo 工程骨架 | DONE | TASK-002 commit（紧随 758d127）：.gitignore；backend/（父 POM＋5 Module＋mvnw 3.9.16）；ai-runtime/（uv＋FastAPI health，uv.lock 按 pypi.org 生成）；web/（npm＋Vite React TS 壳）；contracts/ai-runtime/v1、deploy、scripts 占位 | 独立 Review：PASS AFTER PATCH → 复核 PASS（P1-01 uv.lock 规范索引、P1-02 .env 忽略均关闭；mvnw.cmd NOT VERIFIED）。2026-09-25 修复后实测：backend `./mvnw -B clean verify` exit 0，boot jar `/actuator/health` 200 UP；ai-runtime 清除 UV_/PIP_ 索引变量后 `uv sync --locked`、`ruff format --check`、`ruff check`、`pytest`（1 passed）exit 0，uvicorn `/internal/v1/health` 200；web `npm ci`、`typecheck`、`build` exit 0；`git check-ignore` 根及 ai-runtime/backend/web 的 .env 均忽略 |
-| TASK-003 | 建立工程约束 | READY | — | NOT RUN |
-| TASK-004 | 建立配置与错误模型基础 | TODO | — | NOT RUN |
+| TASK-003 | 建立工程约束 | DONE | TASK-003 commit（紧随 d68c953；同提交含用户的 .gitignore `.claude` 规则）：backend/pom.xml（Enforcer＋Spotless＋版本锁定）；backend/opspilot-web/pom.xml（springdoc）；AGENTS.md（补 07 §120 红线） | 独立 Review PASS（mvnw.cmd、真实 MySQL/Flyway NOT VERIFIED）。2026-09-26 实测：`./mvnw -B clean verify` exit 0（6 条 Enforcer 规则＋6 模块 spotless:check 通过）；负向：JDK 11 → RequireJavaVersion BUILD FAILURE exit 1；POM java.version=17 → RequireProperty(maven.compiler.release) BUILD FAILURE exit 1（已还原）；未格式化 Java → spotless:check BUILD FAILURE exit 1（已删除）；仓库外临时探针：lombok → BannedDependencies 失败，[3.0,) → BanDynamicVersions 失败；MyBatis 3.5.19/MyBatis-Spring 4.1.0/starter 4.1.0、Flyway 12.4.0＋flyway-mysql、mysql-connector-j 9.7.0 与 springdoc 同时解析且收敛通过；boot jar `/actuator/health` 200 UP，`/v3/api-docs` 200 openapi 3.1.0 |
+| TASK-004 | 建立配置与错误模型基础 | READY | — | NOT RUN |
 | TASK-005 | 创建系统接入数据库结构 | TODO | — | NOT RUN |
 | TASK-006 | 实现 ManagedSystem / ManagedResource 领域模型 | TODO | — | NOT RUN |
 | TASK-007 | 实现数据源连接与资源绑定 | TODO | — | NOT RUN |
@@ -121,6 +121,7 @@
 
 | 发现 | 位置 | 影响与建议 | 所属 |
 |---|---|---|---|
-| 07 §120 与 TASK-003 红线中“不增加数据库核心表”“不引入新框架/依赖解决局部问题”“不允许通用 updateStatus”在 AGENTS.md 无逐字条目 | AGENTS.md；07 §120；08 TASK-003 | 现有“唯一转换入口”“禁止扩大范围”只部分覆盖；TASK-003 编码红线时逐条核对补齐，本轮未改 | TASK-003 |
 | 用户放入的 Windows 下载元数据文件 | OpsPilot-START-HERE.md:Zone.Identifier | TASK-002 的 .gitignore 已忽略 `*:Zone.Identifier`；文件本身未删，是否删除由用户决定 | 用户 |
-| Boot 4.1.1 父 POM 默认 java.version=17，本工程覆盖为 21；尚无 Enforcer/Spotless 阻止改回 | backend/pom.xml | 按 08 由 TASK-003 加 Enforcer（Java/Maven 版本、依赖收敛）与 Spotless | TASK-003 |
+| MyBatis starter/Flyway/MySQL 驱动只在父 POM 锁定版本（Flyway、驱动沿用 Boot BOM），尚未进入任何模块；进 classpath 即要求 DataSource | backend/pom.xml | 按用户确认的方案，TASK-005/007 接入数据库时再加入 infrastructure/boot，届时 Boot 4 需 spring-boot-starter-flyway＋flyway-mysql | TASK-005/007 |
+| springdoc 默认开放 /v3/api-docs，启动日志 WARN 提示生产应关闭 | opspilot-web | 单用户 Demo 可接受；是否按 profile 关闭由 TASK-004 配置或 TASK-105 部署决定 | TASK-004/105 |
+| banDynamicVersions 豁免整个 `io.github.ismoyuan.opspilot:*`，范围宽于“仅本工程 SNAPSHOT”（Review 非阻塞意见） | backend/pom.xml | 当前内部依赖版本明确；后续改动父 POM 的 Task 可收窄为仅豁免 SNAPSHOT | 后续触及父 POM 的 Task |

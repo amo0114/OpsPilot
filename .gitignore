@@ -3,6 +3,9 @@
 .env.*
 !.env.example
 
+#AI coding agent
+.claude
+
 # Java
 target/
 

@@ -1,26 +1,31 @@
 # 当前工作
 
-更新时间：2026-09-25 22:10 +0800（本地）
-仓库/分支：/root/projects/OpsPilot-V0.1-IMPLEMENTATION，main；无 remote
-当前任务：TASK-002 DONE（独立 Review 复核 PASS，已提交）；TASK-003 READY，未开始
-任务内位置：TASK-003 清单已向用户汇报，等待确认后开工
-本轮允许修改：docs/dev/（TASK-002 收尾）
-本轮明确不做：TASK-003 实施
+更新时间：2026-09-26（本地）
+仓库/分支：/root/projects/OpsPilot-V0.1-IMPLEMENTATION，main；HEAD d68c953（TASK-002）；无 remote
+当前任务：TASK-003 DONE（独立 Review PASS，已提交）；TASK-004 READY，未开始
+任务内位置：等待用户指示开始 TASK-004
+本轮允许修改：backend/pom.xml、backend/opspilot-web/pom.xml、AGENTS.md、docs/dev/
+本轮明确不做：MyBatis/Flyway/MySQL 进入模块（TASK-005/007，按用户确认方案）；ErrorCode/配置（TASK-004）；业务代码与表
 
-TASK-002 结果摘要（详见 PROGRESS 与 git log）：
-- backend：Boot 4.1.1 父 POM、Java 21、5 Module、mvnw 3.9.16（Central＋SHA-256）；系统 mvn 3.6.3，必须用 backend/mvnw
-- ai-runtime：uv＋Python 3.13，fastapi 0.141.1/uvicorn 0.54.0；uv.lock 按 pypi.org 生成；本机有 UV_DEFAULT_INDEX 镜像时 `uv sync --locked` 需临时 `env -u UV_DEFAULT_INDEX`
-- web：npm，react 19.3.0、vite 8.3.1、typescript 7.0.2
-- .gitignore 覆盖 target/.venv/node_modules/dist/.env*/Zone.Identifier
-- 未验证：Windows 原生 mvnw.cmd（NOT VERIFIED）
+已完成：
+- 父 POM Enforcer 3.6.3（validate）：JDK [21,22)；maven.compiler.release=21（java.version 会被 JVM 系统属性遮蔽，故检查实际编译目标）；Maven [3.9,)；dependencyConvergence；banDynamicVersions（忽略本工程 SNAPSHOT）；bannedDependencies（07 §6：MyBatis-Plus、Hibernate ORM/JPA、Lombok、Spring Cloud/Nacos、Kafka/RabbitMQ、Quartz、Batch、StateMachine、Modulith、Spring Data Elasticsearch、MCP SDK；保留 hibernate-validator）
+- Spotless 3.10.2＋palantir-java-format 2.99.0，verify 阶段 check
+- dependencyManagement：mybatis 3.5.19、mybatis-spring 4.1.0、mybatis-spring-boot-starter 4.1.0、springdoc-openapi-starter-webmvc-api 3.1.1；Flyway 12.4.0、mysql-connector-j 9.7.0 沿用 Boot 4.1.1 BOM
+- opspilot-web 加 springdoc-openapi-starter-webmvc-api（无 UI）
+- AGENTS.md 硬边界补 5 行：Specs 优先、不改 8 状态/无通用 updateStatus、不加核心表、不为局部问题加依赖、完成即验证且不跳过门禁
 
-未提交修改：无（TASK-002 已提交）
+已执行验证（2026-09-26，WSL，JDK 21.0.10，mvnw 3.9.16，基线 d68c953＋未提交工作树）：见 PROGRESS TASK-003 行（clean verify exit 0；JDK 11、java.version=17、未格式化文件三项负向均 BUILD FAILURE；探针验证 banned/dynamic 规则与数据访问依赖解析收敛；health 200 UP；/v3/api-docs 200）
+- 探针 `mvnw install` 把本工程 0.1.0-SNAPSHOT 装入本机 ~/.m2（仅本地缓存）；探针目录已删除
+
+未执行验证：Windows 原生 mvnw.cmd：NOT RUN；真实 MySQL 连接/Flyway 迁移：NOT RUN（TASK-005 范围）
+
+未提交修改：无（TASK-003 已提交；按用户要求 .gitignore 的 `.claude` 规则并入同一提交）
 当前阻塞：无
 
 下一步具体动作：
-1. 用户确认 TASK-003 清单后开工：Enforcer（Java 21、Maven 3.9+、依赖收敛、禁止动态版本）＋Spotless；锁定 MyBatis/springdoc/Flyway patch；补 07 §120 红线（见 PROGRESS 待处理问题）
+1. TASK-004：ErrorCode、DomainException/ApplicationException、API Error Mapping、@ConfigurationProperties、RequestId/CorrelationId
 
-本任务需要读取的规格章节（TASK-003）：08 TASK-003；07 §5、§6～§8、§115～§120、§125、§139
+本任务需要读取的规格章节（TASK-004）：08 TASK-004；07 §88～§90、§98～§99、§103～§105；05 错误响应章节
 
 后续 UI 约定（TASK-096/099 实施）：
 - 底座 React＋TypeScript＋Vite＋Tailwind CSS＋shadcn/ui；Motion 仅在需要布局动画时引入；单一图标库；单一锁文件（npm）
