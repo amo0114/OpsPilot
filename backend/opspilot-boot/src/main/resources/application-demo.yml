@@ -1,0 +1,4 @@
+spring:
+  flyway:
+    # Demo profile 额外加载 ShortLink Demo 配置 Seed；默认与生产只加载核心迁移（07 §93）
+    locations: classpath:db/migration,classpath:db/demo
