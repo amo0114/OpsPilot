@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.system.ResourceBindingMapper">
+
+    <resultMap id="resourceBindingRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.system.ResourceBindingRow">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="managed_resource_id" javaType="_long"/>
+            <arg column="data_source_connection_id" javaType="_long"/>
+            <arg column="selector_schema_name" javaType="String"/>
+            <arg column="selector_schema_version" javaType="_int"/>
+            <arg column="selector_payload" javaType="String"/>
+        </constructor>
+    </resultMap>
+
+    <select id="selectAllByResourceId" resultMap="resourceBindingRow">
+        SELECT id, managed_resource_id, data_source_connection_id,
+               selector_schema_name, selector_schema_version, selector_payload
+        FROM resource_binding
+        WHERE managed_resource_id = #{managedResourceId}
+        ORDER BY data_source_connection_id
+    </select>
+</mapper>

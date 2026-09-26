@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.system.DataSourceConnectionMapper">
+
+    <resultMap id="dataSourceConnectionRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.system.DataSourceConnectionRow">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="connection_key" javaType="String"/>
+            <arg column="name" javaType="String"/>
+            <arg column="provider_type" javaType="String"/>
+            <arg column="endpoint" javaType="String"/>
+            <arg column="credential_ref" javaType="String"/>
+            <arg column="config_schema_name" javaType="String"/>
+            <arg column="config_schema_version" javaType="_int"/>
+            <arg column="config_payload" javaType="String"/>
+            <arg column="status" javaType="String"/>
+            <arg column="lock_version" javaType="_long"/>
+        </constructor>
+    </resultMap>
+
+    <sql id="columns">
+        id, connection_key, name, provider_type, endpoint, credential_ref,
+        config_schema_name, config_schema_version, config_payload, status, lock_version
+    </sql>
+
+    <select id="selectById" resultMap="dataSourceConnectionRow">
+        SELECT <include refid="columns"/>
+        FROM data_source_connection
+        WHERE id = #{id}
+    </select>
+
+    <select id="selectByConnectionKey" resultMap="dataSourceConnectionRow">
+        SELECT <include refid="columns"/>
+        FROM data_source_connection
+        WHERE connection_key = #{connectionKey}
+          <!-- 列为 ai_ci：再按字节比较，大小写或重音变体不命中 -->
+          AND CAST(connection_key AS BINARY) = CAST(#{connectionKey} AS BINARY)
+    </select>
+</mapper>

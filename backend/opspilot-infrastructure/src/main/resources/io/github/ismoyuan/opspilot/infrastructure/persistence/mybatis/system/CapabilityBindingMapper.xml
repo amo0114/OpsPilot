@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.system.CapabilityBindingMapper">
+
+    <resultMap id="capabilityBindingRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.system.CapabilityBindingRow">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="managed_resource_id" javaType="_long"/>
+            <arg column="capability_key" javaType="String"/>
+            <arg column="enabled" javaType="_boolean"/>
+        </constructor>
+    </resultMap>
+
+    <sql id="columns">
+        id, managed_resource_id, capability_key, enabled
+    </sql>
+
+    <select id="selectByResourceIdAndCapabilityKey" resultMap="capabilityBindingRow">
+        SELECT <include refid="columns"/>
+        FROM capability_binding
+        WHERE managed_resource_id = #{managedResourceId}
+          AND capability_key = #{capabilityKey}
+          <!-- 列为 ai_ci：再按字节比较，大小写或重音变体不得命中授权绑定 -->
+          AND CAST(capability_key AS BINARY) = CAST(#{capabilityKey} AS BINARY)
+    </select>
+
+    <select id="selectAllByResourceId" resultMap="capabilityBindingRow">
+        SELECT <include refid="columns"/>
+        FROM capability_binding
+        WHERE managed_resource_id = #{managedResourceId}
+        ORDER BY capability_key
+    </select>
+</mapper>
