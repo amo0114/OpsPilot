@@ -1,16 +1,16 @@
 # 当前工作
 
 更新时间：2026-09-26（本地）
-仓库/分支：/root/projects/OpsPilot-V0.1-IMPLEMENTATION，main；HEAD 为 TASK-010 提交（紧随 509ccc5）；无 remote
-当前任务：TASK-010 DONE（独立 Review PASS，已提交）；TASK-011 READY（后端，按用户授权直接开始）
-任务内位置：TASK-011 开始前
+仓库/分支：/root/projects/OpsPilot-V0.1-IMPLEMENTATION，main；HEAD 为 TASK-011 提交（紧随 334e388）；无 remote
+当前任务：TASK-011 DONE（独立 Review PASS，已提交）；TASK-012 READY（后端，按用户授权直接开始）
+任务内位置：TASK-012 开始前
 本地启动 Demo 配置：在 OPSPILOT_DB_* 环境变量基础上加 --spring.profiles.active=demo
 
-未提交修改：无（TASK-010 已提交）
+未提交修改：无（TASK-011 已提交）
 当前阻塞：无
 
 下一步具体动作：
-1. TASK-011 Systems Read API：读 08 TASK-011；05 §14～§17；处理遗留的 system_key/resource_key 按字节精确匹配
+1. TASK-012 Incident / Investigation 基础表：读 08 TASK-012；04 §12～§16（incident、incident_affected_resource、investigation）；01 生命周期
 
 后续 UI 约定（TASK-096/099 实施）：
 - 底座 React＋TypeScript＋Vite＋Tailwind CSS＋shadcn/ui；Motion 仅在需要布局动画时引入；单一图标库；单一锁文件（npm）

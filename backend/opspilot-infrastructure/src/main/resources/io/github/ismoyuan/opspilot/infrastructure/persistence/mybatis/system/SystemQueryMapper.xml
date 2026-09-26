@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 页面投影（07 §24）。键列为 ai_ci：外部输入的键在索引等值之外再按字节比较，大小写或重音变体不命中。 -->
+<mapper namespace="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.system.SystemQueryMapper">
+
+    <resultMap id="systemSummaryView" type="io.github.ismoyuan.opspilot.application.system.query.SystemSummaryView">
+        <constructor>
+            <arg column="system_key" javaType="String"/>
+            <arg column="name" javaType="String"/>
+            <arg column="environment" javaType="String"/>
+            <arg column="status" javaType="io.github.ismoyuan.opspilot.domain.system.SystemStatus"/>
+            <arg column="resource_count" javaType="_long"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="systemDetailRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.system.SystemDetailRow">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="system_key" javaType="String"/>
+            <arg column="name" javaType="String"/>
+            <arg column="description" javaType="String"/>
+            <arg column="environment" javaType="String"/>
+            <arg column="status" javaType="io.github.ismoyuan.opspilot.domain.system.SystemStatus"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="resourceSummaryView" type="io.github.ismoyuan.opspilot.application.system.query.ResourceSummaryView">
+        <constructor>
+            <arg column="resource_key" javaType="String"/>
+            <arg column="name" javaType="String"/>
+            <arg column="resource_type" javaType="io.github.ismoyuan.opspilot.domain.system.ResourceType"/>
+            <arg column="status" javaType="io.github.ismoyuan.opspilot.domain.system.ResourceStatus"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="resourceIdentityRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.system.ResourceIdentityRow">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="resource_key" javaType="String"/>
+            <arg column="name" javaType="String"/>
+            <arg column="resource_type" javaType="io.github.ismoyuan.opspilot.domain.system.ResourceType"/>
+            <arg column="status" javaType="io.github.ismoyuan.opspilot.domain.system.ResourceStatus"/>
+        </constructor>
+    </resultMap>
+
+    <select id="countSystems" resultType="_long">
+        SELECT COUNT(*) FROM managed_system
+    </select>
+
+    <select id="selectSystems" resultMap="systemSummaryView">
+        SELECT s.system_key, s.name, s.environment, s.status,
+               (SELECT COUNT(*) FROM managed_resource r WHERE r.managed_system_id = s.id) AS resource_count
+        FROM managed_system s
+        ORDER BY s.system_key
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="selectSystemByKey" resultMap="systemDetailRow">
+        SELECT id, system_key, name, description, environment, status
+        FROM managed_system
+        WHERE system_key = #{systemKey}
+          AND CAST(system_key AS BINARY) = CAST(#{systemKey} AS BINARY)
+    </select>
+
+    <select id="selectResourcesBySystemId" resultMap="resourceSummaryView">
+        SELECT resource_key, name, resource_type, status
+        FROM managed_resource
+        WHERE managed_system_id = #{managedSystemId}
+        ORDER BY resource_key
+    </select>
+
+    <select id="selectResourceByKeys" resultMap="resourceIdentityRow">
+        SELECT r.id, r.resource_key, r.name, r.resource_type, r.status
+        FROM managed_resource r
+        JOIN managed_system s ON s.id = r.managed_system_id
+        WHERE s.system_key = #{systemKey}
+          AND CAST(s.system_key AS BINARY) = CAST(#{systemKey} AS BINARY)
+          AND r.resource_key = #{resourceKey}
+          AND CAST(r.resource_key AS BINARY) = CAST(#{resourceKey} AS BINARY)
+    </select>
+
+    <select id="selectEnabledCapabilityKeys" resultType="String">
+        SELECT capability_key
+        FROM capability_binding
+        WHERE managed_resource_id = #{managedResourceId}
+          AND enabled = TRUE
+        ORDER BY capability_key
+    </select>
+</mapper>

@@ -8,6 +8,7 @@ package io.github.ismoyuan.opspilot.domain.error;
 public enum ErrorCode {
     REQUEST_VALIDATION_FAILED(ErrorCategory.INVALID_REQUEST, "请求参数不合法。"),
     RESOURCE_NOT_FOUND(ErrorCategory.NOT_FOUND, "请求的资源不存在。"),
+    SYSTEM_NOT_FOUND(ErrorCategory.NOT_FOUND, "业务系统不存在。"),
     /** credentialRef 无法解析为可用凭据（08 TASK-009）；属部署配置错误，不在 05 §93 公开目录。 */
     SECRET_NOT_FOUND(ErrorCategory.INTERNAL, "所需凭据未配置，请检查部署环境。"),
     /** 未预期的程序错误；不属于 05 §93 业务目录，仅作兜底。 */

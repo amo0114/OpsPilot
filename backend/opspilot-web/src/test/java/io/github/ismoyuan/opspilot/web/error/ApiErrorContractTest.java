@@ -36,7 +36,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 /** 05 §9～§10、§94、§96：错误响应包络、HTTP 状态、X-Request-Id 与错误日志不泄露敏感内容。 */
-@WebMvcTest
+@WebMvcTest(ApiErrorContractTest.ProbeController.class)
 @ExtendWith(OutputCaptureExtension.class)
 @Import(ApiErrorContractTest.ProbeController.class)
 class ApiErrorContractTest {
