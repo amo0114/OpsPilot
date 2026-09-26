@@ -1,6 +1,13 @@
 spring:
   application:
     name: opspilot-server
+  datasource:
+    # 连接地址与账号可由环境覆盖；密码只来自环境变量，不写入仓库（07 §89～§90）
+    url: ${OPSPILOT_DB_URL:jdbc:mysql://localhost:3306/opspilot?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true}
+    username: ${OPSPILOT_DB_USERNAME:opspilot}
+    password: ${OPSPILOT_DB_PASSWORD}
+  flyway:
+    locations: classpath:db/migration
 
 management:
   endpoints:

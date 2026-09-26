@@ -1,28 +1,33 @@
 # 当前工作
 
 更新时间：2026-09-26（本地）
-仓库/分支：/root/projects/OpsPilot-V0.1-IMPLEMENTATION，main；HEAD 04560f9（TASK-003）；无 remote
-当前任务：TASK-004 DONE（独立 Review 复核 PASS，已提交）；TASK-005 READY，未开始
-任务内位置：等待用户指示开始 TASK-005
-本轮允许修改：backend 五模块中错误/请求标识/配置基础代码及 POM、docs/dev/
-本轮明确不做：具体 Incident/System 等业务错误码与异常；具体 @ConfigurationProperties 类；成功响应包络（首个产品 API 的 Task 建）；数据库
+仓库/分支：/root/projects/OpsPilot-V0.1-IMPLEMENTATION，main；HEAD 384589a（TASK-004）；无 remote
+当前任务：TASK-005 DONE（独立 Review 复核 PASS，已提交）；TASK-006 READY，未开始
+任务内位置：等待用户指示开始 TASK-006
+本轮允许修改：infrastructure db/migration 与持久化测试、infrastructure/boot POM、boot application.yml、docs/dev/
+本轮明确不做：领域模型/Repository/Mapper/MyBatis（TASK-006/007）；Codec（TASK-008）；SecretResolver（TASK-009）；Seed（TASK-010）；API（TASK-011）
 
 已完成：
-- domain.error：ErrorCategory（8 类语义，不含 HTTP）；ErrorCode（REQUEST_VALIDATION_FAILED、RESOURCE_NOT_FOUND、兜底 INTERNAL_ERROR，带面向用户的固定文案）；OpsPilotException（code＋不可变 details）；DomainException
-- application：ApplicationException（可携带 cause，作基础设施错误翻译目标）；Correlation（MDC correlationId、newId()＝corr_＋32hex、可恢复先前值的 Scope，供后台 Worker 使用）；POM 加 slf4j-api
-- web：RequestIdFilter（最高优先级；合法 X-Request-Id 沿用，缺失或非法生成 req_＋32hex；写响应头、MDC requestId，且作为 correlationId）；ApiExceptionHandler（OpsPilotException 按 05 §94 类别→HTTP；未预期异常→500 INTERNAL_ERROR；MVC 标准异常保留状态、替换为 05 §9 包络；message 只用固定文案；日志只记 code/status、requestId、异常链类型＋首个栈帧，不记 message/cause 文本）；POM 加 spring-boot-starter-validation、spring-boot-starter-webmvc-test(test)
-- boot：@ConfigurationPropertiesScan；logging.pattern.correlation 输出 [requestId correlationId]
+- V001__create_system_integration_tables.sql（opspilot-infrastructure/src/main/resources/db/migration）：managed_system、managed_resource、data_source_connection、resource_binding、capability_binding
+  - BIGINT UNSIGNED 自增主键；DATETIME(3) 无库默认值（应用写 UTC）；配置表 lock_version BIGINT UNSIGNED DEFAULT 0；InnoDB utf8mb4_0900_ai_ci
+  - UNIQUE：system_key；(system,resource_key)；connection_key；(resource,connection)；(resource,capability_key)
+  - FK 全部 ON DELETE/UPDATE RESTRICT；索引 (managed_system_id,status)、resource_binding(data_source_connection_id)
+  - CHECK：三类状态 ACTIVE/DISABLED/ARCHIVED；6 种 resource_type；5 种 provider_type（06：PROMETHEUS/LOKI/REDIS/MYSQL/DOCKER），枚举均 `CAST(col AS BINARY) IN` 逐字节比较（拒绝大小写/重音/末尾空格）；key 小写格式（REGEXP_LIKE 'c' 区分大小写、`\z` 锚定整串）；credential_ref 仅 env://；schema_version>=1；JSON 必须为对象；非空名称等
+- boot：spring-boot-starter-jdbc、spring-boot-starter-flyway、flyway-mysql、mysql-connector-j(runtime)；datasource url/username 可由环境覆盖，password 只来自 OPSPILOT_DB_PASSWORD
+- infrastructure 测试依赖：flyway-mysql、mysql-connector-j、testcontainers-mysql/junit-jupiter、junit-jupiter、assertj（均 test）
 
-已执行验证：见 PROGRESS TASK-004 行（clean verify exit 0、10 个契约测试含 3 个日志不泄露断言、变异检查、构建输出敏感串 0 命中、boot jar 冒烟）
-未执行验证：具体配置类绑定（尚无配置类）NOT RUN；Windows mvnw.cmd NOT RUN
+本地启动 boot（示例）：先起 MySQL 8.4，再 `OPSPILOT_DB_URL='jdbc:mysql://127.0.0.1:13306/opspilot?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true' OPSPILOT_DB_PASSWORD=… java -jar opspilot-boot/target/opspilot-boot-0.1.0-SNAPSHOT.jar`
 
-未提交修改：无（TASK-004 已提交）
+已执行验证：见 PROGRESS TASK-005 行（clean verify exit 0；29 个真实 MySQL 测试；变异检查；boot 两次启动迁移/幂等；约束计数；直连 SQL 反例）
+未执行验证：Windows mvnw.cmd NOT RUN；MySQL 8.0.16 最低版本上的迁移 NOT RUN（只测 8.4.11）
+
+未提交修改：无（TASK-005 已提交）
 当前阻塞：无
 
 下一步具体动作：
-1. TASK-005 创建系统接入数据库结构（届时加入 MyBatis/Flyway/MySQL 驱动，需要可用 MySQL）
+1. TASK-006 ManagedSystem/ManagedResource 领域模型与 Repository Port（MyBatis 首次进入 infrastructure 时加入 starter）
 
-本任务需要读取的规格章节（TASK-005）：08 TASK-005；04 系统接入相关表；07 §91～§93
+本任务需要读取的规格章节（TASK-006）：08 TASK-006；03 §6～§15；04 §7～§8；07 §13～§23
 
 后续 UI 约定（TASK-096/099 实施）：
 - 底座 React＋TypeScript＋Vite＋Tailwind CSS＋shadcn/ui；Motion 仅在需要布局动画时引入；单一图标库；单一锁文件（npm）
