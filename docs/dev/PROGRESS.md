@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。依赖全部 DONE 才 READY；FROZEN 只表示规格定稿，不表示任务完成。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-26（TASK-005 提交）
+> 最近更新：2026-09-26（TASK-006 提交）
 
 | Task | 名称 | 状态 | 交付定位 | 验证摘要 |
 |---|---|---|---|---|
@@ -12,8 +12,8 @@
 | TASK-003 | 建立工程约束 | DONE | TASK-003 commit（紧随 d68c953；同提交含用户的 .gitignore `.claude` 规则）：backend/pom.xml（Enforcer＋Spotless＋版本锁定）；backend/opspilot-web/pom.xml（springdoc）；AGENTS.md（补 07 §120 红线） | 独立 Review PASS（mvnw.cmd、真实 MySQL/Flyway NOT VERIFIED）。2026-09-26 实测：`./mvnw -B clean verify` exit 0（6 条 Enforcer 规则＋6 模块 spotless:check 通过）；负向：JDK 11 → RequireJavaVersion BUILD FAILURE exit 1；POM java.version=17 → RequireProperty(maven.compiler.release) BUILD FAILURE exit 1（已还原）；未格式化 Java → spotless:check BUILD FAILURE exit 1（已删除）；仓库外临时探针：lombok → BannedDependencies 失败，[3.0,) → BanDynamicVersions 失败；MyBatis 3.5.19/MyBatis-Spring 4.1.0/starter 4.1.0、Flyway 12.4.0＋flyway-mysql、mysql-connector-j 9.7.0 与 springdoc 同时解析且收敛通过；boot jar `/actuator/health` 200 UP，`/v3/api-docs` 200 openapi 3.1.0 |
 | TASK-004 | 建立配置与错误模型基础 | DONE | TASK-004 commit（紧随 04560f9）：domain/error（ErrorCode、ErrorCategory、OpsPilotException、DomainException）；application/error/ApplicationException、application/correlation/Correlation；web/error（ApiExceptionHandler、ErrorResponse）、web/request/RequestIdFilter；boot @ConfigurationPropertiesScan＋日志 correlation 格式；application/web POM；web 测试 2 个文件 | 独立 Review：PASS AFTER PATCH（P1：异常 message/cause 原样写入日志）→ 复核 PASS（具体配置绑定、mvnw.cmd NOT VERIFIED）：三处日志只记 code/status、requestId 与异常链类型＋首个栈帧，不含 message。2026-09-26 修复后实测：`./mvnw -B clean verify` exit 0，ApiErrorContractTest 10/10（原 8 项＋3 个日志点用 OutputCapture 断言 message 与 cause 中的敏感串不进日志，其中 1 项替换原 500 测试）；整段构建输出敏感串 0 命中；变异检查：恢复 `log.error(..., ex)` 后该测试失败（报 hunter2），还原后通过；boot jar health 200、未知路由 404 统一包络；具体配置类绑定 NOT RUN |
 | TASK-005 | 创建系统接入数据库结构 | DONE | TASK-005 commit（紧随 384589a）：infrastructure db/migration/V001__create_system_integration_tables.sql；infrastructure SystemIntegrationSchemaTest；infrastructure/boot POM；boot application.yml（datasource＋flyway） | 独立 Review 两轮 PASS AFTER PATCH：第 1 轮 P1 枚举 CHECK 在 ai_ci 下放行大小写/重音、正则 $ 放行末尾换行 → 正则改 `\z`（已关闭）；第 2 轮 P1 `utf8mb4_bin` 为 PAD SPACE 放行末尾空格 → 5 个枚举 CHECK 改为 `CAST(col AS BINARY) IN`（utf8mb4_0900_bin 需 8.0.17+，不选）。第 3 轮复核 PASS（MySQL 8.0.16 实机、mvnw.cmd NOT VERIFIED）。V001 提交前未应用于持久库，直接修改。2026-09-26 第 2 轮修复后实测（mysql:8.4.11）：`./mvnw -B clean verify` exit 0；SystemIntegrationSchemaTest 29/29（原 13＋5 大小写/重音＋5 末尾换行＋5 末尾空格，均断言 3819 与约束名）；变异检查：换回 utf8mb4_bin 后恰好 5 个末尾空格用例失败，上一轮恢复旧约束时恰好 11 例失败，还原后均通过；boot jar 连独立容器首次应用 v001、再次 up to date，health 200；库内 CHECK 22、FK 4、UNIQUE 5；直连 SQL：ACTIVE␠、active、ÁCTIVE、SERVICE␠、MYSQL␠ 均 3819，合法 ACTIVE（HEX 414354495645）写入；容器已删除 |
-| TASK-006 | 实现 ManagedSystem / ManagedResource 领域模型 | READY | — | NOT RUN |
-| TASK-007 | 实现数据源连接与资源绑定 | TODO | — | NOT RUN |
+| TASK-006 | 实现 ManagedSystem / ManagedResource 领域模型 | DONE | TASK-006 commit（紧随 c804769）：domain/system（ManagedSystem、ManagedResource、SystemStatus、ResourceStatus、ResourceType）；application/system（ManagedSystemRepository、ManagedResourceRepository 两个 Port）；infrastructure persistence/mybatis/system（2 Mapper＋XML、2 Row、2 MyBatis 仓储）；infrastructure POM（mybatis-spring-boot-starter；测试改用 spring-boot-starter-test＋starter-flyway）；infrastructure 测试 2 个文件 | 独立 Review PASS（适配器范围、只读 Port、environment String 均接受；MySQL 8.0.16、mvnw.cmd NOT VERIFIED）。2026-09-26 实测（mysql:8.4.11）：`./mvnw -B clean verify` exit 0（Enforcer 收敛通过）；MyBatisSystemRepositoryTest 8/8（按 key 查系统含全部字段与 null description、ARCHIVED；资源按系统限定查找、跨系统同名 key 不串、findById、按 key 排序列出、6 类型×3 状态逐一往返；3 个 Java 枚举与 information_schema CHECK 取值完全一致）＋SystemIntegrationSchemaTest 29/29＋web 10/10；变异检查：ResourceType 加 CONTAINER 后一致性测试失败、往返测试报错，还原后通过；boot jar 连真实 MySQL：v001 应用、health 200、/actuator/beans 含 2 Mapper 与 2 仓储（beans 端点仅本次命令行临时开放）；容器已删除 |
+| TASK-007 | 实现数据源连接与资源绑定 | READY | — | NOT RUN |
 | TASK-008 | 建立 SchemaCodecRegistry 基础 | TODO | — | NOT RUN |
 | TASK-009 | 实现 SecretResolver | TODO | — | NOT RUN |
 | TASK-010 | ShortLink Demo 系统 Seed | TODO | — | NOT RUN |
@@ -122,7 +122,6 @@
 | 发现 | 位置 | 影响与建议 | 所属 |
 |---|---|---|---|
 | 用户放入的 Windows 下载元数据文件 | OpsPilot-START-HERE.md:Zone.Identifier | TASK-002 的 .gitignore 已忽略 `*:Zone.Identifier`；文件本身未删，是否删除由用户决定 | 用户 |
-| MyBatis 三件套仍只在父 POM 锁定版本，未进入模块；Flyway、JDBC、MySQL 驱动已由 TASK-005 加入 boot | backend/pom.xml | 首个 Mapper 所在 Task（TASK-006/007）加入 infrastructure | TASK-006/007 |
 | springdoc 默认开放 /v3/api-docs，启动日志 WARN 提示生产应关闭 | opspilot-web | 单用户 Demo 可接受；是否按 profile 关闭由 TASK-004 配置或 TASK-105 部署决定 | TASK-004/105 |
 | banDynamicVersions 豁免整个 `io.github.ismoyuan.opspilot:*`，范围宽于“仅本工程 SNAPSHOT”（Review 非阻塞意见） | backend/pom.xml | 当前内部依赖版本明确；后续改动父 POM 的 Task 可收窄为仅豁免 SNAPSHOT | 后续触及父 POM 的 Task |
 | 过滤器链中、DispatcherServlet 之外抛出的异常仍走 Boot 默认 /error 响应体，不是 05 §9 包络 | opspilot-web | 当前唯一过滤器为 RequestIdFilter；出现其他过滤器（如内部认证 05 §90）时再补 ErrorController | 引入新过滤器的 Task |
@@ -133,3 +132,4 @@
 | 未设置 OPSPILOT_DB_PASSWORD 时 Spring 保留占位符原文，启动要到数据库认证才失败（Review 已实测认证失败退出），而不是在配置绑定时报出缺失变量 | opspilot-boot application.yml | 不泄露也不会连上；若需要明确报错，可在数据源配置/SecretResolver（TASK-009）处显式校验 | TASK-009 或后续配置 Task |
 | environment 未在规格中给出枚举，V001 只要求非空（VARCHAR(32)）；config/selector 的 schema 与 payload 均为 NOT NULL，无配置的 Provider 用空对象＋schema | V001 | TASK-008 SchemaCodecRegistry、TASK-010 Seed 按此落地；如需枚举环境再加迁移 | TASK-008/010 |
 | capability_key 只做 `domain.action` 格式 CHECK，不在库里枚举 7 个能力；存在性由 Java CapabilityRegistry 判定（04 §11） | V001 | TASK-044 Registry 与 TASK-010 Seed 校验绑定键 | TASK-044 |
+| 领域 environment 为 String；05 §15 示例值为 "DEMO"，库内未枚举 | domain/system/ManagedSystem | 与 TASK-005 已接受的自由文本一致；TASK-010 Seed 使用 DEMO | TASK-010 |

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.system.ManagedSystemMapper">
+
+    <resultMap id="managedSystemRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.system.ManagedSystemRow">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="system_key" javaType="String"/>
+            <arg column="name" javaType="String"/>
+            <arg column="description" javaType="String"/>
+            <arg column="environment" javaType="String"/>
+            <arg column="status" javaType="String"/>
+            <arg column="lock_version" javaType="_long"/>
+        </constructor>
+    </resultMap>
+
+    <select id="selectBySystemKey" resultMap="managedSystemRow">
+        SELECT id, system_key, name, description, environment, status, lock_version
+        FROM managed_system
+        WHERE system_key = #{systemKey}
+    </select>
+</mapper>

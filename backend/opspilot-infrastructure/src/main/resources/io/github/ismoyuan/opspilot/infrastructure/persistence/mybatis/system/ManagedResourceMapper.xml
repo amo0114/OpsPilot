@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.system.ManagedResourceMapper">
+
+    <resultMap id="managedResourceRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.system.ManagedResourceRow">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="managed_system_id" javaType="_long"/>
+            <arg column="resource_key" javaType="String"/>
+            <arg column="name" javaType="String"/>
+            <arg column="resource_type" javaType="String"/>
+            <arg column="description" javaType="String"/>
+            <arg column="status" javaType="String"/>
+            <arg column="lock_version" javaType="_long"/>
+        </constructor>
+    </resultMap>
+
+    <sql id="columns">
+        id, managed_system_id, resource_key, name, resource_type, description, status, lock_version
+    </sql>
+
+    <select id="selectById" resultMap="managedResourceRow">
+        SELECT <include refid="columns"/>
+        FROM managed_resource
+        WHERE id = #{id}
+    </select>
+
+    <select id="selectBySystemIdAndResourceKey" resultMap="managedResourceRow">
+        SELECT <include refid="columns"/>
+        FROM managed_resource
+        WHERE managed_system_id = #{managedSystemId}
+          AND resource_key = #{resourceKey}
+    </select>
+
+    <select id="selectAllBySystemId" resultMap="managedResourceRow">
+        SELECT <include refid="columns"/>
+        FROM managed_resource
+        WHERE managed_system_id = #{managedSystemId}
+        ORDER BY resource_key
+    </select>
+</mapper>

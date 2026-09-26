@@ -1,33 +1,29 @@
 # 当前工作
 
 更新时间：2026-09-26（本地）
-仓库/分支：/root/projects/OpsPilot-V0.1-IMPLEMENTATION，main；HEAD 384589a（TASK-004）；无 remote
-当前任务：TASK-005 DONE（独立 Review 复核 PASS，已提交）；TASK-006 READY，未开始
-任务内位置：等待用户指示开始 TASK-006
-本轮允许修改：infrastructure db/migration 与持久化测试、infrastructure/boot POM、boot application.yml、docs/dev/
-本轮明确不做：领域模型/Repository/Mapper/MyBatis（TASK-006/007）；Codec（TASK-008）；SecretResolver（TASK-009）；Seed（TASK-010）；API（TASK-011）
+仓库/分支：/root/projects/OpsPilot-V0.1-IMPLEMENTATION，main；HEAD c804769（TASK-005）；无 remote
+当前任务：TASK-006 DONE（独立 Review PASS，已提交）；TASK-007 READY，未开始
+任务内位置：等待用户指示开始 TASK-007
+本轮允许修改：domain/system、application/system、infrastructure persistence/mybatis/system 及其测试、infrastructure POM、docs/dev/
+本轮明确不做：HTTP（TASK-011）；DataSourceConnection/ResourceBinding/CapabilityBinding（TASK-007）；Seed（TASK-010）；写入方法
 
 已完成：
-- V001__create_system_integration_tables.sql（opspilot-infrastructure/src/main/resources/db/migration）：managed_system、managed_resource、data_source_connection、resource_binding、capability_binding
-  - BIGINT UNSIGNED 自增主键；DATETIME(3) 无库默认值（应用写 UTC）；配置表 lock_version BIGINT UNSIGNED DEFAULT 0；InnoDB utf8mb4_0900_ai_ci
-  - UNIQUE：system_key；(system,resource_key)；connection_key；(resource,connection)；(resource,capability_key)
-  - FK 全部 ON DELETE/UPDATE RESTRICT；索引 (managed_system_id,status)、resource_binding(data_source_connection_id)
-  - CHECK：三类状态 ACTIVE/DISABLED/ARCHIVED；6 种 resource_type；5 种 provider_type（06：PROMETHEUS/LOKI/REDIS/MYSQL/DOCKER），枚举均 `CAST(col AS BINARY) IN` 逐字节比较（拒绝大小写/重音/末尾空格）；key 小写格式（REGEXP_LIKE 'c' 区分大小写、`\z` 锚定整串）；credential_ref 仅 env://；schema_version>=1；JSON 必须为对象；非空名称等
-- boot：spring-boot-starter-jdbc、spring-boot-starter-flyway、flyway-mysql、mysql-connector-j(runtime)；datasource url/username 可由环境覆盖，password 只来自 OPSPILOT_DB_PASSWORD
-- infrastructure 测试依赖：flyway-mysql、mysql-connector-j、testcontainers-mysql/junit-jupiter、junit-jupiter、assertj（均 test）
+- domain.system：SystemStatus、ResourceStatus（ACTIVE/DISABLED/ARCHIVED）；ResourceType（6 种）；ManagedSystem、ManagedResource 为不可变 record（id、key、name、description 可空、environment/resourceType、status、version=lock_version），isActive()、ManagedResource.belongsTo(system)；不依赖 Spring
+- application.system：ManagedSystemRepository.findBySystemKey；ManagedResourceRepository.findById / findBySystemIdAndResourceKey / findAllBySystemId（按 resource_key 升序）
+- infrastructure.persistence.mybatis.system：@Mapper 接口＋同路径 XML（显式 SQL、构造器 resultMap，基本类型用 _long）；Row 保留原文，仓储用 Enum.valueOf 严格转换；@Repository 包内可见
+- POM：infrastructure 加 mybatis-spring-boot-starter 4.1.0（compile）；测试依赖改为 spring-boot-starter-test、spring-boot-starter-flyway（junit/assertj 由 starter-test 提供）
+- 测试根 InfrastructureTestApplication（@SpringBootApplication）；MyBatisSystemRepositoryTest（@SpringBootTest＋Testcontainers＋@Transactional 回滚）
 
-本地启动 boot（示例）：先起 MySQL 8.4，再 `OPSPILOT_DB_URL='jdbc:mysql://127.0.0.1:13306/opspilot?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true' OPSPILOT_DB_PASSWORD=… java -jar opspilot-boot/target/opspilot-boot-0.1.0-SNAPSHOT.jar`
+已执行验证：见 PROGRESS TASK-006 行
+未执行验证：Windows mvnw.cmd NOT RUN；MySQL 8.0.16 NOT RUN
 
-已执行验证：见 PROGRESS TASK-005 行（clean verify exit 0；29 个真实 MySQL 测试；变异检查；boot 两次启动迁移/幂等；约束计数；直连 SQL 反例）
-未执行验证：Windows mvnw.cmd NOT RUN；MySQL 8.0.16 最低版本上的迁移 NOT RUN（只测 8.4.11）
-
-未提交修改：无（TASK-005 已提交）
+未提交修改：无（TASK-006 已提交）
 当前阻塞：无
 
 下一步具体动作：
-1. TASK-006 ManagedSystem/ManagedResource 领域模型与 Repository Port（MyBatis 首次进入 infrastructure 时加入 starter）
+1. TASK-007 DataSourceConnection/ResourceBinding/CapabilityBinding 与 SelectorSchema（沿用 TASK-006 的 Port＋MyBatis 适配器＋真实 MySQL 测试模式）
 
-本任务需要读取的规格章节（TASK-006）：08 TASK-006；03 §6～§15；04 §7～§8；07 §13～§23
+本任务需要读取的规格章节（TASK-007）：08 TASK-007；03 §9～§15；04 §9～§11、§67～§69；06 §14～§18
 
 后续 UI 约定（TASK-096/099 实施）：
 - 底座 React＋TypeScript＋Vite＋Tailwind CSS＋shadcn/ui；Motion 仅在需要布局动画时引入；单一图标库；单一锁文件（npm）
