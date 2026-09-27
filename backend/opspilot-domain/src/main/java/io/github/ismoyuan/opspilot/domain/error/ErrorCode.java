@@ -14,6 +14,8 @@ public enum ErrorCode {
     INCIDENT_VERSION_CONFLICT(ErrorCategory.CONFLICT, "故障已被其他操作更新，请刷新后重试。"),
     PENDING_APPROVAL_EXISTS(ErrorCategory.CONFLICT, "存在待审批的处理方案，请先拒绝或撤回审批。"),
     RESOURCE_NOT_IN_SYSTEM(ErrorCategory.RULE_VIOLATION, "指定的组件不属于该业务系统。"),
+    /** 同一 Observation × Hypothesis 已有 Evidence：Intent 拒绝码，原关系保持不变（05 §83、§93）。 */
+    EVIDENCE_LINK_ALREADY_EXISTS(ErrorCategory.CONFLICT, "该观测与假设之间已存在证据关系，不能重复或改写。"),
     /** credentialRef 无法解析为可用凭据（08 TASK-009）；属部署配置错误，不在 05 §93 公开目录。 */
     SECRET_NOT_FOUND(ErrorCategory.INTERNAL, "所需凭据未配置，请检查部署环境。"),
     /** 未预期的程序错误；不属于 05 §93 业务目录，仅作兜底。 */

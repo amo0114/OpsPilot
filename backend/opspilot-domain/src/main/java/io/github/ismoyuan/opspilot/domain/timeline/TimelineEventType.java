@@ -7,5 +7,9 @@ public enum TimelineEventType {
     INVESTIGATION_STARTED,
     /** 当前 run 的协作式停止意图已落账（05 §27），状态仍为 INVESTIGATING。 */
     INVESTIGATION_STOP_REQUESTED,
-    INCIDENT_CANCELLED
+    INCIDENT_CANCELLED,
+    HYPOTHESIS_CREATED,
+    /** Hypothesis 当前状态的每一次变化（01 §14），历史只在时间线保存。 */
+    HYPOTHESIS_STATUS_CHANGED,
+    EVIDENCE_LINKED
 }

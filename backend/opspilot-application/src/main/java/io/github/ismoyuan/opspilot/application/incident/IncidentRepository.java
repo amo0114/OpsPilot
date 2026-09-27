@@ -25,6 +25,9 @@ public interface IncidentRepository {
      */
     Optional<Incident> findByKeyForUpdate(IncidentKey incidentKey);
 
+    /** 按内部 id 加排他锁读取，供已知 incidentId 的后台调查写入按 Incident → Investigation 顺序加锁。 */
+    Optional<Incident> findByIdForUpdate(long id);
+
     /**
      * 执行一次已由策略验证的迁移：status 与 lock_version 同时匹配才更新，lock_version 加一；
      * 目标为 RESOLVED 时同一语句写入 resolved_at。

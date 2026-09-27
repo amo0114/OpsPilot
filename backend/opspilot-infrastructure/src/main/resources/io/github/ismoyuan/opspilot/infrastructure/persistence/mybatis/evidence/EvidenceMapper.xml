@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.evidence.EvidenceMapper">
+
+    <resultMap id="evidenceRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.evidence.EvidenceRow">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="investigation_id" javaType="_long"/>
+            <arg column="observation_id" javaType="_long"/>
+            <arg column="hypothesis_id" javaType="_long"/>
+            <arg column="relation" javaType="String"/>
+            <arg column="reason" javaType="String"/>
+            <arg column="created_at" javaType="java.time.LocalDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <sql id="columns">
+        id, investigation_id, observation_id, hypothesis_id, relation, reason, created_at
+    </sql>
+
+    <!-- 复合外键保证 Observation、Hypothesis 与 investigation_id 一致，恢复 Observation 无法匹配（04 §31） -->
+    <insert id="insert" useGeneratedKeys="true" keyProperty="e.id" keyColumn="id">
+        INSERT INTO evidence (investigation_id, observation_id, hypothesis_id, relation, reason, created_at)
+        VALUES (#{e.investigationId}, #{e.observationId}, #{e.hypothesisId}, #{e.relation}, #{e.reason},
+                #{e.createdAt})
+    </insert>
+
+    <select id="selectById" resultMap="evidenceRow">
+        SELECT <include refid="columns"/>
+        FROM evidence
+        WHERE id = #{id}
+    </select>
+
+    <select id="selectByObservationAndHypothesisForShare" resultMap="evidenceRow">
+        SELECT <include refid="columns"/>
+        FROM evidence
+        WHERE observation_id = #{observationId}
+          AND hypothesis_id = #{hypothesisId}
+        FOR SHARE
+    </select>
+</mapper>

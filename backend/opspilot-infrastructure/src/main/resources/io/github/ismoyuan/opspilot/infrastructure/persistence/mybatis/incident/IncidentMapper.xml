@@ -46,6 +46,13 @@
         FOR UPDATE
     </select>
 
+    <select id="selectByIdForUpdate" resultMap="incidentRow">
+        SELECT <include refid="columns"/>
+        FROM incident
+        WHERE id = #{id}
+        FOR UPDATE
+    </select>
+
     <select id="selectByIdForShare" resultMap="incidentRow">
         SELECT <include refid="columns"/>
         FROM incident

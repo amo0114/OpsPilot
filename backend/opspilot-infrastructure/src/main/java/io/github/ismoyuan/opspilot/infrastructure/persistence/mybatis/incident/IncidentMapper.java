@@ -14,6 +14,8 @@ interface IncidentMapper {
 
     IncidentRow selectByKeyForUpdate(@Param("incidentKey") String incidentKey);
 
+    IncidentRow selectByIdForUpdate(@Param("id") long id);
+
     /** 条件更新失败后读取最新已提交版本以区分冲突原因（共享锁读，不受事务快照影响）。 */
     IncidentRow selectByIdForShare(@Param("id") long id);
 
