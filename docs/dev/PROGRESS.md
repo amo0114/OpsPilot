@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-27（B05 REVIEW，B05-R1 PASS，提交中）
+> 最近更新：2026-09-27（B05 DONE，01c3395；B06 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -30,8 +30,8 @@
 | TASK-020 | B03 | Incident 基础 API | DONE | commit 626a19f（B03，Base 4630f27） | B03-V1/V2 verify exit 0＋成员专项证据；B03-R1 P1 已修复，B03-R2 PASS；见 PROGRESS「B03」 |
 | TASK-021 | B04 | 调查事实数据库结构 | DONE | commit b927804（B04，Base f116f8e） | B04-V1 verify exit 0＋成员专项证据；B04-R1 PASS；见 PROGRESS「B04」 |
 | TASK-022 | B04 | Observation Domain / Persistence | DONE | commit b927804（B04，Base f116f8e） | B04-V1 verify exit 0＋成员专项证据；B04-R1 PASS；见 PROGRESS「B04」 |
-| TASK-023 | B05 | Hypothesis Domain | REVIEW | 未提交（B05，Base c3bdd7d；文件见 PROGRESS「B05」） | B05-V1 verify exit 0＋HypothesisRulesTest 3/3、HypothesisIntegrationTest 5/5（真实 MySQL）；B05-R1 PASS |
-| TASK-024 | B05 | Evidence Domain | REVIEW | 未提交（B05，Base c3bdd7d；文件见 PROGRESS「B05」） | B05-V1 verify exit 0＋EvidenceIntegrationTest 6/6（真实 MySQL）；B05-R1 PASS |
+| TASK-023 | B05 | Hypothesis Domain | DONE | commit 01c3395（B05，Base c3bdd7d） | B05-V1 verify exit 0＋HypothesisRulesTest 3/3、HypothesisIntegrationTest 5/5（真实 MySQL）；B05-R1 PASS；见 PROGRESS「B05」 |
+| TASK-024 | B05 | Evidence Domain | DONE | commit 01c3395（B05，Base c3bdd7d） | B05-V1 verify exit 0＋EvidenceIntegrationTest 6/6（真实 MySQL）；B05-R1 PASS；见 PROGRESS「B05」 |
 | TASK-025 | B06 | Diagnosis Domain | TODO | — | NOT RUN |
 | TASK-026 | B06 | Diagnosis 创建事务 | TODO | — | NOT RUN |
 | TASK-027 | B06 | Investigation 技术详情 Query | TODO | — | NOT RUN |
@@ -205,7 +205,7 @@
 
 ### B05 — Hypothesis 与 Evidence 关系
 
-- 状态：REVIEW（B05-R1 PASS，已获提交建议，提交中）
+- 状态：DONE（B05-R1 PASS，已提交 01c3395）
 - 成员及顺序：TASK-023 → TASK-024；批外前置：TASK-022 DONE（b927804，B04-R1 PASS）
 - Base SHA：c3bdd7d74d6578c460ad97b9ef6697b4929d1583
 - 范围：domain/hypothesis、domain/evidence、domain/timeline（新增事件类型与载荷）、domain/error（EVIDENCE_LINK_ALREADY_EXISTS）；application/hypothesis、application/evidence 及其仓储端口，application/investigation 共用的加锁辅助、IncidentRepository 按 id 加锁读取；infrastructure persistence/mybatis/hypothesis、evidence 与 incident 按 id 加锁语句及测试；docs/dev。沿用 V003 表与约束，不新增迁移。明确不做：Diagnosis 领域与创建事务（TASK-025/026）、调查查询 API（TASK-027）、AI 协议与 Intent 分派（TASK-028～040）、AgentStep 生命周期与拒绝审计（TASK-038/040）、run/Stop 准入（TASK-039～041）、公开写接口（05 §51、§99：没有 POST/PUT Hypothesis、用户不能创建 Evidence）
@@ -224,7 +224,7 @@
   - 数据库层 UNIQUE(observation_id, hypothesis_id) 与 Evidence/Hypothesis/Observation 复合外键沿用 B04 InvestigationFactSchemaTest 证据，本批未重复
   - NOT RUN：并发重复关系（同 Incident 行锁串行化，单实例；未做并发压测）；run 号/Stop/deadline 准入与拒绝审计（TASK-038～041）；查询 API（TASK-027）；ccg verify-change/verify-quality 质量关卡（本机 /root/.claude/skills/ccg 不存在，无法执行）；MySQL 8.0.16、Windows mvnw.cmd NOT RUN
 - B05-R1：独立 Reviewer；范围 c3bdd7d 到当前工作树（含全部未跟踪文件），无范围扩大或 B06 提前实现；结论 PASS，无 P0/P1；确认 Hypothesis 自 PENDING 起、三种已评估状态可互相变化且不回到 PENDING、状态与时间线原子提交，Evidence 不可修改/删除、归属校验、重复关系拒绝与附带状态更新符合规格，附带状态等于当前时不重复记事件、非法变化使整个关系创建回滚，当前错误码＋details.reason 约定适用于本阶段；独立实测 `./mvnw -B clean verify` exit 0（domain 26、infrastructure 256、web 21、boot 2，无跳过），真实 MySQL 上 Hypothesis 5、Evidence 6 个用例通过并以直接查库核实故障注入后的回滚，6 模块 Enforcer/Spotless 与 `git diff --check` 通过；非阻塞：TASK-039～041 须在调用这些写路径前、同一事务持锁期间完成 run/Stop/deadline 检查，TASK-038/040 的拒绝审计须在失败业务事务结束后另行提交以免随 rollback-only 丢失，并发重复关系不另做压测（Incident 排他锁＋锁内查询＋唯一约束共同保护）；独立 jar 冒烟、MySQL 8.0.16、Windows Wrapper、ccg 关卡 NOT VERIFIED；Commit Recommendation YES
-- 提交：未提交（等待独立 Review 与用户提交授权）；范围外问题：见「待处理问题」中 B05 行
+- 提交：代码提交 01c33952fe10b95e23b93429c28165fb67979e9c（feat(investigation): hypothesis and immutable evidence links (TASK-023–024)）；SHA 回填为后续 docs 提交；范围外问题：见「待处理问题」中 B05 行
 
 ### 工作流文档变更（不属于 TASK-012 或 B01）
 
@@ -296,7 +296,7 @@
 | diagnosis.termination_reason 只约束大写格式，取值集合（04 §35 为示例）由 Java 定义；diagnosis_evidence_ref 未在库内约束“同一 Investigation”（表无 investigation_id 列） | V003 | TASK-025/026 创建事务中校验引用的 Evidence 属于同一 Investigation 且主假设有 SUPPORTS 证据（diagnosis_evidence_ref 的两个独立外键不能保证同一 Investigation，B04-R1） | TASK-025/026 |
 | error_message（invocation/agent_step）必须为脱敏文本；Observation payload 目前为未解码 JSON 文本 | V003、domain/observation | TASK-049 Sanitizer、TASK-051 ObservationExtractor 与结果 Codec 落实 | TASK-049/051 |
 | 同一 Investigation 的跨表一致性已用复合外键保证（invocation/observation/agent_step 的 investigation↔incident、observation↔invocation 的 incident/resource、evidence 两侧、diagnosis 主假设）；为此 investigation 增 UNIQUE(id, incident_id)，observation/hypothesis/evidence/diagnosis 增 (id, investigation_id) 唯一键 | V003 | 后续迁移需保留这些复合键 | — |
-| Hypothesis 状态变化矩阵为本批解释：目标须不同于当前、不能回到 PENDING，其余已评估状态可互相变化（01 §14 只规定“允许变化且必须进时间线”） | domain/hypothesis/HypothesisStatus.canChangeTo | 如 Review 或规格认为需允许回到 PENDING 或更严格的边，只改此处与 HypothesisRulesTest 矩阵 | B05 Review |
+| Hypothesis 状态变化矩阵为本批解释：目标须不同于当前、不能回到 PENDING，其余已评估状态可互相变化（01 §14 只规定“允许变化且必须进时间线”） | domain/hypothesis/HypothesisStatus.canChangeTo | 如 Review 或规格认为需允许回到 PENDING 或更严格的边，只改此处与 HypothesisRulesTest 矩阵 | —（B05-R1 已确认） |
 | Hypothesis/Evidence 业务拒绝（非法状态变化、引用不属于当前 Investigation、字段超限）用 REQUEST_VALIDATION_FAILED＋details.reason（ILLEGAL_TRANSITION、NOT_IN_INVESTIGATION、BLANK/TOO_LONG），重复关系用 EVIDENCE_LINK_ALREADY_EXISTS；05 §93 无专门码 | application/hypothesis、application/evidence | TASK-040 把这些异常转换成结构化 Intent 拒绝并写入 AgentStep 审计；服务以 TransactionTemplate(REQUIRED) 抛异常，若在外层事务内调用会将外层标记 rollback-only，拒绝审计须在独立事务写入 | TASK-038/040 |
 | 服务只核对 Incident=INVESTIGATING（ActiveInvestigation），不核对 run 号、Stop、deadline；时间线 actorId 为空、载荷不含 runNo/stepId | application/investigation/ActiveInvestigation、HYPOTHESIS_*/EVIDENCE_LINKED 载荷 | TASK-039～041 在同一锁序内先完成 run/Stop 准入再调用；如需在事件中追溯 step/run，以新载荷版本加入，不改 V1 | TASK-039～041 |
 | 重复关系以锁内 FOR SHARE 预查判定；数据库唯一键冲突（理论上仅在绕过服务写入时）会以数据访问异常失败而非 EVIDENCE_LINK_ALREADY_EXISTS | application/evidence/EvidenceApplicationService | 所有 Evidence 写入须经 createEvidenceLink（持 Incident 行锁）；不得新增旁路写入 | — |
