@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-27（B04 REVIEW，待独立 Review）
+> 最近更新：2026-09-27（B04 DONE，b927804；B05 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -28,8 +28,8 @@
 | TASK-018 | B03 | Stop Investigation Request | DONE | commit 626a19f（B03，Base 4630f27） | B03-V1/V2 verify exit 0＋成员专项证据；B03-R1 P1 已修复，B03-R2 PASS；见 PROGRESS「B03」 |
 | TASK-019 | B03 | Cancel Incident | DONE | commit 626a19f（B03，Base 4630f27） | B03-V1/V2 verify exit 0＋成员专项证据；B03-R1 P1 已修复，B03-R2 PASS；见 PROGRESS「B03」 |
 | TASK-020 | B03 | Incident 基础 API | DONE | commit 626a19f（B03，Base 4630f27） | B03-V1/V2 verify exit 0＋成员专项证据；B03-R1 P1 已修复，B03-R2 PASS；见 PROGRESS「B03」 |
-| TASK-021 | B04 | 调查事实数据库结构 | REVIEW | 未提交（B04，Base f116f8e） | 见 PROGRESS「B04」成员进度与 B04-V1；B04-R1 PASS，待提交 |
-| TASK-022 | B04 | Observation Domain / Persistence | REVIEW | 未提交（B04，Base f116f8e） | 见 PROGRESS「B04」成员进度与 B04-V1；B04-R1 PASS，待提交 |
+| TASK-021 | B04 | 调查事实数据库结构 | DONE | commit b927804（B04，Base f116f8e） | B04-V1 verify exit 0＋成员专项证据；B04-R1 PASS；见 PROGRESS「B04」 |
+| TASK-022 | B04 | Observation Domain / Persistence | DONE | commit b927804（B04，Base f116f8e） | B04-V1 verify exit 0＋成员专项证据；B04-R1 PASS；见 PROGRESS「B04」 |
 | TASK-023 | B05 | Hypothesis Domain | TODO | — | NOT RUN |
 | TASK-024 | B05 | Evidence Domain | TODO | — | NOT RUN |
 | TASK-025 | B06 | Diagnosis Domain | TODO | — | NOT RUN |
@@ -186,7 +186,7 @@
 
 ### B04 — 调查事实表与不可变 Observation
 
-- 状态：REVIEW（B04-R1 PASS，已通过，待提交）
+- 状态：DONE（B04-R1 PASS，已提交 b927804）
 - 成员及顺序：TASK-021 → TASK-022；批外前置：TASK-020 DONE（626a19f，B03-R2 PASS）
 - Base SHA：f116f8e76b230ba758d1279394875a8db544b6f3
 - 范围：infrastructure db/migration（V003）与 Schema 测试；domain/observation；application/observation（ObservationRepository 端口）；infrastructure persistence/mybatis/observation 与测试；docs/dev。明确不做：Hypothesis/Evidence/Diagnosis 领域与用例（TASK-023～026）、Invocation 执行骨架与去重（TASK-047/048）、AgentStep 生命周期（TASK-038）、Provider 与结果 Codec（TASK-051 起）、recovery_policy/recovery_verification 表（TASK-074）
@@ -201,7 +201,7 @@
 - 专项证据/NOT RUN：正式 boot jar＋demo＋独立 MySQL 8.4.11：先 --spring.flyway.target=2（V001、V002、R__），再正常启动升级应用 V003、R__ 不重跑、资源 5 行，两次 health 200，容器已删除；recovery_verification 外键 NOT RUN（表由 TASK-074 创建）；Hypothesis/Evidence/Diagnosis/AgentStep/Invocation 的 Java 领域与写路径 NOT RUN（TASK-023～026、038、048）；结果 Payload Codec NOT RUN（TASK-051 起）；MySQL 8.0.16、Windows mvnw.cmd NOT RUN
 - 验证矩阵：021 真实 MySQL Schema 测试（CHECK、UNIQUE、FK、同 Investigation/Incident 复合约束）；022 真实 MySQL 仓储测试（插入与读取、与来源 Invocation 不一致时拒绝、MyBatis 中不存在针对 observation 的 UPDATE/DELETE 语句）；批尾 `cd backend && ./mvnw -B clean verify`
 - B04-R1：独立 Reviewer；范围 f116f8e 到当前工作树（含未跟踪文件），无范围扩大或 B05 提前实现；结论 PASS，无 P0/P1；确认 V003 七表、上下文互斥、Evidence 唯一关系、Diagnosis 版本与复合外键符合本阶段规格，Observation 无更新/删除入口且写入时核对来源 SUCCEEDED、Incident、上下文与资源；独立实测 `./mvnw -B clean verify` exit 0（domain 23、infrastructure 245、web 21、boot 2，无跳过），36 个 Schema 与 4 个仓储用例在真实 MySQL 通过，Enforcer/Spotless 与 `git diff --check` 通过；正式 jar 自 V002＋Demo Seed 升级到 V003，前后 health 200、七表存在、Seed 未重跑、资源仍 5 行；非阻塞：TASK-074 补恢复外键时勿重复创建已存在的样本唯一键，Diagnosis 引用的 Evidence 属同一 Investigation 须由 TASK-025/026 创建事务校验；MySQL 8.0.16、Windows Wrapper NOT VERIFIED；Commit Recommendation YES
-- 提交：未提交（Review 通过，按用户授权提交中）
+- 提交：代码提交 b927804bb0b459d0aa59c365234f4a0474fe83f8（feat(investigation): investigation fact tables and immutable observations (TASK-021–022)）；SHA 回填为后续 docs 提交
 
 ### 工作流文档变更（不属于 TASK-012 或 B01）
 

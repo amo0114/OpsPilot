@@ -2,22 +2,20 @@
 
 更新时间：2026-09-27（本地）
 仓库/分支：/root/projects/OpsPilot-V0.1-IMPLEMENTATION，main；无 remote
-当前批次/状态：B04 REVIEW（B04-R1 PASS，提交中）
-成员 Task 及顺序：TASK-021 → TASK-022（均 REVIEW）
-固定 Base SHA：f116f8e76b230ba758d1279394875a8db544b6f3
-批外前置核实：TASK-020 DONE（626a19f）；B03 DONE
-允许目录 / 明确不做 / 关键不变量：见 PROGRESS「B04」记录
+当前批次/状态：B04 DONE（代码 b927804，B04-R1 PASS）；B05 未开始
+成员 Task 及顺序：B04 = TASK-021 → 022（均 DONE）；下一批 B05 = TASK-023 → 024
+固定 Base SHA：B04 为 f116f8e76b230ba758d1279394875a8db544b6f3；B05 开工时读取当时 HEAD
+批外前置核实：B05 的批外前置 TASK-022 DONE（b927804）
+允许目录 / 明确不做 / 关键不变量：B05 开工时按 BATCH-PLAN 与 08 TASK-023/024 固定
 本批规格章节及 PROGRESS 记录：PROGRESS「B04」
-当前成员及位置：全部成员实现完成；等待 B04-R1 独立 Review
-已实现并针对性验证的成员：TASK-021（InvestigationFactSchemaTest 36/36）；TASK-022（MyBatisObservationRepositoryTest 4/4＋2 变异）
-未完成 / 未执行验证：recovery_verification 外键（TASK-074）、Hypothesis/Evidence/Diagnosis 领域（TASK-023～026）NOT RUN；MySQL 8.0.16、Windows mvnw.cmd NOT RUN
-未提交文件（含既有无关修改）：全部为 B04 改动，见 PROGRESS「B04」本批修改文件（含未跟踪文件）；无既有无关修改
-共同验证及独立 Review 证据编号：B04-V1（backend `./mvnw -B clean verify` exit 0：domain 23、infrastructure 245、web 21、boot 2）；B04-R1 PASS
-后续回填（已记入 PROGRESS 待处理问题）：TASK-074 补 recovery_verification 外键；TASK-043/047/048 状态索引；TASK-025/026 诊断引用同 Investigation；TASK-049/051 脱敏与结果 Codec
+当前成员及位置：无进行中批次
+已实现并针对性验证的成员：B01～B04 全部
+未完成 / 未执行验证：recovery_verification 外键（TASK-074）；MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
+未提交文件（含既有无关修改）：无（本交接卡与 PROGRESS 回填随 docs(progress) 提交）
+共同验证及独立 Review 证据编号：B04-V1、B04-R1
 下一步具体动作：
-1. 独立 Reviewer 按 BATCH-PLAN §2 审查 f116f8e 到当前工作树（git status --short、git diff f116f8e、git ls-files --others --exclude-standard）
-2. Review PASS 且获用户提交授权后提交（建议标题 feat(investigation): investigation fact tables and immutable observations (TASK-021–022)），回填 SHA，B04 与成员一起 DONE
-3. 未提交/未 DONE 前不开始 B05
+1. 等待用户指示开始 B05（Hypothesis 与 Evidence 关系，TASK-023 → 024）
+2. B05 开工：核对 Git、固定 HEAD 为 Base；Evidence 不可变、重复关系返回 EVIDENCE_LINK_ALREADY_EXISTS（04 §29）；Hypothesis 状态变化须进时间线（04 §27）
 本地启动 Demo 配置：在 OPSPILOT_DB_* 环境变量基础上加 --spring.profiles.active=demo
 
 后续 UI 约定（TASK-096/099 实施）：
