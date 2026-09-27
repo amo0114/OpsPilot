@@ -42,6 +42,12 @@ class MyBatisIncidentRepository implements IncidentRepository {
     }
 
     @Override
+    public Optional<Incident> findByKeyForUpdate(IncidentKey incidentKey) {
+        return Optional.ofNullable(mapper.selectByKeyForUpdate(incidentKey.value()))
+                .map(MyBatisIncidentRepository::toDomain);
+    }
+
+    @Override
     public Incident apply(IncidentTransition transition, Instant at) {
         LocalDateTime time = utc(at);
         int updated = mapper.transition(

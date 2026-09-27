@@ -38,6 +38,14 @@
           AND CAST(incident_key AS BINARY) = CAST(#{incidentKey} AS BINARY)
     </select>
 
+    <select id="selectByKeyForUpdate" resultMap="incidentRow">
+        SELECT <include refid="columns"/>
+        FROM incident
+        WHERE incident_key = #{incidentKey}
+          AND CAST(incident_key AS BINARY) = CAST(#{incidentKey} AS BINARY)
+        FOR UPDATE
+    </select>
+
     <select id="selectByIdForShare" resultMap="incidentRow">
         SELECT <include refid="columns"/>
         FROM incident

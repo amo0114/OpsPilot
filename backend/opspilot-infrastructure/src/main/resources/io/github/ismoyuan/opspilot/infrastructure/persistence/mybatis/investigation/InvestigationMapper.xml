@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.investigation.InvestigationMapper">
+
+    <resultMap id="investigationRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.investigation.InvestigationRow">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="incident_id" javaType="_long"/>
+            <arg column="started_at" javaType="java.time.LocalDateTime"/>
+            <arg column="last_activity_at" javaType="java.time.LocalDateTime"/>
+            <arg column="current_run_no" javaType="_int"/>
+            <arg column="current_run_started_at" javaType="java.time.LocalDateTime"/>
+            <arg column="current_run_capability_count" javaType="_int"/>
+            <arg column="capability_call_count" javaType="_long"/>
+            <arg column="consecutive_ai_failure_count" javaType="_int"/>
+            <arg column="stop_requested_at" javaType="java.time.LocalDateTime"/>
+            <arg column="stop_requested_by" javaType="String"/>
+            <arg column="max_capability_calls" javaType="_int"/>
+            <arg column="max_duration_seconds" javaType="_int"/>
+            <arg column="agent_step_timeout_seconds" javaType="_int"/>
+            <arg column="max_consecutive_ai_failures" javaType="_int"/>
+            <arg column="lock_version" javaType="_long"/>
+        </constructor>
+    </resultMap>
+
+    <select id="selectByIncidentIdForUpdate" resultMap="investigationRow">
+        SELECT id, incident_id, started_at, last_activity_at, current_run_no, current_run_started_at,
+               current_run_capability_count, capability_call_count, consecutive_ai_failure_count,
+               stop_requested_at, stop_requested_by, max_capability_calls, max_duration_seconds,
+               agent_step_timeout_seconds, max_consecutive_ai_failures, lock_version
+        FROM investigation
+        WHERE incident_id = #{incidentId}
+        FOR UPDATE
+    </select>
+
+    <insert id="insertFirstRun">
+        INSERT INTO investigation (incident_id, started_at, last_activity_at, current_run_no, current_run_started_at,
+                                   current_run_capability_count, capability_call_count,
+                                   consecutive_ai_failure_count, stop_requested_at, stop_requested_by,
+                                   max_capability_calls, max_duration_seconds, agent_step_timeout_seconds,
+                                   max_consecutive_ai_failures, created_at, updated_at, lock_version)
+        VALUES (#{incidentId}, #{now}, #{now}, 1, #{now}, 0, 0, 0, NULL, NULL, #{maxCapabilityCalls},
+                #{maxDurationSeconds}, #{agentStepTimeoutSeconds}, #{maxConsecutiveAiFailures}, #{now}, #{now}, 0)
+    </insert>
+
+    <!-- 累计 capability_call_count、started_at 与限制快照不在此处修改（01 §9） -->
+    <update id="startNextRun">
+        UPDATE investigation
+        SET current_run_no = #{nextRunNo},
+            current_run_started_at = #{now},
+            current_run_capability_count = 0,
+            consecutive_ai_failure_count = 0,
+            stop_requested_at = NULL,
+            stop_requested_by = NULL,
+            last_activity_at = #{now},
+            updated_at = #{now},
+            lock_version = lock_version + 1
+        WHERE id = #{id}
+          AND current_run_no = #{expectedRunNo}
+          AND lock_version = #{expectedVersion}
+    </update>
+</mapper>

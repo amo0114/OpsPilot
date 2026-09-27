@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-27（B01 DONE，ced26e0；B02 未开始）
+> 最近更新：2026-09-27（B02 REVIEW，待独立 Review）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -23,8 +23,8 @@
 | TASK-013 | B01 | Incident Domain Model | DONE | commit ced26e0（B01，Base 5cc63e0） | B01-V1 verify exit 0＋成员专项证据；B01-R1 PASS；见 PROGRESS「B01」 |
 | TASK-014 | B01 | Incident 状态转换 Repository | DONE | commit ced26e0（B01，Base 5cc63e0） | B01-V1 verify exit 0＋成员专项证据；B01-R1 PASS；见 PROGRESS「B01」 |
 | TASK-015 | B01 | 创建 Incident | DONE | commit ced26e0（B01，Base 5cc63e0） | B01-V1 verify exit 0＋成员专项证据；B01-R1 PASS；见 PROGRESS「B01」 |
-| TASK-016 | B02 | 开始调查 | TODO | — | NOT RUN |
-| TASK-017 | B02 | Continue Investigation | TODO | — | NOT RUN |
+| TASK-016 | B02 | 开始调查 | REVIEW | 未提交（B02，Base cb69440） | 见 PROGRESS「B02」成员进度与 B02-V1；B02-R1 PASS，待提交 |
+| TASK-017 | B02 | Continue Investigation | REVIEW | 未提交（B02，Base cb69440） | 见 PROGRESS「B02」成员进度与 B02-V1；B02-R1 PASS，待提交 |
 | TASK-018 | B03 | Stop Investigation Request | TODO | — | NOT RUN |
 | TASK-019 | B03 | Cancel Incident | TODO | — | NOT RUN |
 | TASK-020 | B03 | Incident 基础 API | TODO | — | NOT RUN |
@@ -142,6 +142,25 @@
 - B01-R1：独立 Reviewer；范围 5cc63e0 到当前工作树（含未跟踪文件），未发现 B02 功能提前进入；结论 PASS，无 P0/P1；实测 `./mvnw -B clean verify` exit 0（domain 22/22、infrastructure 191/191、web 21/21，无跳过），Enforcer、Spotless、`git diff --check` 通过，真实 MySQL 条件更新、并发竞争、创建事务回滚与编号分配已核实；boot jar 启动、MySQL 8.0.16、Windows Wrapper NOT VERIFIED；非阻塞意见已记入待处理问题；Commit Recommendation YES
 - 提交：代码提交 ced26e02e9e8c15eed55e6e2a3b5842544f158ac（feat(incident): add incident creation and guarded transitions (TASK-013–015)）；SHA 回填为后续 docs 提交
 
+### B02 — 开始/继续调查与 run 初始化/切换
+
+- 状态：REVIEW（独立 Review PASS，已通过，待提交）
+- 成员及顺序：TASK-016 → TASK-017；批外前置：TASK-015 DONE（ced26e0，B01-R1 PASS）
+- Base SHA：cb694401f955ecf6a63202c19ad900dbeec38e18
+- 范围：domain/investigation、domain/timeline、domain/error；application/investigation（用例、Investigation 仓储端口、WorkDispatcher 端口）、application/incident（按 key 加锁读取）；infrastructure persistence/mybatis/investigation、incident、配置（InvestigationProperties）与占位 WorkDispatcher；测试；docs/dev。明确不做：Stop（TASK-018）、Cancel（TASK-019）、HTTP API（TASK-020）、真实 WorkDispatcher/Worker（TASK-035）、调查循环/Guard/AgentStep（TASK-037～043）、启动恢复（TASK-043）、VerificationFailed 回到调查（TASK-082）、Approval 表（TASK-062/066）
+- 规格：08 TASK-016～017；01 §3～§4、§9～§10、§36；04 §16、§57、§70～§71；05 §24～§28、§93；07 §40～§42、§45、§51～§52、§88
+- 关键不变量：Start 同事务创建唯一 Investigation、初始化 run1、Incident 条件迁移、追加 Timeline；Continue 按 Incident→Investigation 锁序，在同一 Investigation 开新 run，只重置本轮起点/本轮计数/连续 AI 失败/Stop，保留 started_at、累计计数与历史；AWAITING_APPROVAL（即存在 PENDING Approval，01 §3.4）拒绝为 PENDING_APPROVAL_EXISTS；并发 Start/Continue 只准入一个；派发只在提交后，占位 Dispatcher 不代表后台调查完成；预算限制为首次创建时的配置快照
+- 开工已有修改：无（工作树干净）
+- 成员进度：
+  - TASK-016：实现并针对性验证完成。domain：Investigation（nextRun、currentRunDeadline）、InvestigationLimits、InvestigationStartedPayloadV1、TimelineEventType.INVESTIGATION_STARTED、ErrorCode.PENDING_APPROVAL_EXISTS；application：WorkDispatcher 端口、InvestigationRepository 端口、IncidentRepository.findByKeyForUpdate、Start/Continue 命令与结果、InvestigationApplicationService（私有 resumeInvestigation：一事务内锁 Incident→校验→锁/建 Investigation→条件迁移→时间线，afterCommit 派发，派发异常只记录）；infrastructure：InvestigationMapper/Row/MyBatisInvestigationRepository（insertFirstRun、startNextRun 条件为原轮号＋原版本）、IncidentMapper.selectByKeyForUpdate、InvestigationProperties（opspilot.investigation.*，默认 12/480/60/3）＋InvestigationLimits Bean、DeferredWorkDispatcher（只记录日志的占位派发器）。InvestigationRunIntegrationTest 中 Start 4 例（真实 MySQL：run 1 字段与配置快照、时间线、另一连接在派发时读到已提交 INVESTIGATING；时间线失败全回滚且不派发；旧版本/不存在/小写键/错误状态均拒绝且无写入；2 线程并发 Start 恰一准入、一条 Investigation、一次派发）；变异：派发改为事务内调用 → 1 例失败，已还原
+  - TASK-017：实现并针对性验证完成（Continue 走同一 resumeInvestigation：AWAITING_APPROVAL 先于版本校验返回 PENDING_APPROVAL_EXISTS；Investigation.nextRun＋startNextRun 只改本轮字段）。InvestigationRunIntegrationTest 中 Continue 3 例（真实 MySQL：同一 Investigation id 进入 run 2，本轮计数/连续失败/Stop 清零，累计 19、started_at、限制快照 12 保留，Incident v3→v4，lock_version 4→5，时间线 START 0→1 与 CONTINUE 1→2 并存，提交后派发 run 2；AWAITING_APPROVAL 即使旧版本也返回 PENDING_APPROVAL_EXISTS，INVESTIGATING 状态冲突，旧版本冲突，均无写入；2 线程并发 Continue 恰一准入、run 为 2）；InvestigationRunTest 1 例（nextRun 只重置本轮字段）；变异：run 切换同时清零累计计数 → 1 例失败，已还原
+- 本批修改文件：domain（ErrorCode、timeline/TimelineEventType、timeline/InvestigationStartedPayloadV1、investigation/、测试 investigation/）；application（dispatch/WorkDispatcher、investigation/、incident/IncidentRepository）；infrastructure（mybatis/investigation 及 XML、IncidentMapper.java/.xml、MyBatisIncidentRepository、config/InvestigationProperties、config/InvestigationConfiguration、dispatch/DeferredWorkDispatcher、测试 investigation/InvestigationRunIntegrationTest）；docs/dev；无迁移、无新依赖
+- B02-V1：backend/；`./mvnw -B clean verify`；2026-09-27 本机 JDK 21＋Docker（Testcontainers mysql:8.4.11）；exit 0，Enforcer 与 6 模块 spotless:check 通过；domain 23/23、infrastructure 198/198、web 21/21，无跳过；受测代码为 Base cb69440＋当前未提交工作树；覆盖 TASK-016～017
+- 专项证据/NOT RUN：真实 MySQL 原子性、提交后派发、并发准入见成员进度；boot jar＋demo 连 MySQL 8.4.11：health 200，beans 含 investigationApplicationService、deferredWorkDispatcher、investigationLimits、myBatisInvestigationRepository、clock（beans 端点仅本次命令行临时开放，容器已删除）；无 HTTP 入口（TASK-020），真实派发/Worker NOT RUN（TASK-035 起）；MySQL 8.0.16、Windows mvnw.cmd NOT RUN
+- 验证矩阵：016/017 真实 MySQL 用例（原子创建与回滚、run 字段、提交后派发、冲突与 PENDING 审批、2 线程并发 Start/Continue 各一胜者）；纯规则单测只覆盖 run 切换；批尾 `cd backend && ./mvnw -B clean verify`
+- B02-R1：独立 Reviewer；范围 cb69440 到当前工作树（含未跟踪文件），未发现 B03 功能提前进入；结论 PASS，无 P0/P1；实测 `./mvnw -B clean verify` exit 0（domain 23/23、infrastructure 198/198、web 21/21，无跳过），Enforcer、Spotless、`git diff --check` 通过，7 个真实 MySQL 用例覆盖原子性、回滚、提交后派发与并发准入；正式 boot jar＋demo＋独立 MySQL 8.4.11 health 200，新 Service/Repository/Dispatcher/配置 Bean 装配，临时进程与容器已清理；确认配置覆盖值写入库、Continue 不以当前配置覆盖原快照、回滚不派发、派发异常日志不含原始异常内容；真实 Worker、MySQL 8.0.16、Windows Wrapper NOT VERIFIED（不阻塞）；非阻塞意见（真实 PENDING Approval 同锁复核、占位 Dispatcher 由 TASK-035～043 接替）已在待处理问题；Commit Recommendation YES
+- 提交：未提交（Review 通过，按用户授权提交中）
+
 ### 工作流文档变更（不属于 TASK-012 或 B01）
 
 - 2026-09-27：用户确认批次流程，新增 BATCH-PLAN，同步 Agent 入口、07/08 工作流条款、Manifest、启动指南及进度/交接。
@@ -198,3 +217,8 @@
 | Fault Lab 创建的 Incident 时间线发起方记为 SYSTEM、actorId 为请求用户；MANUAL 记 USER | IncidentApplicationService | TASK-092 如需区分请求用户与系统注入，再调整 | TASK-092 |
 | createIncident 用 TransactionTemplate 默认 REQUIRED 传播：无外层事务时每次编号冲突重试都是新事务；若将来从已有事务内调用，会加入外层事务，冲突后外层被标记 rollback-only，重试不成立（B01-R1 非阻塞） | application/incident/IncidentApplicationService.createIncident | 第一个在事务内调用它的用例（如 TASK-092 Fault Lab 创建 Incident）须先明确事务契约：在外层事务之外调用，或改为 REQUIRES_NEW 并说明提交语义 | TASK-092 或首个事务内调用方 |
 | 并发阻塞测试以 700ms 未完成推断第二个迁移在等待行锁，只证明未完成，不直接证明进入数据库锁等待（B01-R1 非阻塞） | MyBatisIncidentTransitionTest.concurrentTransitionWaitsForFirstCommitThenConflicts | 调整该测试时可改为查询 performance_schema.data_lock_waits / information_schema 确认锁等待再放行，不增加加压轮次 | 后续触及该测试的 Task |
+| 调查派发目前为 DeferredWorkDispatcher（只记日志）：Start/Continue 落账后 Incident 停在 INVESTIGATING、无 Worker 推进；不能视为后台调查完成 | infrastructure/dispatch/DeferredWorkDispatcher | TASK-035 以 InProcessWorkDispatcher 替换并删除本类；TASK-036 SingleFlight；TASK-037～043 调查循环、Guard、AgentStep、终止与启动恢复；启动恢复/补派发不得调用 resumeInvestigation | TASK-035～043 |
+| PENDING Approval 判定目前以 Incident=AWAITING_APPROVAL 表达（01 §3.4），approval_request 表尚未建立 | application/investigation/InvestigationApplicationService | Approval 表建立后在同一锁内以真实 PENDING 记录复核，保持 PENDING_APPROVAL_EXISTS 语义 | TASK-062/066/067 |
+| resumeInvestigation 为私有，只服务 Start/Continue；VerificationFailed → INVESTIGATING（新 run）尚未接入 | InvestigationApplicationService | 在同一方法增加 VERIFICATION_FAILED 来源，由验证结果事务调用；不开放给启动恢复 | TASK-082 |
+| Start/Continue 的派发用 afterCommit 同步注册：外层事务存在时派发推迟到外层提交；派发异常只记录（事实已提交，由补派发恢复） | InvestigationApplicationService.dispatchAfterCommit | TASK-035 补派发与启动扫描覆盖“已提交但未唤醒”的 run | TASK-035/043 |
+| INVESTIGATION_STARTED 同时用于 Start 与 Continue，以载荷 source（START_INVESTIGATION/CONTINUE_INVESTIGATION）、previousRunNo、runNo、本轮额度区分；发起方均为 USER | domain/timeline/InvestigationStartedPayloadV1 | 01 §35 只列 INVESTIGATION_STARTED；TASK-082 的 VerificationFailed 来源用同一事件、发起方 SYSTEM | TASK-082 |

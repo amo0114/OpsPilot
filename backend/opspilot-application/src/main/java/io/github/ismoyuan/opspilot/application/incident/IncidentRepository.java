@@ -21,6 +21,11 @@ public interface IncidentRepository {
     Optional<Incident> findByKey(IncidentKey incidentKey);
 
     /**
+     * 按字节精确匹配编号并对该行加排他锁（SELECT … FOR UPDATE）；运行控制事务按 Incident → Investigation 顺序加锁（05 §27）。
+     */
+    Optional<Incident> findByKeyForUpdate(IncidentKey incidentKey);
+
+    /**
      * 执行一次已由策略验证的迁移：status 与 lock_version 同时匹配才更新，lock_version 加一；
      * 目标为 RESOLVED 时同一语句写入 resolved_at。
      *

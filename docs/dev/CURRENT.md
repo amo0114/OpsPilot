@@ -2,20 +2,22 @@
 
 更新时间：2026-09-27（本地）
 仓库/分支：/root/projects/OpsPilot-V0.1-IMPLEMENTATION，main；无 remote
-当前批次/状态：B01 DONE（代码 ced26e0，B01-R1 PASS）；B02 未开始
-成员 Task 及顺序：B01 = TASK-013 → 014 → 015（均 DONE）；下一批 B02 = TASK-016 → 017
-固定 Base SHA：B01 为 5cc63e03c57b560184127ba94c4581e3e077dbff；B02 开工时读取当时 HEAD
-批外前置核实：B02 的批外前置 TASK-015 DONE（ced26e0）
-允许目录 / 明确不做 / 关键不变量：B02 开工时按 BATCH-PLAN 与 08 TASK-016/017 固定
-本批规格章节及 PROGRESS 记录：PROGRESS「B01」
-当前成员及位置：无进行中批次
-已实现并针对性验证的成员：B01 全部
-未完成 / 未执行验证：B01 的 boot jar 启动、MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
-未提交文件（含既有无关修改）：无（本交接卡与 PROGRESS 回填随 docs(progress) 提交）
-共同验证及独立 Review 证据编号：B01-V1、B01-R1
+当前批次/状态：B02 REVIEW（B02-R1 PASS，提交中）
+成员 Task 及顺序：TASK-016 → TASK-017（均 REVIEW）
+固定 Base SHA：cb694401f955ecf6a63202c19ad900dbeec38e18
+批外前置核实：TASK-015 DONE（ced26e0）；B01 DONE
+允许目录 / 明确不做 / 关键不变量：见 PROGRESS「B02」记录
+本批规格章节及 PROGRESS 记录：PROGRESS「B02」
+当前成员及位置：全部成员实现完成；B02-R1 PASS
+已实现并针对性验证的成员：TASK-016（Start 4 例＋变异）；TASK-017（Continue 3 例＋InvestigationRunTest＋变异）
+未完成 / 未执行验证：真实派发/Worker NOT RUN（TASK-035 起）；MySQL 8.0.16、Windows mvnw.cmd NOT RUN
+未提交文件（含既有无关修改）：全部为 B02 改动，见 PROGRESS「B02」本批修改文件（含未跟踪目录）；无既有无关修改
+共同验证及独立 Review 证据编号：B02-V1（backend `./mvnw -B clean verify` exit 0：domain 23、infrastructure 198、web 21）；B02-R1 PASS（无 P0/P1）
+后续任务（已记入 PROGRESS 待处理问题，本批未实现）：TASK-035 真实派发替换 DeferredWorkDispatcher；TASK-036～043 调查循环、Guard、AgentStep、终止与启动恢复；TASK-062/066/067 真实 PENDING Approval 复核；TASK-082 VerificationFailed 进入新 run
 下一步具体动作：
-1. 等待用户指示开始 B02（开始/继续调查与 run 初始化/切换，TASK-016 → 017）
-2. B02 开工：核对 Git、固定 HEAD 为 Base，按 BATCH-PLAN §1 记录范围与验证矩阵；遵守 PROGRESS 中归属 TASK-016 的待处理问题（incidentKey 先查再迁移、事务契约）
+1. 独立 Reviewer 按 BATCH-PLAN §2 审查 cb69440 到当前工作树（git status --short、git diff cb69440、git ls-files --others --exclude-standard）
+2. Review PASS 且获用户提交授权后提交（建议标题 feat(investigation): start and continue investigation runs (TASK-016–017)），回填 SHA，B02 与成员一起 DONE
+3. 未提交/未 DONE 前不开始 B03
 本地启动 Demo 配置：在 OPSPILOT_DB_* 环境变量基础上加 --spring.profiles.active=demo
 
 后续 UI 约定（TASK-096/099 实施）：
