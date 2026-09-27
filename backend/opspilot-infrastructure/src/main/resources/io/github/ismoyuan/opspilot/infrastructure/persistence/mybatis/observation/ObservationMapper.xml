@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.observation.ObservationMapper">
+
+    <resultMap id="observationRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.observation.ObservationRow">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="incident_id" javaType="_long"/>
+            <arg column="investigation_id" javaType="Long"/>
+            <arg column="recovery_verification_id" javaType="Long"/>
+            <arg column="capability_invocation_id" javaType="_long"/>
+            <arg column="managed_resource_id" javaType="_long"/>
+            <arg column="observation_kind" javaType="String"/>
+            <arg column="schema_name" javaType="String"/>
+            <arg column="schema_version" javaType="_int"/>
+            <arg column="payload" javaType="String"/>
+            <arg column="summary" javaType="String"/>
+            <arg column="observed_at" javaType="java.time.LocalDateTime"/>
+            <arg column="window_start" javaType="java.time.LocalDateTime"/>
+            <arg column="window_end" javaType="java.time.LocalDateTime"/>
+            <arg column="created_at" javaType="java.time.LocalDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <sql id="columns">
+        id, incident_id, investigation_id, recovery_verification_id, capability_invocation_id, managed_resource_id,
+        observation_kind, schema_name, schema_version, payload, summary, observed_at, window_start, window_end,
+        created_at
+    </sql>
+
+    <!--
+      来源 Invocation 必须已成功（01 §16），且 Incident、调查/恢复上下文与资源一致（04 §22）；
+      &lt;=&gt; 使两侧同为 NULL 时视为相等。条件不满足时插入 0 行。
+    -->
+    <insert id="insertFromSucceededInvocation" useGeneratedKeys="true" keyProperty="o.id" keyColumn="id">
+        INSERT INTO observation (incident_id, investigation_id, recovery_verification_id, capability_invocation_id,
+                                 managed_resource_id, observation_kind, schema_name, schema_version, payload,
+                                 summary, observed_at, window_start, window_end, created_at)
+        SELECT #{o.incidentId}, #{o.investigationId}, #{o.recoveryVerificationId}, ci.id, #{o.managedResourceId},
+               #{o.observationKind}, #{o.schemaName}, #{o.schemaVersion}, #{o.payload}, #{o.summary},
+               #{o.observedAt}, #{o.windowStart}, #{o.windowEnd}, #{o.createdAt}
+        FROM capability_invocation ci
+        WHERE ci.id = #{o.capabilityInvocationId}
+          AND ci.status = 'SUCCEEDED'
+          AND ci.incident_id = #{o.incidentId}
+          AND ci.managed_resource_id = #{o.managedResourceId}
+          AND ci.investigation_id &lt;=&gt; #{o.investigationId}
+          AND ci.recovery_verification_id &lt;=&gt; #{o.recoveryVerificationId}
+    </insert>
+
+    <select id="selectById" resultMap="observationRow">
+        SELECT <include refid="columns"/>
+        FROM observation
+        WHERE id = #{id}
+    </select>
+
+    <select id="selectByInvestigationId" resultMap="observationRow">
+        SELECT <include refid="columns"/>
+        FROM observation
+        WHERE investigation_id = #{investigationId}
+        ORDER BY id
+    </select>
+</mapper>

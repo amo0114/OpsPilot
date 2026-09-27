@@ -70,7 +70,8 @@ class IncidentInvestigationSchemaTest {
     @Test
     void migrationCreatesIncidentCoreTablesAndIndexes() throws SQLException {
         assertThat(migration.success).isTrue();
-        assertThat(migration.targetSchemaVersion).isEqualTo("002");
+        assertThat(migration.migrations)
+                .anySatisfy(applied -> assertThat(applied.version).isEqualTo("002"));
         assertThat(strings("SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE()"))
                 .contains("incident", "incident_affected_resource", "investigation", "incident_timeline_event");
         assertThat(strings("SELECT CONCAT(table_name, '.', index_name, '(', GROUP_CONCAT(column_name ORDER BY"

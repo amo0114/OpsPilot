@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-27（B03 DONE，626a19f；B04 未开始）
+> 最近更新：2026-09-27（B04 REVIEW，待独立 Review）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -28,8 +28,8 @@
 | TASK-018 | B03 | Stop Investigation Request | DONE | commit 626a19f（B03，Base 4630f27） | B03-V1/V2 verify exit 0＋成员专项证据；B03-R1 P1 已修复，B03-R2 PASS；见 PROGRESS「B03」 |
 | TASK-019 | B03 | Cancel Incident | DONE | commit 626a19f（B03，Base 4630f27） | B03-V1/V2 verify exit 0＋成员专项证据；B03-R1 P1 已修复，B03-R2 PASS；见 PROGRESS「B03」 |
 | TASK-020 | B03 | Incident 基础 API | DONE | commit 626a19f（B03，Base 4630f27） | B03-V1/V2 verify exit 0＋成员专项证据；B03-R1 P1 已修复，B03-R2 PASS；见 PROGRESS「B03」 |
-| TASK-021 | B04 | 调查事实数据库结构 | TODO | — | NOT RUN |
-| TASK-022 | B04 | Observation Domain / Persistence | TODO | — | NOT RUN |
+| TASK-021 | B04 | 调查事实数据库结构 | REVIEW | 未提交（B04，Base f116f8e） | 见 PROGRESS「B04」成员进度与 B04-V1；B04-R1 PASS，待提交 |
+| TASK-022 | B04 | Observation Domain / Persistence | REVIEW | 未提交（B04，Base f116f8e） | 见 PROGRESS「B04」成员进度与 B04-V1；B04-R1 PASS，待提交 |
 | TASK-023 | B05 | Hypothesis Domain | TODO | — | NOT RUN |
 | TASK-024 | B05 | Evidence Domain | TODO | — | NOT RUN |
 | TASK-025 | B06 | Diagnosis Domain | TODO | — | NOT RUN |
@@ -184,6 +184,25 @@
 - B03-R2（复核）：独立 Reviewer；基线仍为 4630f27，含未跟踪文件，无范围扩大；结论 PASS，无 P0/P1，原 P1 关闭：ACCEPT_FLOAT_AS_INT 已关闭，真实 HTTP＋MySQL 下 Start 与 Cancel 对 expectedVersion 0.9 均 400 REQUEST_VALIDATION_FAILED，Incident 保持 CREATED/v0、时间线只有创建事件；独立重跑 `./mvnw -B clean verify` exit 0（domain 23、infrastructure 205、web 21、boot 2，无跳过），6 模块 Enforcer/Spotless 与 `git diff --check` 通过；本轮未重复独立 jar 冒烟；MySQL 8.0.16、Windows Wrapper NOT VERIFIED；Commit Recommendation YES
 - 提交：代码提交 626a19f062babf0c5e749d198f994c4a881a4db7（feat(incident): stop, cancel and basic incident API (TASK-018–020)）；SHA 回填为后续 docs 提交
 
+### B04 — 调查事实表与不可变 Observation
+
+- 状态：REVIEW（B04-R1 PASS，已通过，待提交）
+- 成员及顺序：TASK-021 → TASK-022；批外前置：TASK-020 DONE（626a19f，B03-R2 PASS）
+- Base SHA：f116f8e76b230ba758d1279394875a8db544b6f3
+- 范围：infrastructure db/migration（V003）与 Schema 测试；domain/observation；application/observation（ObservationRepository 端口）；infrastructure persistence/mybatis/observation 与测试；docs/dev。明确不做：Hypothesis/Evidence/Diagnosis 领域与用例（TASK-023～026）、Invocation 执行骨架与去重（TASK-047/048）、AgentStep 生命周期（TASK-038）、Provider 与结果 Codec（TASK-051 起）、recovery_policy/recovery_verification 表（TASK-074）
+- 规格：08 TASK-021～022、07 §92；04 §17～§36、§59～§61、§67～§69、§84～§86、§89、§93、§97～§98；01 §15～§21、§34、§39；03 Observation/Evidence/Diagnosis 章节
+- 关键不变量：Invocation 与 Observation 调查/恢复上下文互斥（04 §19、§23）；调查调用必有 run_no、恢复调用必有 criterion_key/sample_index；Observation 只插入、无 updated_at、无更新入口，且与来源 Invocation 的 Incident/上下文/资源一致；Evidence 无内容版本字段、UNIQUE(observation_id, hypothesis_id)、只能关联同一 Investigation 的调查 Observation；Diagnosis UNIQUE(investigation_id, version_no)、含 run_no、主假设属同一 Investigation；恢复父表未建时 recovery_verification_id 先建可空列，最终 FK 由 TASK-074 补
+- 开工已有修改：无（工作树干净）
+- 成员进度：
+  - TASK-021：实现并针对性验证完成。V003__create_investigation_fact_tables.sql：capability_invocation（04 §19 上下文互斥 CHECK、run_no/criterion_key/sample_index、终态一致 CHECK：成功必有响应、失败必有错误码、未结束无结束时间、响应三列同空、raw_result_ref 仅 file://、UNIQUE(recovery_verification_id, criterion_key, sample_index)、04 §21 四个索引）、observation（无 updated_at、上下文互斥、7 种 kind、窗口成对且有序）、hypothesis（4 状态、lock_version）、evidence（仅 7 列，无 version_no/previous_evidence_id，UNIQUE(observation_id, hypothesis_id)，3 种 relation）、diagnosis（run_no、UNIQUE(investigation_id, version_no)、三类结论、前两类必有主假设）、diagnosis_evidence_ref（复合主键）、agent_step_record（run_no、step_no、UNIQUE(investigation_id, step_no)、6 种 Intent、RUNNING/SUCCEEDED/FAILED 终态一致）；investigation 增 UNIQUE(id, incident_id)。复合外键：Invocation/Observation/AgentStep 的 (investigation_id, incident_id) 与所属 Investigation 一致，Observation 的 (invocation, incident, resource) 与来源 Invocation 一致，Evidence 的 Observation 与 Hypothesis 均属同一 Investigation（恢复 Observation 因 investigation_id 为空无法被引用），Diagnosis 主假设属同一 Investigation。recovery_verification_id 只建可空列与索引。InvestigationFactSchemaTest 36/36（真实 MySQL：7 表、Evidence 列集、Observation 无 updated_at；一致图谱可插入；12 个复合外键/唯一冲突用例；22 个 CHECK 用例）；IncidentInvestigationSchemaTest 断言改为“V002 已应用”。测试首轮发现响应与 AgentStep 输出的“同空同非空”CHECK 在部分为空时结果为 NULL 被放行，已改为 (…) IS TRUE 并增加 2 个用例
+  - TASK-022：实现并针对性验证完成。domain/observation：ObservationKind（7 类）、NewObservation（上下文互斥、schema 命名与版本、摘要 ≤1000、窗口成对有序）、Observation（id＋内容＋createdAt，无修改方法）；application/observation/ObservationRepository（只有 insert、findById、findByInvestigationId）；infrastructure：ObservationMapper＋XML（唯一写语句为 INSERT … SELECT FROM capability_invocation：仅当来源调用 SUCCEEDED 且 Incident、investigation/recovery 上下文（<=>）、资源一致时插入，否则 0 行→IllegalArgumentException）、ObservationInsert、ObservationRow、MyBatisObservationRepository。MyBatisObservationRepositoryTest 4/4（真实 MySQL：调查观测往返含 JSON 与窗口、按 id 列出；恢复观测保持恢复上下文且不出现在调查列表；RUNNING/FAILED 来源、调查观测引用恢复调用、资源不一致、Incident 不一致 5 种均拒绝且无写入；端口方法仅 3 个、全部 Mapper XML 无 UPDATE/DELETE observation）；变异：去掉 SUCCEEDED 条件 → 1 例失败，植入 UPDATE observation 语句 → 1 例失败，均已还原
+- 本批修改文件：新增 V003__create_investigation_fact_tables.sql、InvestigationFactSchemaTest；修改 IncidentInvestigationSchemaTest（版本断言）；新增 domain/observation/{ObservationKind,NewObservation,Observation}、application/observation/ObservationRepository、infrastructure mybatis/observation/{ObservationMapper,ObservationInsert,ObservationRow,MyBatisObservationRepository} 与 ObservationMapper.xml、测试 MyBatisObservationRepositoryTest；docs/dev；无新依赖
+- B04-V1：backend/；`./mvnw -B clean verify`；2026-09-27 本机 JDK 21＋Docker（Testcontainers mysql:8.4.11）；exit 0，Enforcer 与 6 模块 spotless:check 通过；domain 23/23、infrastructure 245/245、web 21/21、boot 2/2，无跳过；受测代码为 Base f116f8e＋当前未提交工作树；覆盖 TASK-021～022
+- 专项证据/NOT RUN：正式 boot jar＋demo＋独立 MySQL 8.4.11：先 --spring.flyway.target=2（V001、V002、R__），再正常启动升级应用 V003、R__ 不重跑、资源 5 行，两次 health 200，容器已删除；recovery_verification 外键 NOT RUN（表由 TASK-074 创建）；Hypothesis/Evidence/Diagnosis/AgentStep/Invocation 的 Java 领域与写路径 NOT RUN（TASK-023～026、038、048）；结果 Payload Codec NOT RUN（TASK-051 起）；MySQL 8.0.16、Windows mvnw.cmd NOT RUN
+- 验证矩阵：021 真实 MySQL Schema 测试（CHECK、UNIQUE、FK、同 Investigation/Incident 复合约束）；022 真实 MySQL 仓储测试（插入与读取、与来源 Invocation 不一致时拒绝、MyBatis 中不存在针对 observation 的 UPDATE/DELETE 语句）；批尾 `cd backend && ./mvnw -B clean verify`
+- B04-R1：独立 Reviewer；范围 f116f8e 到当前工作树（含未跟踪文件），无范围扩大或 B05 提前实现；结论 PASS，无 P0/P1；确认 V003 七表、上下文互斥、Evidence 唯一关系、Diagnosis 版本与复合外键符合本阶段规格，Observation 无更新/删除入口且写入时核对来源 SUCCEEDED、Incident、上下文与资源；独立实测 `./mvnw -B clean verify` exit 0（domain 23、infrastructure 245、web 21、boot 2，无跳过），36 个 Schema 与 4 个仓储用例在真实 MySQL 通过，Enforcer/Spotless 与 `git diff --check` 通过；正式 jar 自 V002＋Demo Seed 升级到 V003，前后 health 200、七表存在、Seed 未重跑、资源仍 5 行；非阻塞：TASK-074 补恢复外键时勿重复创建已存在的样本唯一键，Diagnosis 引用的 Evidence 属同一 Investigation 须由 TASK-025/026 创建事务校验；MySQL 8.0.16、Windows Wrapper NOT VERIFIED；Commit Recommendation YES
+- 提交：未提交（Review 通过，按用户授权提交中）
+
 ### 工作流文档变更（不属于 TASK-012 或 B01）
 
 - 2026-09-27：用户确认批次流程，新增 BATCH-PLAN，同步 Agent 入口、07/08 工作流条款、Manifest、启动指南及进度/交接。
@@ -249,3 +268,8 @@
 | Stop 只落账停止意图，不唤醒 Worker；取消 INVESTIGATING 后旧 run 的迟到结果尚无准入拒绝（尚无调查循环） | InvestigationApplicationService.stopInvestigation、IncidentApplicationService.cancelIncident | Stop 后收束、补派发可达与按 run/状态拒绝迟到结果由 TASK-039～043 实现 | TASK-039～043 |
 | 详情 API 为阶段版本：无 currentAssessment、remediation、recovery、availableActions；创建响应也不含 availableActions | web/incident/IncidentResponses | TASK-085 IncidentDetailView、TASK-086 availableActions 按 05 §23 补齐 | TASK-085/086 |
 | Cancel reason 可空、上限 500 字符（本批自定），写入时间线载荷与摘要 | IncidentApplicationService、CancelIncidentCommand | 05 §33 未给上限 | — |
+| capability_invocation.recovery_verification_id、observation.recovery_verification_id 暂无外键（recovery_verification 表未建）；样本唯一键 UNIQUE(recovery_verification_id, criterion_key, sample_index) 已在 V003 建立 | V003 | TASK-074 必须新增 fk_capability_invocation_verification、fk_observation_verification（引用 recovery_verification(id)，并按需以复合键核对 incident_id），终版不得遗留无约束恢复引用（07 §92、08 TASK-021）；样本唯一键 uk_capability_invocation_sample 已存在，勿重复创建 | TASK-074 |
+| capability_invocation 的状态/补派发复合索引未建（04 §21 要求按实际查询确定） | V003 | Duplicate Guard、补派发与中断扫描实现时按实际 SQL 新增迁移 | TASK-043/047/048 |
+| diagnosis.termination_reason 只约束大写格式，取值集合（04 §35 为示例）由 Java 定义；diagnosis_evidence_ref 未在库内约束“同一 Investigation”（表无 investigation_id 列） | V003 | TASK-025/026 创建事务中校验引用的 Evidence 属于同一 Investigation 且主假设有 SUPPORTS 证据（diagnosis_evidence_ref 的两个独立外键不能保证同一 Investigation，B04-R1） | TASK-025/026 |
+| error_message（invocation/agent_step）必须为脱敏文本；Observation payload 目前为未解码 JSON 文本 | V003、domain/observation | TASK-049 Sanitizer、TASK-051 ObservationExtractor 与结果 Codec 落实 | TASK-049/051 |
+| 同一 Investigation 的跨表一致性已用复合外键保证（invocation/observation/agent_step 的 investigation↔incident、observation↔invocation 的 incident/resource、evidence 两侧、diagnosis 主假设）；为此 investigation 增 UNIQUE(id, incident_id)，observation/hypothesis/evidence/diagnosis 增 (id, investigation_id) 唯一键 | V003 | 后续迁移需保留这些复合键 | — |
