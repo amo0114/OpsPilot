@@ -1,121 +1,141 @@
 # 实施进度
 
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
-> 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。依赖全部 DONE 才 READY；FROZEN 只表示规格定稿，不表示任务完成。
+> 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-27（TASK-012 提交）
+> 最近更新：2026-09-27（TASK-012 提交；批次工作流文档提交；B01 未开始）
+> 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
-| Task | 名称 | 状态 | 交付定位 | 验证摘要 |
-|---|---|---|---|---|
-| TASK-001 | 导入已合并 Frozen Spec 并验证仓库落位 | DONE | commit 758d127（交付包原样落位＋授权修改 AGENTS.md、CLAUDE.md＋docs/dev 两份进度文件） | 2026-09-25 实测：SHA256SUMS 16/16 字节与哈希一致（改 AGENTS/CLAUDE 前，`sha256sum -c` exit 0；此后这两份按授权修改，与清单不同属预期）；链接 506 个 0 缺失、Manifest § 引用 95 个 0 未解析；TASK 001～109 唯一有序，前置依赖按 068→074～076→067→069 顺序 0 违例；Manifest 与 00～09 均 FROZEN/0.1；Incident 8 状态与 7 能力跨文件一致；4 类旧规则只以禁止语句出现；无 archive/旧补丁/业务代码 |
-| TASK-002 | 创建 Monorepo 工程骨架 | DONE | TASK-002 commit（紧随 758d127）：.gitignore；backend/（父 POM＋5 Module＋mvnw 3.9.16）；ai-runtime/（uv＋FastAPI health，uv.lock 按 pypi.org 生成）；web/（npm＋Vite React TS 壳）；contracts/ai-runtime/v1、deploy、scripts 占位 | 独立 Review：PASS AFTER PATCH → 复核 PASS（P1-01 uv.lock 规范索引、P1-02 .env 忽略均关闭；mvnw.cmd NOT VERIFIED）。2026-09-25 修复后实测：backend `./mvnw -B clean verify` exit 0，boot jar `/actuator/health` 200 UP；ai-runtime 清除 UV_/PIP_ 索引变量后 `uv sync --locked`、`ruff format --check`、`ruff check`、`pytest`（1 passed）exit 0，uvicorn `/internal/v1/health` 200；web `npm ci`、`typecheck`、`build` exit 0；`git check-ignore` 根及 ai-runtime/backend/web 的 .env 均忽略 |
-| TASK-003 | 建立工程约束 | DONE | TASK-003 commit（紧随 d68c953；同提交含用户的 .gitignore `.claude` 规则）：backend/pom.xml（Enforcer＋Spotless＋版本锁定）；backend/opspilot-web/pom.xml（springdoc）；AGENTS.md（补 07 §120 红线） | 独立 Review PASS（mvnw.cmd、真实 MySQL/Flyway NOT VERIFIED）。2026-09-26 实测：`./mvnw -B clean verify` exit 0（6 条 Enforcer 规则＋6 模块 spotless:check 通过）；负向：JDK 11 → RequireJavaVersion BUILD FAILURE exit 1；POM java.version=17 → RequireProperty(maven.compiler.release) BUILD FAILURE exit 1（已还原）；未格式化 Java → spotless:check BUILD FAILURE exit 1（已删除）；仓库外临时探针：lombok → BannedDependencies 失败，[3.0,) → BanDynamicVersions 失败；MyBatis 3.5.19/MyBatis-Spring 4.1.0/starter 4.1.0、Flyway 12.4.0＋flyway-mysql、mysql-connector-j 9.7.0 与 springdoc 同时解析且收敛通过；boot jar `/actuator/health` 200 UP，`/v3/api-docs` 200 openapi 3.1.0 |
-| TASK-004 | 建立配置与错误模型基础 | DONE | TASK-004 commit（紧随 04560f9）：domain/error（ErrorCode、ErrorCategory、OpsPilotException、DomainException）；application/error/ApplicationException、application/correlation/Correlation；web/error（ApiExceptionHandler、ErrorResponse）、web/request/RequestIdFilter；boot @ConfigurationPropertiesScan＋日志 correlation 格式；application/web POM；web 测试 2 个文件 | 独立 Review：PASS AFTER PATCH（P1：异常 message/cause 原样写入日志）→ 复核 PASS（具体配置绑定、mvnw.cmd NOT VERIFIED）：三处日志只记 code/status、requestId 与异常链类型＋首个栈帧，不含 message。2026-09-26 修复后实测：`./mvnw -B clean verify` exit 0，ApiErrorContractTest 10/10（原 8 项＋3 个日志点用 OutputCapture 断言 message 与 cause 中的敏感串不进日志，其中 1 项替换原 500 测试）；整段构建输出敏感串 0 命中；变异检查：恢复 `log.error(..., ex)` 后该测试失败（报 hunter2），还原后通过；boot jar health 200、未知路由 404 统一包络；具体配置类绑定 NOT RUN |
-| TASK-005 | 创建系统接入数据库结构 | DONE | TASK-005 commit（紧随 384589a）：infrastructure db/migration/V001__create_system_integration_tables.sql；infrastructure SystemIntegrationSchemaTest；infrastructure/boot POM；boot application.yml（datasource＋flyway） | 独立 Review 两轮 PASS AFTER PATCH：第 1 轮 P1 枚举 CHECK 在 ai_ci 下放行大小写/重音、正则 $ 放行末尾换行 → 正则改 `\z`（已关闭）；第 2 轮 P1 `utf8mb4_bin` 为 PAD SPACE 放行末尾空格 → 5 个枚举 CHECK 改为 `CAST(col AS BINARY) IN`（utf8mb4_0900_bin 需 8.0.17+，不选）。第 3 轮复核 PASS（MySQL 8.0.16 实机、mvnw.cmd NOT VERIFIED）。V001 提交前未应用于持久库，直接修改。2026-09-26 第 2 轮修复后实测（mysql:8.4.11）：`./mvnw -B clean verify` exit 0；SystemIntegrationSchemaTest 29/29（原 13＋5 大小写/重音＋5 末尾换行＋5 末尾空格，均断言 3819 与约束名）；变异检查：换回 utf8mb4_bin 后恰好 5 个末尾空格用例失败，上一轮恢复旧约束时恰好 11 例失败，还原后均通过；boot jar 连独立容器首次应用 v001、再次 up to date，health 200；库内 CHECK 22、FK 4、UNIQUE 5；直连 SQL：ACTIVE␠、active、ÁCTIVE、SERVICE␠、MYSQL␠ 均 3819，合法 ACTIVE（HEX 414354495645）写入；容器已删除 |
-| TASK-006 | 实现 ManagedSystem / ManagedResource 领域模型 | DONE | TASK-006 commit（紧随 c804769）：domain/system（ManagedSystem、ManagedResource、SystemStatus、ResourceStatus、ResourceType）；application/system（ManagedSystemRepository、ManagedResourceRepository 两个 Port）；infrastructure persistence/mybatis/system（2 Mapper＋XML、2 Row、2 MyBatis 仓储）；infrastructure POM（mybatis-spring-boot-starter；测试改用 spring-boot-starter-test＋starter-flyway）；infrastructure 测试 2 个文件 | 独立 Review PASS（适配器范围、只读 Port、environment String 均接受；MySQL 8.0.16、mvnw.cmd NOT VERIFIED）。2026-09-26 实测（mysql:8.4.11）：`./mvnw -B clean verify` exit 0（Enforcer 收敛通过）；MyBatisSystemRepositoryTest 8/8（按 key 查系统含全部字段与 null description、ARCHIVED；资源按系统限定查找、跨系统同名 key 不串、findById、按 key 排序列出、6 类型×3 状态逐一往返；3 个 Java 枚举与 information_schema CHECK 取值完全一致）＋SystemIntegrationSchemaTest 29/29＋web 10/10；变异检查：ResourceType 加 CONTAINER 后一致性测试失败、往返测试报错，还原后通过；boot jar 连真实 MySQL：v001 应用、health 200、/actuator/beans 含 2 Mapper 与 2 仓储（beans 端点仅本次命令行临时开放）；容器已删除 |
-| TASK-007 | 实现数据源连接与资源绑定 | DONE | TASK-007 commit（紧随 0a0818b）：domain/system（DataSourceConnection、ResourceBinding、CapabilityBinding、ProviderType、ConnectionStatus、SelectorSchema、ConfigSchema）；application/system（DataSourceConnectionRepository、ResourceBindingRepository、CapabilityBindingRepository 三个只读 Port）；infrastructure persistence/mybatis/system（3 Mapper＋XML、3 Row、3 MyBatis 仓储）；infrastructure 测试 MyBatisBindingRepositoryTest | 2026-09-26 实测（mysql:8.4.11）：`./mvnw -B clean verify` exit 0；MyBatisBindingRepositoryTest 13/13（连接按 key/id 全字段含 credentialRef、config schema 与 JSON 载荷；无凭据＋DISABLED；5 Provider×3 状态往返；资源绑定按资源限定、按连接 id 排序、SelectorSchema 与载荷；能力绑定按资源限定、enabled=false 保留、按 key 排序；connection_key 与 capability_key 的大小写/重音变体 6 例不命中；ProviderType、ConnectionStatus 与 CHECK 取值一致）＋SystemIntegrationSchemaTest 29/29＋MyBatisSystemRepositoryTest 8/8＋web 10/10；变异检查：删除两处按字节比较后恰好 6 个变体用例失败，还原后通过；独立 Review PASS（无 P0/P1；复核实测 `./mvnw -B clean verify` exit 0、infrastructure 50/50、web 10/10；正式 boot jar 连 MySQL 8.4.11 迁移成功、health 200 UP、3 Mapper 与 3 仓储装配；`git diff --check` 通过）；MySQL 8.0.16、mvnw.cmd NOT VERIFIED |
-| TASK-008 | 建立 SchemaCodecRegistry 基础 | DONE | TASK-008 commit（紧随 3740c16）：domain/system/binding（PrometheusResourceBindingV1＋PrometheusMetricBindingV1、LokiResourceBindingV1、RedisResourceBindingV1、MySqlResourceBindingV1、DockerResourceBindingV1、包内 BindingLabels）；application/schema（SchemaCodecRegistry Port、SchemaPayloadException）；infrastructure/schema/JacksonSchemaCodecRegistry；infrastructure POM（tools.jackson.core:jackson-databind，Boot 管理 3.1.5）；infrastructure 测试 JacksonSchemaCodecRegistryTest | 2026-09-26 实测：`./mvnw -B clean verify` exit 0（infrastructure 95/95、web 10/10，Enforcer/Spotless 通过）；JacksonSchemaCodecRegistryTest 45/45（5 种 V1 按规格示例解码、Redis 缓存/Stream 两形态、decodeSelector；未注册 name/version 5 例 UNKNOWN_SCHEMA；类型错配 TYPE_MISMATCH；非法载荷 33 例 INVALID_PAYLOAD：畸形/顶层 null/数组/字符串/尾随内容/未知字段/重复键/数字与布尔冒充字符串/缺失/null/非法名与标签/空 metrics/Redis 半配置与 glob/MySQL 注入与超长等；拒绝信息不含载荷值、无 cause、details 为空）；变异检查：去掉字符串强转禁止→4 例失败、去掉重复键检测→1 例失败、去掉 FAIL_ON_UNKNOWN_PROPERTIES 等→3 例失败（Jackson 3 默认不拒绝未知字段），均已还原；boot jar 连 MySQL 8.4.11：v001 应用、health 200 UP、beans 含 jacksonSchemaCodecRegistry（beans 端点仅本次命令行临时开放），容器已删除；独立 Review PASS（无 P0/P1；复核 `./mvnw -B clean verify` exit 0、Codec 45/45、infrastructure 95/95、web 10/10；boot jar 连 MySQL 8.4.11 health 200 UP、Registry Bean 装配；确认 Jackson 3.1.5；`git diff --check` 通过）；MySQL 8.0.16、mvnw.cmd NOT VERIFIED |
-| TASK-009 | 实现 SecretResolver | DONE | TASK-009 commit（紧随 542d570）：domain/error/ErrorCode（新增 SECRET_NOT_FOUND，INTERNAL）；application/secret（SecretResolver Port、SecretValue、SecretNotFoundException）；infrastructure/secret/EnvironmentSecretResolver；infrastructure 测试 EnvironmentSecretResolverTest | 2026-09-26 实测：`./mvnw -B clean verify` exit 0（infrastructure 108/108、web 10/10，门禁通过）；EnvironmentSecretResolverTest 13/13（env://KEY 解析且 SecretValue.toString 不含明文；缺失与空值 → SECRET_NOT_FOUND/NOT_FOUND，消息只含引用名；null、空串、误填明文、vault://、大写 scheme、小写键、env://、末尾换行、前导空格 9 例 → SECRET_NOT_FOUND/UNSUPPORTED_REF 且不回显引用；details 为空、无 cause；默认构造读取真实进程环境）；变异检查：不合法引用回显原文 → 9 例失败，空值视为存在 → 1 例失败，均已还原；boot jar 连 MySQL 8.4.11：health 200 UP、beans 含 environmentSecretResolver，容器已删除；独立 Review PASS（无 P0/P1；复核 `./mvnw -B clean verify` exit 0、infrastructure 108/108、web 10/10，构建日志无测试凭据值；boot jar health 200 UP、environmentSecretResolver 装配；`git diff --check` 通过）；MySQL 8.0.16、mvnw.cmd NOT VERIFIED |
-| TASK-010 | ShortLink Demo 系统 Seed | DONE | TASK-010 commit（紧随 509ccc5）：infrastructure db/demo/R__shortlink_demo_seed.sql（可重复迁移，按唯一键 upsert）；boot application-demo.yml（demo profile 追加 classpath:db/demo）；infrastructure 测试 ShortLinkDemoSeedTest | 2026-09-26 实测（mysql:8.4.11）：`./mvnw -B clean verify` exit 0（infrastructure 114/114、web 10/10，门禁通过）；ShortLinkDemoSeedTest 6/6（系统与 5 资源类型；5 连接 providerType、仅 env:// 引用；7 条资源绑定与 06 §131 一致且全部经 SchemaCodecRegistry 解码为对应 V1 类型，含 8 个 09 §7 语义指标；8 条能力绑定与 06 §131 一致、均 enabled、均属 7 个 V0.1 能力；篡改名称/状态/enabled/选择器后重跑脚本行数不变且收敛；flyway_schema_history 记为 repeatable）；变异检查：绑定 join 键拼错 → 2 例失败，已还原；boot jar：默认 profile 仅应用 V001、managed_system 0 行，demo profile 应用 R__ 后 1/5/5/7/8 行，再次启动 up to date，health 均 200；容器已删除；独立 Review PASS（无 P0/P1；复核 `./mvnw -B clean verify` exit 0、Seed 6/6、infrastructure 114/114、web 10/10；正式 jar 默认及 production profile 仅 V001 且配置表为空，demo 1/5/5/7/8 行，二次启动行数与迁移记录不变，四次 health 200；`git diff --check` 通过）；MySQL 8.0.16、mvnw.cmd NOT VERIFIED |
-| TASK-011 | Systems Read API | DONE | TASK-011 commit（紧随 334e388）：domain/capability（CapabilityMode、CapabilityKey：7 个冻结能力及 mode）；domain ErrorCode（SYSTEM_NOT_FOUND）；application/query/PageResult；application/system/query（SystemQueryRepository Port、SystemQueryService、7 个 View/Projection record）；application POM（spring-context、spring-tx）；infrastructure SystemQueryMapper＋XML、2 个 Row、MyBatisSystemQueryRepository；web/response（ApiResponse、ApiPageResponse）、web/system/SystemController；测试 MyBatisSystemQueryRepositoryTest、SystemControllerTest；ApiErrorContractTest 限定为探针控制器 | 2026-09-26 实测：`./mvnw -B clean verify` exit 0（infrastructure 123/123、web 21/21，门禁通过）；MyBatisSystemQueryRepositoryTest 9/9（真实 MySQL：分页按 key、资源计数、详情资源排序与 null 描述、跨系统同名资源隔离、只取 enabled 能力、系统键与资源键大小写/重音变体 6 例不命中）；SystemControllerTest 11/11（分页包络与默认 0/20、5 种非法分页 400 且不查询、详情包络、SYSTEM_NOT_FOUND 与 RESOURCE_NOT_FOUND 区分、能力 mode 映射且丢弃未知键、recoveryPolicy 为 null）；变异检查：去掉按字节比较 → 6 例失败，去掉 enabled 过滤 → 1 例失败，均已还原；boot jar＋demo profile 连 MySQL 8.4.11：三个端点输出与 05 §15～§17 结构一致（resourceCount 5、statistics-consumer 能力 logs.search/service.inspect OBSERVE、service.restart CHANGE），变体键 404、缺失资源 404、size=0 400，响应不含端点/凭据，/v3/api-docs 含三条路径；容器已删除；独立 Review PASS（无 P0/P1；复核 `./mvnw -B clean verify` exit 0、infrastructure 123/123、web 21/21；正式 jar＋MySQL 8.4.11 三接口、分页、requestId、mode 符合契约；6 种非法分页 400，9 种不存在/键变体（含大小写、重音、末尾空格）404；OpenAPI 三个 GET 均带 Systems 标签；`git diff --check` 通过）；MySQL 8.0.16、mvnw.cmd NOT VERIFIED |
-| TASK-012 | Incident / Investigation 基础表 | DONE | TASK-012 commit（紧随 625489e）：infrastructure db/migration/V002__create_incident_investigation_tables.sql（incident、incident_affected_resource、investigation、incident_timeline_event）；测试 IncidentInvestigationSchemaTest；SystemIntegrationSchemaTest 改为断言 V001 已应用且含 5 张表（不再要求最新版本为 001、表恰为 5 张） | 2026-09-27 实测（mysql:8.4.11）：`./mvnw -B clean verify` exit 0（infrastructure 163/163、web 21/21，门禁通过）；IncidentInvestigationSchemaTest 40/40（版本 002、4 表与 04 §89 关键索引；合法工作空间含 run 2、stop 成对、RESOLVED＋resolved_at、CANCELLED、5 位序号；incident_key/受影响资源/一事故一调查唯一；FK 孤儿与 RESTRICT 删除；35 个 CHECK 用例均 3819＋约束名：8 状态外/小写/末尾空格、键格式、空标题/影响、来源、空创建者、resolved_at 与 RESOLVED 双向、run_no 0、本轮计数超快照上限、stop 半填/空白、四个限制值为 0、事件类型格式、actor_type、空 actor_id/summary、payload 非对象/缺 schemaName/缺 schemaVersion/空白/数字/null 名称/版本 0/字符串/小数）；SystemIntegrationSchemaTest 29/29；首次建表时发现 CHECK 中 IFNULL 非布尔被 MySQL 拒绝（3812），改为 (…) IS TRUE；变异检查：去掉 IS TRUE → 缺 schemaName/schemaVersion 2 例被放行，已还原；boot jar＋demo：先 --spring.flyway.target=1 启动（V001＋R__），再正常启动升级应用 V002、R__ 不重跑、4 表存在、资源 5 行，health 均 200；独立 Review PASS（无 P0/P1；复核 `./mvnw -B clean verify` exit 0、Schema 40/40、infrastructure 163/163、web 21/21；正式 jar 自 V001＋Demo Seed 升级应用 V002、四表存在、Seed 未重跑且配置完整、两次 health 200；确认四项预算限制无库默认值；`git diff --check` 通过）；MySQL 8.0.16、mvnw.cmd NOT VERIFIED |
-| TASK-013 | Incident Domain Model | TODO | — | NOT RUN |
-| TASK-014 | Incident 状态转换 Repository | TODO | — | NOT RUN |
-| TASK-015 | 创建 Incident | TODO | — | NOT RUN |
-| TASK-016 | 开始调查 | TODO | — | NOT RUN |
-| TASK-017 | Continue Investigation | TODO | — | NOT RUN |
-| TASK-018 | Stop Investigation Request | TODO | — | NOT RUN |
-| TASK-019 | Cancel Incident | TODO | — | NOT RUN |
-| TASK-020 | Incident 基础 API | TODO | — | NOT RUN |
-| TASK-021 | 调查事实数据库结构 | TODO | — | NOT RUN |
-| TASK-022 | Observation Domain / Persistence | TODO | — | NOT RUN |
-| TASK-023 | Hypothesis Domain | TODO | — | NOT RUN |
-| TASK-024 | Evidence Domain | TODO | — | NOT RUN |
-| TASK-025 | Diagnosis Domain | TODO | — | NOT RUN |
-| TASK-026 | Diagnosis 创建事务 | TODO | — | NOT RUN |
-| TASK-027 | Investigation 技术详情 Query | TODO | — | NOT RUN |
-| TASK-028 | Canonical AI Protocol Schema | TODO | — | NOT RUN |
-| TASK-029 | Capability Arguments Protocol | TODO | — | NOT RUN |
-| TASK-030 | Java Protocol Model | TODO | — | NOT RUN |
-| TASK-031 | Python Pydantic Protocol | TODO | — | NOT RUN |
-| TASK-032 | Java / Python Contract Test | TODO | — | NOT RUN |
-| TASK-033 | AI Runtime 最小推理服务 | TODO | — | NOT RUN |
-| TASK-034 | Java AiRuntimeClient | TODO | — | NOT RUN |
-| TASK-035 | WorkDispatcher | TODO | — | NOT RUN |
-| TASK-036 | SingleFlightRegistry | TODO | — | NOT RUN |
-| TASK-037 | Investigation Context Builder | TODO | — | NOT RUN |
-| TASK-038 | AgentStep 生命周期 | TODO | — | NOT RUN |
-| TASK-039 | Investigation Guard | TODO | — | NOT RUN |
-| TASK-040 | Intent Dispatcher | TODO | — | NOT RUN |
-| TASK-041 | Stop Race Handling | TODO | — | NOT RUN |
-| TASK-042 | Deterministic Termination | TODO | — | NOT RUN |
-| TASK-043 | Investigation Startup Recovery | TODO | — | NOT RUN |
-| TASK-044 | CapabilityRegistry | TODO | — | NOT RUN |
-| TASK-045 | Capability Descriptor Builder | TODO | — | NOT RUN |
-| TASK-046 | Provider Resolver | TODO | — | NOT RUN |
-| TASK-047 | Canonical JSON + Duplicate Guard | TODO | — | NOT RUN |
-| TASK-048 | CapabilityInvocation 执行骨架 | TODO | — | NOT RUN |
-| TASK-049 | Sanitizer Framework | TODO | — | NOT RUN |
-| TASK-050 | RawResultStore | TODO | — | NOT RUN |
-| TASK-051 | ObservationExtractor | TODO | — | NOT RUN |
-| TASK-052 | metrics.query | TODO | — | NOT RUN |
-| TASK-053 | logs.search | TODO | — | NOT RUN |
-| TASK-054 | cache.inspect | TODO | — | NOT RUN |
-| TASK-055 | database.inspect | TODO | — | NOT RUN |
-| TASK-056 | queue.inspect | TODO | — | NOT RUN |
-| TASK-057 | service.inspect | TODO | — | NOT RUN |
-| TASK-058 | Capability Execution Integration | TODO | — | NOT RUN |
-| TASK-059 | COMPLETE_INVESTIGATION 全链路 | TODO | — | NOT RUN |
-| TASK-060 | Diagnosis Version Evolution | TODO | — | NOT RUN |
-| TASK-061 | Undetermined Outcomes | TODO | — | NOT RUN |
-| TASK-062 | Remediation 数据结构 | TODO | — | NOT RUN |
-| TASK-063 | Remediation Draft Context | TODO | — | NOT RUN |
-| TASK-064 | Remediation Proposal 校验 | TODO | — | NOT RUN |
-| TASK-065 | request-remediation | TODO | — | NOT RUN |
-| TASK-066 | Approval API | TODO | — | NOT RUN |
-| TASK-067 | Approval 并发与历史方案保护 | TODO | — | NOT RUN |
-| TASK-068 | ActionExecution 数据结构 | TODO | — | NOT RUN |
-| TASK-069 | Approve → Execution | TODO | — | NOT RUN |
-| TASK-070 | Docker service.restart Executor | TODO | — | NOT RUN |
-| TASK-071 | Execution Worker | TODO | — | NOT RUN |
-| TASK-072 | Execution Reconciliation | TODO | — | NOT RUN |
-| TASK-073 | Execution Startup Recovery | TODO | — | NOT RUN |
-| TASK-074 | RecoveryPolicy / Verification 数据结构 | TODO | — | NOT RUN |
-| TASK-075 | RecoveryPolicy Criteria V1 | TODO | — | NOT RUN |
-| TASK-076 | RecoveryPolicy Activation | TODO | — | NOT RUN |
-| TASK-077 | Recovery Predicate Evaluator | TODO | — | NOT RUN |
-| TASK-078 | Recovery Sampling Runner | TODO | — | NOT RUN |
-| TASK-079 | Recovery Verification Runner | TODO | — | NOT RUN |
-| TASK-080 | Execution Success → Verification | TODO | — | NOT RUN |
-| TASK-081 | Manual Verify Recovery | TODO | — | NOT RUN |
-| TASK-082 | Verification Outcome Transition | TODO | — | NOT RUN |
-| TASK-083 | Verification Startup Recovery | TODO | — | NOT RUN |
-| TASK-084 | Timeline Query | TODO | — | NOT RUN |
-| TASK-085 | IncidentDetailView | TODO | — | NOT RUN |
-| TASK-086 | availableActions | TODO | — | NOT RUN |
-| TASK-087 | SSE Hub | TODO | — | NOT RUN |
-| TASK-088 | After Commit Event | TODO | — | NOT RUN |
-| TASK-089 | SSE Reconnect | TODO | — | NOT RUN |
-| TASK-090 | Fault Lab 基础模型 | TODO | — | NOT RUN |
-| TASK-091 | Ground Truth Isolation | TODO | — | NOT RUN |
-| TASK-092 | Fault Inject / Reset API | TODO | — | NOT RUN |
-| TASK-093 | Statistics Consumer Stop Injector | TODO | — | NOT RUN |
-| TASK-094 | Redis Latency Injector | TODO | — | NOT RUN |
-| TASK-095 | MySQL Slow Query Injector | TODO | — | NOT RUN |
-| TASK-096 | Web 基础壳 | TODO | — | NOT RUN |
-| TASK-097 | Systems 页面 | TODO | — | NOT RUN |
-| TASK-098 | Incident List | TODO | — | NOT RUN |
-| TASK-099 | Incident Detail 核心页 | TODO | — | NOT RUN |
-| TASK-100 | Investigation Timeline UI | TODO | — | NOT RUN |
-| TASK-101 | Approval UI | TODO | — | NOT RUN |
-| TASK-102 | Recovery UI | TODO | — | NOT RUN |
-| TASK-103 | Technical Detail UI | TODO | — | NOT RUN |
-| TASK-104 | Fault Lab UI | TODO | — | NOT RUN |
-| TASK-105 | Demo Docker Compose | TODO | — | NOT RUN |
-| TASK-106 | Demo Seed / Health Check | TODO | — | NOT RUN |
-| TASK-107 | S1 Acceptance | TODO | — | NOT RUN |
-| TASK-108 | S2 Acceptance | TODO | — | NOT RUN |
-| TASK-109 | S3 Acceptance | TODO | — | NOT RUN |
+| Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
+|---|---|---|---|---|---|
+| TASK-001 | 单项 | 导入已合并 Frozen Spec 并验证仓库落位 | DONE | commit 758d127（交付包原样落位＋授权修改 AGENTS.md、CLAUDE.md＋docs/dev 两份进度文件） | 2026-09-25 实测：SHA256SUMS 16/16 字节与哈希一致（改 AGENTS/CLAUDE 前，`sha256sum -c` exit 0；此后这两份按授权修改，与清单不同属预期）；链接 506 个 0 缺失、Manifest § 引用 95 个 0 未解析；TASK 001～109 唯一有序，前置依赖按 068→074～076→067→069 顺序 0 违例；Manifest 与 00～09 均 FROZEN/0.1；Incident 8 状态与 7 能力跨文件一致；4 类旧规则只以禁止语句出现；无 archive/旧补丁/业务代码 |
+| TASK-002 | 单项 | 创建 Monorepo 工程骨架 | DONE | TASK-002 commit（紧随 758d127）：.gitignore；backend/（父 POM＋5 Module＋mvnw 3.9.16）；ai-runtime/（uv＋FastAPI health，uv.lock 按 pypi.org 生成）；web/（npm＋Vite React TS 壳）；contracts/ai-runtime/v1、deploy、scripts 占位 | 独立 Review：PASS AFTER PATCH → 复核 PASS（P1-01 uv.lock 规范索引、P1-02 .env 忽略均关闭；mvnw.cmd NOT VERIFIED）。2026-09-25 修复后实测：backend `./mvnw -B clean verify` exit 0，boot jar `/actuator/health` 200 UP；ai-runtime 清除 UV_/PIP_ 索引变量后 `uv sync --locked`、`ruff format --check`、`ruff check`、`pytest`（1 passed）exit 0，uvicorn `/internal/v1/health` 200；web `npm ci`、`typecheck`、`build` exit 0；`git check-ignore` 根及 ai-runtime/backend/web 的 .env 均忽略 |
+| TASK-003 | 单项 | 建立工程约束 | DONE | TASK-003 commit（紧随 d68c953；同提交含用户的 .gitignore `.claude` 规则）：backend/pom.xml（Enforcer＋Spotless＋版本锁定）；backend/opspilot-web/pom.xml（springdoc）；AGENTS.md（补 07 §120 红线） | 独立 Review PASS（mvnw.cmd、真实 MySQL/Flyway NOT VERIFIED）。2026-09-26 实测：`./mvnw -B clean verify` exit 0（6 条 Enforcer 规则＋6 模块 spotless:check 通过）；负向：JDK 11 → RequireJavaVersion BUILD FAILURE exit 1；POM java.version=17 → RequireProperty(maven.compiler.release) BUILD FAILURE exit 1（已还原）；未格式化 Java → spotless:check BUILD FAILURE exit 1（已删除）；仓库外临时探针：lombok → BannedDependencies 失败，[3.0,) → BanDynamicVersions 失败；MyBatis 3.5.19/MyBatis-Spring 4.1.0/starter 4.1.0、Flyway 12.4.0＋flyway-mysql、mysql-connector-j 9.7.0 与 springdoc 同时解析且收敛通过；boot jar `/actuator/health` 200 UP，`/v3/api-docs` 200 openapi 3.1.0 |
+| TASK-004 | 单项 | 建立配置与错误模型基础 | DONE | TASK-004 commit（紧随 04560f9）：domain/error（ErrorCode、ErrorCategory、OpsPilotException、DomainException）；application/error/ApplicationException、application/correlation/Correlation；web/error（ApiExceptionHandler、ErrorResponse）、web/request/RequestIdFilter；boot @ConfigurationPropertiesScan＋日志 correlation 格式；application/web POM；web 测试 2 个文件 | 独立 Review：PASS AFTER PATCH（P1：异常 message/cause 原样写入日志）→ 复核 PASS（具体配置绑定、mvnw.cmd NOT VERIFIED）：三处日志只记 code/status、requestId 与异常链类型＋首个栈帧，不含 message。2026-09-26 修复后实测：`./mvnw -B clean verify` exit 0，ApiErrorContractTest 10/10（原 8 项＋3 个日志点用 OutputCapture 断言 message 与 cause 中的敏感串不进日志，其中 1 项替换原 500 测试）；整段构建输出敏感串 0 命中；变异检查：恢复 `log.error(..., ex)` 后该测试失败（报 hunter2），还原后通过；boot jar health 200、未知路由 404 统一包络；具体配置类绑定 NOT RUN |
+| TASK-005 | 单项 | 创建系统接入数据库结构 | DONE | TASK-005 commit（紧随 384589a）：infrastructure db/migration/V001__create_system_integration_tables.sql；infrastructure SystemIntegrationSchemaTest；infrastructure/boot POM；boot application.yml（datasource＋flyway） | 独立 Review 两轮 PASS AFTER PATCH：第 1 轮 P1 枚举 CHECK 在 ai_ci 下放行大小写/重音、正则 $ 放行末尾换行 → 正则改 `\z`（已关闭）；第 2 轮 P1 `utf8mb4_bin` 为 PAD SPACE 放行末尾空格 → 5 个枚举 CHECK 改为 `CAST(col AS BINARY) IN`（utf8mb4_0900_bin 需 8.0.17+，不选）。第 3 轮复核 PASS（MySQL 8.0.16 实机、mvnw.cmd NOT VERIFIED）。V001 提交前未应用于持久库，直接修改。2026-09-26 第 2 轮修复后实测（mysql:8.4.11）：`./mvnw -B clean verify` exit 0；SystemIntegrationSchemaTest 29/29（原 13＋5 大小写/重音＋5 末尾换行＋5 末尾空格，均断言 3819 与约束名）；变异检查：换回 utf8mb4_bin 后恰好 5 个末尾空格用例失败，上一轮恢复旧约束时恰好 11 例失败，还原后均通过；boot jar 连独立容器首次应用 v001、再次 up to date，health 200；库内 CHECK 22、FK 4、UNIQUE 5；直连 SQL：ACTIVE␠、active、ÁCTIVE、SERVICE␠、MYSQL␠ 均 3819，合法 ACTIVE（HEX 414354495645）写入；容器已删除 |
+| TASK-006 | 单项 | 实现 ManagedSystem / ManagedResource 领域模型 | DONE | TASK-006 commit（紧随 c804769）：domain/system（ManagedSystem、ManagedResource、SystemStatus、ResourceStatus、ResourceType）；application/system（ManagedSystemRepository、ManagedResourceRepository 两个 Port）；infrastructure persistence/mybatis/system（2 Mapper＋XML、2 Row、2 MyBatis 仓储）；infrastructure POM（mybatis-spring-boot-starter；测试改用 spring-boot-starter-test＋starter-flyway）；infrastructure 测试 2 个文件 | 独立 Review PASS（适配器范围、只读 Port、environment String 均接受；MySQL 8.0.16、mvnw.cmd NOT VERIFIED）。2026-09-26 实测（mysql:8.4.11）：`./mvnw -B clean verify` exit 0（Enforcer 收敛通过）；MyBatisSystemRepositoryTest 8/8（按 key 查系统含全部字段与 null description、ARCHIVED；资源按系统限定查找、跨系统同名 key 不串、findById、按 key 排序列出、6 类型×3 状态逐一往返；3 个 Java 枚举与 information_schema CHECK 取值完全一致）＋SystemIntegrationSchemaTest 29/29＋web 10/10；变异检查：ResourceType 加 CONTAINER 后一致性测试失败、往返测试报错，还原后通过；boot jar 连真实 MySQL：v001 应用、health 200、/actuator/beans 含 2 Mapper 与 2 仓储（beans 端点仅本次命令行临时开放）；容器已删除 |
+| TASK-007 | 单项 | 实现数据源连接与资源绑定 | DONE | TASK-007 commit（紧随 0a0818b）：domain/system（DataSourceConnection、ResourceBinding、CapabilityBinding、ProviderType、ConnectionStatus、SelectorSchema、ConfigSchema）；application/system（DataSourceConnectionRepository、ResourceBindingRepository、CapabilityBindingRepository 三个只读 Port）；infrastructure persistence/mybatis/system（3 Mapper＋XML、3 Row、3 MyBatis 仓储）；infrastructure 测试 MyBatisBindingRepositoryTest | 2026-09-26 实测（mysql:8.4.11）：`./mvnw -B clean verify` exit 0；MyBatisBindingRepositoryTest 13/13（连接按 key/id 全字段含 credentialRef、config schema 与 JSON 载荷；无凭据＋DISABLED；5 Provider×3 状态往返；资源绑定按资源限定、按连接 id 排序、SelectorSchema 与载荷；能力绑定按资源限定、enabled=false 保留、按 key 排序；connection_key 与 capability_key 的大小写/重音变体 6 例不命中；ProviderType、ConnectionStatus 与 CHECK 取值一致）＋SystemIntegrationSchemaTest 29/29＋MyBatisSystemRepositoryTest 8/8＋web 10/10；变异检查：删除两处按字节比较后恰好 6 个变体用例失败，还原后通过；独立 Review PASS（无 P0/P1；复核实测 `./mvnw -B clean verify` exit 0、infrastructure 50/50、web 10/10；正式 boot jar 连 MySQL 8.4.11 迁移成功、health 200 UP、3 Mapper 与 3 仓储装配；`git diff --check` 通过）；MySQL 8.0.16、mvnw.cmd NOT VERIFIED |
+| TASK-008 | 单项 | 建立 SchemaCodecRegistry 基础 | DONE | TASK-008 commit（紧随 3740c16）：domain/system/binding（PrometheusResourceBindingV1＋PrometheusMetricBindingV1、LokiResourceBindingV1、RedisResourceBindingV1、MySqlResourceBindingV1、DockerResourceBindingV1、包内 BindingLabels）；application/schema（SchemaCodecRegistry Port、SchemaPayloadException）；infrastructure/schema/JacksonSchemaCodecRegistry；infrastructure POM（tools.jackson.core:jackson-databind，Boot 管理 3.1.5）；infrastructure 测试 JacksonSchemaCodecRegistryTest | 2026-09-26 实测：`./mvnw -B clean verify` exit 0（infrastructure 95/95、web 10/10，Enforcer/Spotless 通过）；JacksonSchemaCodecRegistryTest 45/45（5 种 V1 按规格示例解码、Redis 缓存/Stream 两形态、decodeSelector；未注册 name/version 5 例 UNKNOWN_SCHEMA；类型错配 TYPE_MISMATCH；非法载荷 33 例 INVALID_PAYLOAD：畸形/顶层 null/数组/字符串/尾随内容/未知字段/重复键/数字与布尔冒充字符串/缺失/null/非法名与标签/空 metrics/Redis 半配置与 glob/MySQL 注入与超长等；拒绝信息不含载荷值、无 cause、details 为空）；变异检查：去掉字符串强转禁止→4 例失败、去掉重复键检测→1 例失败、去掉 FAIL_ON_UNKNOWN_PROPERTIES 等→3 例失败（Jackson 3 默认不拒绝未知字段），均已还原；boot jar 连 MySQL 8.4.11：v001 应用、health 200 UP、beans 含 jacksonSchemaCodecRegistry（beans 端点仅本次命令行临时开放），容器已删除；独立 Review PASS（无 P0/P1；复核 `./mvnw -B clean verify` exit 0、Codec 45/45、infrastructure 95/95、web 10/10；boot jar 连 MySQL 8.4.11 health 200 UP、Registry Bean 装配；确认 Jackson 3.1.5；`git diff --check` 通过）；MySQL 8.0.16、mvnw.cmd NOT VERIFIED |
+| TASK-009 | 单项 | 实现 SecretResolver | DONE | TASK-009 commit（紧随 542d570）：domain/error/ErrorCode（新增 SECRET_NOT_FOUND，INTERNAL）；application/secret（SecretResolver Port、SecretValue、SecretNotFoundException）；infrastructure/secret/EnvironmentSecretResolver；infrastructure 测试 EnvironmentSecretResolverTest | 2026-09-26 实测：`./mvnw -B clean verify` exit 0（infrastructure 108/108、web 10/10，门禁通过）；EnvironmentSecretResolverTest 13/13（env://KEY 解析且 SecretValue.toString 不含明文；缺失与空值 → SECRET_NOT_FOUND/NOT_FOUND，消息只含引用名；null、空串、误填明文、vault://、大写 scheme、小写键、env://、末尾换行、前导空格 9 例 → SECRET_NOT_FOUND/UNSUPPORTED_REF 且不回显引用；details 为空、无 cause；默认构造读取真实进程环境）；变异检查：不合法引用回显原文 → 9 例失败，空值视为存在 → 1 例失败，均已还原；boot jar 连 MySQL 8.4.11：health 200 UP、beans 含 environmentSecretResolver，容器已删除；独立 Review PASS（无 P0/P1；复核 `./mvnw -B clean verify` exit 0、infrastructure 108/108、web 10/10，构建日志无测试凭据值；boot jar health 200 UP、environmentSecretResolver 装配；`git diff --check` 通过）；MySQL 8.0.16、mvnw.cmd NOT VERIFIED |
+| TASK-010 | 单项 | ShortLink Demo 系统 Seed | DONE | TASK-010 commit（紧随 509ccc5）：infrastructure db/demo/R__shortlink_demo_seed.sql（可重复迁移，按唯一键 upsert）；boot application-demo.yml（demo profile 追加 classpath:db/demo）；infrastructure 测试 ShortLinkDemoSeedTest | 2026-09-26 实测（mysql:8.4.11）：`./mvnw -B clean verify` exit 0（infrastructure 114/114、web 10/10，门禁通过）；ShortLinkDemoSeedTest 6/6（系统与 5 资源类型；5 连接 providerType、仅 env:// 引用；7 条资源绑定与 06 §131 一致且全部经 SchemaCodecRegistry 解码为对应 V1 类型，含 8 个 09 §7 语义指标；8 条能力绑定与 06 §131 一致、均 enabled、均属 7 个 V0.1 能力；篡改名称/状态/enabled/选择器后重跑脚本行数不变且收敛；flyway_schema_history 记为 repeatable）；变异检查：绑定 join 键拼错 → 2 例失败，已还原；boot jar：默认 profile 仅应用 V001、managed_system 0 行，demo profile 应用 R__ 后 1/5/5/7/8 行，再次启动 up to date，health 均 200；容器已删除；独立 Review PASS（无 P0/P1；复核 `./mvnw -B clean verify` exit 0、Seed 6/6、infrastructure 114/114、web 10/10；正式 jar 默认及 production profile 仅 V001 且配置表为空，demo 1/5/5/7/8 行，二次启动行数与迁移记录不变，四次 health 200；`git diff --check` 通过）；MySQL 8.0.16、mvnw.cmd NOT VERIFIED |
+| TASK-011 | 单项 | Systems Read API | DONE | TASK-011 commit（紧随 334e388）：domain/capability（CapabilityMode、CapabilityKey：7 个冻结能力及 mode）；domain ErrorCode（SYSTEM_NOT_FOUND）；application/query/PageResult；application/system/query（SystemQueryRepository Port、SystemQueryService、7 个 View/Projection record）；application POM（spring-context、spring-tx）；infrastructure SystemQueryMapper＋XML、2 个 Row、MyBatisSystemQueryRepository；web/response（ApiResponse、ApiPageResponse）、web/system/SystemController；测试 MyBatisSystemQueryRepositoryTest、SystemControllerTest；ApiErrorContractTest 限定为探针控制器 | 2026-09-26 实测：`./mvnw -B clean verify` exit 0（infrastructure 123/123、web 21/21，门禁通过）；MyBatisSystemQueryRepositoryTest 9/9（真实 MySQL：分页按 key、资源计数、详情资源排序与 null 描述、跨系统同名资源隔离、只取 enabled 能力、系统键与资源键大小写/重音变体 6 例不命中）；SystemControllerTest 11/11（分页包络与默认 0/20、5 种非法分页 400 且不查询、详情包络、SYSTEM_NOT_FOUND 与 RESOURCE_NOT_FOUND 区分、能力 mode 映射且丢弃未知键、recoveryPolicy 为 null）；变异检查：去掉按字节比较 → 6 例失败，去掉 enabled 过滤 → 1 例失败，均已还原；boot jar＋demo profile 连 MySQL 8.4.11：三个端点输出与 05 §15～§17 结构一致（resourceCount 5、statistics-consumer 能力 logs.search/service.inspect OBSERVE、service.restart CHANGE），变体键 404、缺失资源 404、size=0 400，响应不含端点/凭据，/v3/api-docs 含三条路径；容器已删除；独立 Review PASS（无 P0/P1；复核 `./mvnw -B clean verify` exit 0、infrastructure 123/123、web 21/21；正式 jar＋MySQL 8.4.11 三接口、分页、requestId、mode 符合契约；6 种非法分页 400，9 种不存在/键变体（含大小写、重音、末尾空格）404；OpenAPI 三个 GET 均带 Systems 标签；`git diff --check` 通过）；MySQL 8.0.16、mvnw.cmd NOT VERIFIED |
+| TASK-012 | 单项 | Incident / Investigation 基础表 | DONE | TASK-012 commit（紧随 625489e）：infrastructure db/migration/V002__create_incident_investigation_tables.sql（incident、incident_affected_resource、investigation、incident_timeline_event）；测试 IncidentInvestigationSchemaTest；SystemIntegrationSchemaTest 改为断言 V001 已应用且含 5 张表（不再要求最新版本为 001、表恰为 5 张） | 2026-09-27 实测（mysql:8.4.11）：`./mvnw -B clean verify` exit 0（infrastructure 163/163、web 21/21，门禁通过）；IncidentInvestigationSchemaTest 40/40（版本 002、4 表与 04 §89 关键索引；合法工作空间含 run 2、stop 成对、RESOLVED＋resolved_at、CANCELLED、5 位序号；incident_key/受影响资源/一事故一调查唯一；FK 孤儿与 RESTRICT 删除；35 个 CHECK 用例均 3819＋约束名：8 状态外/小写/末尾空格、键格式、空标题/影响、来源、空创建者、resolved_at 与 RESOLVED 双向、run_no 0、本轮计数超快照上限、stop 半填/空白、四个限制值为 0、事件类型格式、actor_type、空 actor_id/summary、payload 非对象/缺 schemaName/缺 schemaVersion/空白/数字/null 名称/版本 0/字符串/小数）；SystemIntegrationSchemaTest 29/29；首次建表时发现 CHECK 中 IFNULL 非布尔被 MySQL 拒绝（3812），改为 (…) IS TRUE；变异检查：去掉 IS TRUE → 缺 schemaName/schemaVersion 2 例被放行，已还原；boot jar＋demo：先 --spring.flyway.target=1 启动（V001＋R__），再正常启动升级应用 V002、R__ 不重跑、4 表存在、资源 5 行，health 均 200；独立 Review PASS（无 P0/P1；复核 `./mvnw -B clean verify` exit 0、Schema 40/40、infrastructure 163/163、web 21/21；正式 jar 自 V001＋Demo Seed 升级应用 V002、四表存在、Seed 未重跑且配置完整、两次 health 200；确认四项预算限制无库默认值；`git diff --check` 通过）；MySQL 8.0.16、mvnw.cmd NOT VERIFIED |
+| TASK-013 | B01 | Incident Domain Model | TODO | — | NOT RUN |
+| TASK-014 | B01 | Incident 状态转换 Repository | TODO | — | NOT RUN |
+| TASK-015 | B01 | 创建 Incident | TODO | — | NOT RUN |
+| TASK-016 | B02 | 开始调查 | TODO | — | NOT RUN |
+| TASK-017 | B02 | Continue Investigation | TODO | — | NOT RUN |
+| TASK-018 | B03 | Stop Investigation Request | TODO | — | NOT RUN |
+| TASK-019 | B03 | Cancel Incident | TODO | — | NOT RUN |
+| TASK-020 | B03 | Incident 基础 API | TODO | — | NOT RUN |
+| TASK-021 | B04 | 调查事实数据库结构 | TODO | — | NOT RUN |
+| TASK-022 | B04 | Observation Domain / Persistence | TODO | — | NOT RUN |
+| TASK-023 | B05 | Hypothesis Domain | TODO | — | NOT RUN |
+| TASK-024 | B05 | Evidence Domain | TODO | — | NOT RUN |
+| TASK-025 | B06 | Diagnosis Domain | TODO | — | NOT RUN |
+| TASK-026 | B06 | Diagnosis 创建事务 | TODO | — | NOT RUN |
+| TASK-027 | B06 | Investigation 技术详情 Query | TODO | — | NOT RUN |
+| TASK-028 | B07 | Canonical AI Protocol Schema | TODO | — | NOT RUN |
+| TASK-029 | B07 | Capability Arguments Protocol | TODO | — | NOT RUN |
+| TASK-030 | B07 | Java Protocol Model | TODO | — | NOT RUN |
+| TASK-031 | B07 | Python Pydantic Protocol | TODO | — | NOT RUN |
+| TASK-032 | B07 | Java / Python Contract Test | TODO | — | NOT RUN |
+| TASK-033 | B08 | AI Runtime 最小推理服务 | TODO | — | NOT RUN |
+| TASK-034 | B08 | Java AiRuntimeClient | TODO | — | NOT RUN |
+| TASK-035 | B09 | WorkDispatcher | TODO | — | NOT RUN |
+| TASK-036 | B09 | SingleFlightRegistry | TODO | — | NOT RUN |
+| TASK-037 | B10 | Investigation Context Builder | TODO | — | NOT RUN |
+| TASK-038 | B10 | AgentStep 生命周期 | TODO | — | NOT RUN |
+| TASK-039 | B10 | Investigation Guard | TODO | — | NOT RUN |
+| TASK-040 | B11 | Intent Dispatcher | TODO | — | NOT RUN |
+| TASK-041 | B11 | Stop Race Handling | TODO | — | NOT RUN |
+| TASK-042 | B12 | Deterministic Termination | TODO | — | NOT RUN |
+| TASK-043 | B12 | Investigation Startup Recovery | TODO | — | NOT RUN |
+| TASK-044 | B13 | CapabilityRegistry | TODO | — | NOT RUN |
+| TASK-045 | B13 | Capability Descriptor Builder | TODO | — | NOT RUN |
+| TASK-046 | B13 | Provider Resolver | TODO | — | NOT RUN |
+| TASK-047 | B14 | Canonical JSON + Duplicate Guard | TODO | — | NOT RUN |
+| TASK-048 | B14 | CapabilityInvocation 执行骨架 | TODO | — | NOT RUN |
+| TASK-049 | B15 | Sanitizer Framework | TODO | — | NOT RUN |
+| TASK-050 | B15 | RawResultStore | TODO | — | NOT RUN |
+| TASK-051 | B15 | ObservationExtractor | TODO | — | NOT RUN |
+| TASK-052 | B16 | metrics.query | TODO | — | NOT RUN |
+| TASK-053 | B16 | logs.search | TODO | — | NOT RUN |
+| TASK-054 | B17 | cache.inspect | TODO | — | NOT RUN |
+| TASK-055 | B17 | database.inspect | TODO | — | NOT RUN |
+| TASK-056 | B17 | queue.inspect | TODO | — | NOT RUN |
+| TASK-057 | B18 | service.inspect | TODO | — | NOT RUN |
+| TASK-058 | B18 | Capability Execution Integration | TODO | — | NOT RUN |
+| TASK-059 | B19 | COMPLETE_INVESTIGATION 全链路 | TODO | — | NOT RUN |
+| TASK-060 | B19 | Diagnosis Version Evolution | TODO | — | NOT RUN |
+| TASK-061 | B19 | Undetermined Outcomes | TODO | — | NOT RUN |
+| TASK-062 | B20 | Remediation 数据结构 | TODO | — | NOT RUN |
+| TASK-063 | B20 | Remediation Draft Context | TODO | — | NOT RUN |
+| TASK-064 | B20 | Remediation Proposal 校验 | TODO | — | NOT RUN |
+| TASK-065 | B21 | request-remediation | TODO | — | NOT RUN |
+| TASK-066 | B21 | Approval API | TODO | — | NOT RUN |
+| TASK-067 | B24 | Approval 并发与历史方案保护 | TODO | — | NOT RUN |
+| TASK-068 | B22 | ActionExecution 数据结构 | TODO | — | NOT RUN |
+| TASK-069 | B25 | Approve → Execution | TODO | — | NOT RUN |
+| TASK-070 | B26 | Docker service.restart Executor | TODO | — | NOT RUN |
+| TASK-071 | B26 | Execution Worker | TODO | — | NOT RUN |
+| TASK-072 | B27 | Execution Reconciliation | TODO | — | NOT RUN |
+| TASK-073 | B27 | Execution Startup Recovery | TODO | — | NOT RUN |
+| TASK-074 | B22 | RecoveryPolicy / Verification 数据结构 | TODO | — | NOT RUN |
+| TASK-075 | B23 | RecoveryPolicy Criteria V1 | TODO | — | NOT RUN |
+| TASK-076 | B23 | RecoveryPolicy Activation | TODO | — | NOT RUN |
+| TASK-077 | B28 | Recovery Predicate Evaluator | TODO | — | NOT RUN |
+| TASK-078 | B28 | Recovery Sampling Runner | TODO | — | NOT RUN |
+| TASK-079 | B28 | Recovery Verification Runner | TODO | — | NOT RUN |
+| TASK-080 | B29 | Execution Success → Verification | TODO | — | NOT RUN |
+| TASK-081 | B29 | Manual Verify Recovery | TODO | — | NOT RUN |
+| TASK-082 | B30 | Verification Outcome Transition | TODO | — | NOT RUN |
+| TASK-083 | B30 | Verification Startup Recovery | TODO | — | NOT RUN |
+| TASK-084 | B31 | Timeline Query | TODO | — | NOT RUN |
+| TASK-085 | B31 | IncidentDetailView | TODO | — | NOT RUN |
+| TASK-086 | B31 | availableActions | TODO | — | NOT RUN |
+| TASK-087 | B32 | SSE Hub | TODO | — | NOT RUN |
+| TASK-088 | B32 | After Commit Event | TODO | — | NOT RUN |
+| TASK-089 | B32 | SSE Reconnect | TODO | — | NOT RUN |
+| TASK-090 | B33 | Fault Lab 基础模型 | TODO | — | NOT RUN |
+| TASK-091 | B33 | Ground Truth Isolation | TODO | — | NOT RUN |
+| TASK-092 | B33 | Fault Inject / Reset API | TODO | — | NOT RUN |
+| TASK-093 | B34 | Statistics Consumer Stop Injector | TODO | — | NOT RUN |
+| TASK-094 | B35 | Redis Latency Injector | TODO | — | NOT RUN |
+| TASK-095 | B36 | MySQL Slow Query Injector | TODO | — | NOT RUN |
+| TASK-096 | B37 | Web 基础壳 | TODO | — | NOT RUN |
+| TASK-097 | B37 | Systems 页面 | TODO | — | NOT RUN |
+| TASK-098 | B37 | Incident List | TODO | — | NOT RUN |
+| TASK-099 | B38 | Incident Detail 核心页 | TODO | — | NOT RUN |
+| TASK-100 | B38 | Investigation Timeline UI | TODO | — | NOT RUN |
+| TASK-101 | B39 | Approval UI | TODO | — | NOT RUN |
+| TASK-102 | B39 | Recovery UI | TODO | — | NOT RUN |
+| TASK-103 | B39 | Technical Detail UI | TODO | — | NOT RUN |
+| TASK-104 | B40 | Fault Lab UI | TODO | — | NOT RUN |
+| TASK-105 | B41 | Demo Docker Compose | TODO | — | NOT RUN |
+| TASK-106 | B41 | Demo Seed / Health Check | TODO | — | NOT RUN |
+| TASK-107 | B42 | S1 Acceptance | TODO | — | NOT RUN |
+| TASK-108 | B43 | S2 Acceptance | TODO | — | NOT RUN |
+| TASK-109 | B44 | S3 Acceptance | TODO | — | NOT RUN |
+
+## 批次记录
+
+仅为已安排或启动的批次建记录，后续按 BATCH-PLAN 模板追加；不要提前生成虚假的基线、验证或 Review 结果。
+
+### B01 — Incident 模型、受控状态更新、创建事务
+
+- 状态：TODO（未开工）；成员顺序：TASK-013 → TASK-014 → TASK-015。
+- 批外前置：TASK-012 DONE（独立 Review PASS，已提交，紧随 625489e）；流程文档随 docs(workflow) 提交入库。
+- Base SHA：未固定；开工时在 TASK-012 及流程文档收尾后读取真实 HEAD，不用当前 625489e 预填。
+- 范围/不变量/验证：见 BATCH-PLAN §5 与 08 的三个 Task 正文；开工时将具体目录、规格章节及验证命令固定到 CURRENT。
+- 成员进度：全部未开始；共同/专项验证 NOT RUN；独立 Review NOT RUN；提交：未提交。
+
+### 工作流文档变更（不属于 TASK-012 或 B01）
+
+- 2026-09-27：用户确认批次流程，新增 BATCH-PLAN，同步 Agent 入口、07/08 工作流条款、Manifest、启动指南及进度/交接。
+- 业务代码、Task 业务合同和已有验证结果未变；本次不代表 TASK-012 Review 已通过。
+- 验证（2026-09-27，仓库根目录）：`git diff --check` exit 0；`python3` 内联文档核验 exit 0：44批覆盖97项且每项一次、依赖无倒置；109项Task正文与HEAD逐字一致、进度批次/状态匹配；9份工作流文档的475个本地Markdown链接均存在；3个既有TASK-012代码文件SHA-256与本轮开始时一致。业务构建 NOT RUN（纯文档变更）。
+- TASK-012 已先行单独提交（9d482d0，只含其业务改动与进度行）；本工作流变更作为独立 docs 提交（提交说明 `docs(workflow): adopt batch implementation and review process`），不含业务代码。
 
 ## 待处理问题
 

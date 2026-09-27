@@ -2,13 +2,15 @@
 
 ## 权威输入
 
-首先阅读docs/specs/SPEC-MANIFEST.md，再读取本Task列出的正式规格。
+首先阅读docs/specs/SPEC-MANIFEST.md，再读取当前批次成员Task列出的正式规格。
+TASK-013起按docs/dev/BATCH-PLAN.md执行；该文件只定义批次与记录方式，不替代业务合同。
 docs/archive及历史Review不作为实现规则；不要重新解析旧补丁。
 本文件只约束工作方式，业务合同只在docs/specs。
 
 ## 范围与报告
 
-一次实施一个READY Task；遵守docs/specs/08-implementation-plan.md的依赖，而不是盲按数字递增。
+一次实施一个READY批次（TASK-001～012保留单项流程）；成员与顺序见docs/dev/BATCH-PLAN.md。
+遵守docs/specs/08-implementation-plan.md的原始依赖与每项DoD，不是盲按数字递增。
 特别顺序：001～066 → 068 → 074～076 → 067 → 069～073 → 077～109。
 不得把任务范围外发现“顺手修好”；记录位置、影响与建议，留给对应Task。
 
@@ -18,9 +20,13 @@ docs/archive及历史Review不作为实现规则；不要重新解析旧补丁�
 
 ## 进度与交接
 
-- 开工读取 docs/dev/CURRENT.md，核对 Git 真实状态，再定位当前 Task 与相关规格。
-- PROGRESS.md 记录任务状态与证据；CURRENT.md 记录准确断点、未提交修改和下一步。
-- 一次只修改一个已满足依赖的任务范围；停工、换会话或任务结束前更新交接卡。
+- 开工读取 docs/dev/CURRENT.md、BATCH-PLAN.md 和 PROGRESS.md 当前批次记录，核对 Git 真实状态。
+- 批外前置须验证、独立Review通过并提交/DONE；批内按依赖实施，前置针对性验证完成即可继续，不必逐项提交/外审。
+- 开工固定批次成员、完整base SHA、允许目录、关键不变量和验证要求；只修改本批范围，保护已有无关修改。
+- PROGRESS保留逐Task状态/批次关联及共同验证、专项验证、Review、提交证据；CURRENT记录当前成员、断点、未提交文件与下一步。
+- 批尾完整验证覆盖所有成员DoD，独立Reviewer审查固定base到当前代码树全部变化（含未跟踪文件）；修复沿用原批次与基线。
+- 整批Review PASS后按用户授权提交，回填真实SHA，再将批次及成员一起标DONE；待提交仍REVIEW。不得提前开始下一批。
+- 停工、换会话或批次结束前更新交接卡；记录模板见BATCH-PLAN，不新建逐Task长报告。
 - 不凭聊天摘要宣告 DONE；没执行的验证写 NOT RUN，不编造提交或结果。
 - 不覆盖、重置或清理用户已有修改；不自动推送。
 
@@ -40,7 +46,8 @@ Frozen Specs优先于代码；代码与规格冲突时不得用代码改写需�
 不修改Incident 8个状态；不允许通用updateStatus或绕过转换入口的CRUD状态更新。
 不增加数据库核心表，除非Task明确要求。
 不引入新框架/依赖解决局部问题，除非Task明确要求；新增前回答07 §125三问。
-每个Task完成后运行其对应验证；不得用-Denforcer.skip、-Dspotless.check.skip等跳过工程门禁。
+每个Task完成其针对性验证；批尾在最终代码树运行覆盖所有成员DoD的完整验证，共同构建证据可复用。
+不得用-Denforcer.skip、-Dspotless.check.skip等跳过工程门禁；专项验证不得被BUILD SUCCESS替代。
 
 ## 必须保护的组合规则
 
