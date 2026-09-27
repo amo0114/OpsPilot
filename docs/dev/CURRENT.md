@@ -1,16 +1,15 @@
 # 当前工作
 
-更新时间：2026-09-26（本地）
-仓库/分支：/root/projects/OpsPilot-V0.1-IMPLEMENTATION，main；HEAD 为 TASK-011 提交（紧随 334e388）；无 remote
-当前任务：TASK-011 DONE（独立 Review PASS，已提交）；TASK-012 READY（后端，按用户授权直接开始）
-任务内位置：TASK-012 开始前
-本地启动 Demo 配置：在 OPSPILOT_DB_* 环境变量基础上加 --spring.profiles.active=demo
+更新时间：2026-09-27（本地）
+仓库/分支：/root/projects/OpsPilot-V0.1-IMPLEMENTATION，main；HEAD 为 TASK-012 提交（紧随 625489e）；无 remote
+当前任务：TASK-012 DONE（独立 Review PASS，已提交）
+任务内位置：TASK-012 收尾完成；下一步按批次流程开始 B01（TASK-013～015）
 
-未提交修改：无（TASK-011 已提交）
+未提交修改：无（TASK-012 已提交）
 当前阻塞：无
 
 下一步具体动作：
-1. TASK-012 Incident / Investigation 基础表：读 08 TASK-012；04 §12～§16（incident、incident_affected_resource、investigation）；01 生命周期
+1. B01：TASK-013 Incident Domain Model → TASK-014 状态转换 Repository → TASK-015 创建 Incident
 
 后续 UI 约定（TASK-096/099 实施）：
 - 底座 React＋TypeScript＋Vite＋Tailwind CSS＋shadcn/ui；Motion 仅在需要布局动画时引入；单一图标库；单一锁文件（npm）

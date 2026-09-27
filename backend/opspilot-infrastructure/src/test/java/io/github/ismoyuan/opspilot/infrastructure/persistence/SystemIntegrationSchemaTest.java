@@ -62,7 +62,8 @@ class SystemIntegrationSchemaTest {
     @Test
     void migrationCreatesTheFiveSystemIntegrationTables() throws SQLException {
         assertThat(migration.success).isTrue();
-        assertThat(migration.targetSchemaVersion).isEqualTo("001");
+        assertThat(migration.migrations)
+                .anySatisfy(applied -> assertThat(applied.version).isEqualTo("001"));
 
         List<String> tables = new ArrayList<>();
         try (Statement statement = connection.createStatement();
@@ -74,7 +75,7 @@ class SystemIntegrationSchemaTest {
             }
         }
         assertThat(tables)
-                .containsExactly(
+                .contains(
                         "capability_binding",
                         "data_source_connection",
                         "managed_resource",
