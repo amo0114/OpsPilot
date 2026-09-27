@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.diagnosis.DiagnosisMapper">
+
+    <resultMap id="diagnosisRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.diagnosis.DiagnosisRow">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="investigation_id" javaType="_long"/>
+            <arg column="run_no" javaType="_int"/>
+            <arg column="version_no" javaType="_int"/>
+            <arg column="conclusion_type" javaType="String"/>
+            <arg column="primary_hypothesis_id" javaType="Long"/>
+            <arg column="summary" javaType="String"/>
+            <arg column="impact_summary" javaType="String"/>
+            <arg column="termination_reason" javaType="String"/>
+            <arg column="created_at" javaType="java.time.LocalDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <!--
+      版本号在同一语句内分配（INSERT … SELECT 对读取的行加共享锁）；调用方已锁定 Investigation，
+      uk_diagnosis_investigation_version 做最后保护（04 §33）。
+    -->
+    <insert id="insertNextVersion" useGeneratedKeys="true" keyProperty="d.id" keyColumn="id">
+        INSERT INTO diagnosis (investigation_id, run_no, version_no, conclusion_type, primary_hypothesis_id, summary,
+                               impact_summary, termination_reason, created_at)
+        SELECT #{d.investigationId}, #{d.runNo}, COALESCE(MAX(version_no), 0) + 1, #{d.conclusionType},
+               #{d.primaryHypothesisId}, #{d.summary}, #{d.impactSummary}, #{d.terminationReason}, #{d.createdAt}
+        FROM diagnosis
+        WHERE investigation_id = #{d.investigationId}
+    </insert>
+
+    <insert id="insertEvidenceRefs">
+        INSERT INTO diagnosis_evidence_ref (diagnosis_id, evidence_id, created_at)
+        VALUES
+        <foreach collection="evidenceIds" item="evidenceId" separator=",">
+            (#{diagnosisId}, #{evidenceId}, #{createdAt})
+        </foreach>
+    </insert>
+
+    <select id="selectById" resultMap="diagnosisRow">
+        SELECT id, investigation_id, run_no, version_no, conclusion_type, primary_hypothesis_id, summary,
+               impact_summary, termination_reason, created_at
+        FROM diagnosis
+        WHERE id = #{id}
+    </select>
+
+    <select id="selectEvidenceIds" resultType="long">
+        SELECT evidence_id
+        FROM diagnosis_evidence_ref
+        WHERE diagnosis_id = #{diagnosisId}
+        ORDER BY evidence_id
+    </select>
+</mapper>

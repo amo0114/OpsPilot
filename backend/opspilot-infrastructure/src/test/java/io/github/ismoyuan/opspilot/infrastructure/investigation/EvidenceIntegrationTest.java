@@ -242,7 +242,7 @@ class EvidenceIntegrationTest {
     @Test
     void persistenceOffersNoWayToModifyEvidence() throws IOException {
         assertThat(Arrays.stream(EvidenceRepository.class.getDeclaredMethods()).map(Method::getName))
-                .containsExactlyInAnyOrder("insert", "findByObservationAndHypothesis");
+                .containsExactlyInAnyOrder("insert", "findByObservationAndHypothesis", "findByIds");
 
         Pattern modify = Pattern.compile("(?is)\\b(update\\s+evidence\\b|delete\\s+from\\s+evidence\\b)");
         Resource[] mappers =

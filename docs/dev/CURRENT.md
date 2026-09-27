@@ -2,20 +2,20 @@
 
 更新时间：2026-09-27（本地）
 仓库/分支：/root/projects/OpsPilot-V0.1-IMPLEMENTATION，main；无 remote
-当前批次/状态：B05 DONE（代码 01c3395，B05-R1 PASS）；B06 未开始
-成员 Task 及顺序：B05 = TASK-023 → 024（均 DONE）；下一批 B06 = TASK-025 → 027
-固定 Base SHA：B05 为 c3bdd7d74d6578c460ad97b9ef6697b4929d1583；B06 开工时读取当时 HEAD
-批外前置核实：B06 的批外前置 TASK-024 DONE（01c3395）
-允许目录 / 明确不做 / 关键不变量：B06 开工时按 BATCH-PLAN 与 08 TASK-025～027 固定
-本批规格章节及 PROGRESS 记录：PROGRESS「B05」
-当前成员及位置：无进行中批次
-已实现并针对性验证的成员：B01～B05 全部
-未完成 / 未执行验证：recovery_verification 外键（TASK-074）；MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
-未提交文件（含既有无关修改）：无（本交接卡与 PROGRESS 回填随 docs(progress) 提交）
-共同验证及独立 Review 证据编号：B05-V1、B05-R1
+当前批次/状态：B06 REVIEW（B06-R1 PASS，提交中）
+成员 Task 及顺序：B06 = TASK-025 → TASK-026 → TASK-027（均 REVIEW）
+固定 Base SHA：c1042ff3fd33b4783c9dcfb348092e54b74e9913
+批外前置核实：TASK-024 DONE（01c3395，B05-R1 PASS）；开工时工作树干净
+允许目录 / 明确不做 / 关键不变量：见 PROGRESS「B06」（沿用 V003，不新增迁移；不做 AI 协议/Intent 分派/run 准入/确定性收束/Plan 表/Invocation 技术 API）
+本批规格章节及 PROGRESS 记录：PROGRESS「B06」
+当前成员及位置：整批送审，无进行中编码
+已实现并针对性验证的成员：TASK-025（DiagnosisRulesTest 4/4）、TASK-026（DiagnosisIntegrationTest 5/5 真实 MySQL）、TASK-027（InvestigationApiContractTest 2/2 真实 HTTP＋MySQL）
+未完成 / 未执行验证：B06-R1 独立 Review；Invocation 技术 API 归属待确认；Plan supersede 占位（TASK-062/067）；ccg 质量关卡 NOT RUN（本机未安装）；recovery_verification 外键（TASK-074）；MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
+未提交文件（含既有无关修改）：无既有无关修改；本批修改 8 个代码/测试文件＋docs/dev/CURRENT.md、PROGRESS.md，新增 37 个未跟踪文件（`git ls-files --others --exclude-standard`，清单见 PROGRESS「B06」本批修改文件）
+共同验证及独立 Review 证据编号：B06-V1（`./mvnw -B clean verify` exit 0）；B06-R1 PASS
 下一步具体动作：
-1. 等待用户指示开始 B06（Diagnosis 规则、持久化与调查查询，TASK-025 → 027）
-2. B06 开工：核对 Git、固定 HEAD 为 Base；Diagnosis 引用的 Evidence 须属同一 Investigation 且主假设有被引用的 SUPPORTS Evidence（PROGRESS 待处理问题 TASK-025/026）；run/Stop 准入与拒绝审计仍属 TASK-038～041
+1. 独立 Reviewer 审查 c1042ff → 当前工作树（含未跟踪文件），重点：支持证据须在本 Diagnosis 引用集合且关联主假设、旧 run 拒绝、同事务回滚、版本分配、查询只含调查事实与冻结引用、自定错误码/时长语义
+2. Review PASS 且获用户授权后提交（建议 `feat(investigation): versioned diagnosis and investigation queries (TASK-025–027)`），回填 SHA 后批次与成员标 DONE；不得提前开始 B07
 本地启动 Demo 配置：在 OPSPILOT_DB_* 环境变量基础上加 --spring.profiles.active=demo
 
 后续 UI 约定（TASK-096/099 实施）：

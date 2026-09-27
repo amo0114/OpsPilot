@@ -38,4 +38,12 @@
           AND hypothesis_id = #{hypothesisId}
         FOR SHARE
     </select>
+
+    <select id="selectByIds" resultMap="evidenceRow">
+        SELECT <include refid="columns"/>
+        FROM evidence
+        WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+        ORDER BY id
+    </select>
 </mapper>

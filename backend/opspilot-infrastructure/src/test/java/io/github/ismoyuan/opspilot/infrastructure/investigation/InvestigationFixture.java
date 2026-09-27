@@ -18,6 +18,8 @@ record InvestigationFixture(
 
     static InvestigationFixture reset(JdbcTemplate jdbc) {
         for (String table : List.of(
+                "diagnosis_evidence_ref",
+                "diagnosis",
                 "evidence",
                 "hypothesis",
                 "observation",

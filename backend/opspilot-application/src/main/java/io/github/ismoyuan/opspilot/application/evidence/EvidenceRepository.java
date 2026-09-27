@@ -3,6 +3,8 @@ package io.github.ismoyuan.opspilot.application.evidence;
 import io.github.ismoyuan.opspilot.domain.evidence.Evidence;
 import io.github.ismoyuan.opspilot.domain.evidence.NewEvidence;
 import java.time.Instant;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -15,4 +17,7 @@ public interface EvidenceRepository {
 
     /** 加共享锁读取最新已提交的关系，不受事务快照影响。 */
     Optional<Evidence> findByObservationAndHypothesis(long observationId, long hypothesisId);
+
+    /** 按 id 读取，不存在的 id 不出现在结果中；按 id 升序。 */
+    List<Evidence> findByIds(Collection<Long> ids);
 }

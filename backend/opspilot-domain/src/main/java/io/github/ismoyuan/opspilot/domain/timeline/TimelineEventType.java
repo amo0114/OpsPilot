@@ -11,5 +11,7 @@ public enum TimelineEventType {
     HYPOTHESIS_CREATED,
     /** Hypothesis 当前状态的每一次变化（01 §14），历史只在时间线保存。 */
     HYPOTHESIS_STATUS_CHANGED,
-    EVIDENCE_LINKED
+    EVIDENCE_LINKED,
+    /** 新 Diagnosis 版本已冻结，Incident 同事务 INVESTIGATING → DIAGNOSED。 */
+    DIAGNOSIS_CREATED
 }

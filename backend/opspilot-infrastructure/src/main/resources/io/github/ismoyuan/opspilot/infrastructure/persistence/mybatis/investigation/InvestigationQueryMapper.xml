@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  调查技术详情投影（05 §49～§56、07 §24）。只读取 investigation_id 匹配的调查事实：恢复 Observation 的 investigation_id
+  为空，不会出现。外部输入的键在索引等值之外再按字节比较。
+-->
+<mapper namespace="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.investigation.InvestigationQueryMapper">
+
+    <resultMap id="scopeRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.investigation.InvestigationQueryRows$ScopeRow">
+        <constructor>
+            <arg column="incident_id" javaType="_long"/>
+            <arg column="status" javaType="String"/>
+            <arg column="updated_at" javaType="java.time.LocalDateTime"/>
+            <arg column="investigation_id" javaType="Long"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="factsRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.investigation.InvestigationQueryRows$FactsRow">
+        <constructor>
+            <arg column="current_run_no" javaType="_int"/>
+            <arg column="started_at" javaType="java.time.LocalDateTime"/>
+            <arg column="current_run_started_at" javaType="java.time.LocalDateTime"/>
+            <arg column="last_activity_at" javaType="java.time.LocalDateTime"/>
+            <arg column="stop_requested_at" javaType="java.time.LocalDateTime"/>
+            <arg column="current_run_capability_count" javaType="_int"/>
+            <arg column="max_capability_calls" javaType="_int"/>
+            <arg column="max_duration_seconds" javaType="_int"/>
+            <arg column="capability_call_count" javaType="_long"/>
+            <arg column="hypothesis_count" javaType="_long"/>
+            <arg column="observation_count" javaType="_long"/>
+            <arg column="evidence_count" javaType="_long"/>
+            <arg column="diagnosis_versions" javaType="_long"/>
+            <arg column="current_run_diagnosed_at" javaType="java.time.LocalDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="hypothesisView" type="io.github.ismoyuan.opspilot.application.investigation.query.HypothesisView">
+        <constructor>
+            <arg column="id" javaType="_long"/>
+            <arg column="title" javaType="String"/>
+            <arg column="description" javaType="String"/>
+            <arg column="status" javaType="io.github.ismoyuan.opspilot.domain.hypothesis.HypothesisStatus"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="observationRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.investigation.InvestigationQueryRows$ObservationRow">
+        <constructor>
+            <arg column="id" javaType="_long"/>
+            <arg column="observation_kind" javaType="String"/>
+            <arg column="resource_key" javaType="String"/>
+            <arg column="resource_name" javaType="String"/>
+            <arg column="summary" javaType="String"/>
+            <arg column="observed_at" javaType="java.time.LocalDateTime"/>
+            <arg column="capability_invocation_id" javaType="_long"/>
+            <arg column="schema_name" javaType="String"/>
+            <arg column="schema_version" javaType="_int"/>
+            <arg column="payload" javaType="String"/>
+            <arg column="window_start" javaType="java.time.LocalDateTime"/>
+            <arg column="window_end" javaType="java.time.LocalDateTime"/>
+            <arg column="capability_key" javaType="String"/>
+            <arg column="run_no" javaType="_int"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="evidenceView" type="io.github.ismoyuan.opspilot.application.investigation.query.EvidenceView">
+        <constructor>
+            <arg column="id" javaType="_long"/>
+            <arg column="relation" javaType="io.github.ismoyuan.opspilot.domain.evidence.EvidenceRelation"/>
+            <arg column="reason" javaType="String"/>
+            <arg column="observation_id" javaType="_long"/>
+            <arg column="observation_summary" javaType="String"/>
+            <arg column="hypothesis_id" javaType="_long"/>
+            <arg column="hypothesis_title" javaType="String"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="diagnosisSummaryRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.investigation.InvestigationQueryRows$DiagnosisSummaryRow">
+        <constructor>
+            <arg column="version_no" javaType="_int"/>
+            <arg column="conclusion_type" javaType="String"/>
+            <arg column="summary" javaType="String"/>
+            <arg column="created_at" javaType="java.time.LocalDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="diagnosisRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.investigation.InvestigationQueryRows$DiagnosisRow">
+        <constructor>
+            <arg column="version_no" javaType="_int"/>
+            <arg column="run_no" javaType="_int"/>
+            <arg column="conclusion_type" javaType="String"/>
+            <arg column="primary_hypothesis_id" javaType="Long"/>
+            <arg column="primary_hypothesis_title" javaType="String"/>
+            <arg column="summary" javaType="String"/>
+            <arg column="impact_summary" javaType="String"/>
+            <arg column="termination_reason" javaType="String"/>
+            <arg column="created_at" javaType="java.time.LocalDateTime"/>
+            <arg column="id" javaType="_long"/>
+        </constructor>
+    </resultMap>
+
+    <select id="selectScope" resultMap="scopeRow">
+        SELECT i.id AS incident_id, i.status, i.updated_at, v.id AS investigation_id
+        FROM incident i
+        LEFT JOIN investigation v ON v.incident_id = i.id
+        WHERE i.incident_key = #{incidentKey}
+          AND CAST(i.incident_key AS BINARY) = CAST(#{incidentKey} AS BINARY)
+    </select>
+
+    <select id="selectFacts" resultMap="factsRow">
+        SELECT v.current_run_no, v.started_at, v.current_run_started_at, v.last_activity_at, v.stop_requested_at,
+               v.current_run_capability_count, v.max_capability_calls, v.max_duration_seconds, v.capability_call_count,
+               (SELECT COUNT(*) FROM hypothesis h WHERE h.investigation_id = v.id) AS hypothesis_count,
+               (SELECT COUNT(*) FROM observation o WHERE o.investigation_id = v.id) AS observation_count,
+               (SELECT COUNT(*) FROM evidence e WHERE e.investigation_id = v.id) AS evidence_count,
+               (SELECT COUNT(*) FROM diagnosis d WHERE d.investigation_id = v.id) AS diagnosis_versions,
+               (SELECT MAX(d.created_at) FROM diagnosis d
+                WHERE d.investigation_id = v.id AND d.run_no = v.current_run_no) AS current_run_diagnosed_at
+        FROM investigation v
+        WHERE v.id = #{investigationId}
+    </select>
+
+    <select id="selectHypotheses" resultMap="hypothesisView">
+        SELECT id, title, description, status
+        FROM hypothesis
+        WHERE investigation_id = #{investigationId}
+        ORDER BY id
+    </select>
+
+    <sql id="observationColumns">
+        o.id, o.observation_kind, r.resource_key, r.name AS resource_name, o.summary, o.observed_at,
+        o.capability_invocation_id, o.schema_name, o.schema_version, o.payload, o.window_start, o.window_end,
+        ci.capability_key, ci.run_no
+    </sql>
+
+    <sql id="observationFrom">
+        FROM observation o
+        JOIN managed_resource r ON r.id = o.managed_resource_id
+        JOIN capability_invocation ci ON ci.id = o.capability_invocation_id
+        WHERE o.investigation_id = #{investigationId}
+        <if test="resourceKey != null">
+            AND r.resource_key = #{resourceKey}
+            AND CAST(r.resource_key AS BINARY) = CAST(#{resourceKey} AS BINARY)
+        </if>
+        <if test="kind != null">
+            AND o.observation_kind = #{kind}
+        </if>
+    </sql>
+
+    <select id="countObservations" resultType="_long">
+        SELECT COUNT(*)
+        <include refid="observationFrom"/>
+    </select>
+
+    <select id="selectObservations" resultMap="observationRow">
+        SELECT <include refid="observationColumns"/>
+        <include refid="observationFrom"/>
+        ORDER BY o.id
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="selectObservation" resultMap="observationRow">
+        SELECT <include refid="observationColumns"/>
+        FROM observation o
+        JOIN managed_resource r ON r.id = o.managed_resource_id
+        JOIN capability_invocation ci ON ci.id = o.capability_invocation_id
+        WHERE o.investigation_id = #{investigationId}
+          AND o.id = #{observationId}
+    </select>
+
+    <sql id="evidenceColumns">
+        e.id, e.relation, e.reason, o.id AS observation_id, o.summary AS observation_summary,
+        h.id AS hypothesis_id, h.title AS hypothesis_title
+    </sql>
+
+    <select id="selectEvidence" resultMap="evidenceView">
+        SELECT <include refid="evidenceColumns"/>
+        FROM evidence e
+        JOIN observation o ON o.id = e.observation_id
+        JOIN hypothesis h ON h.id = e.hypothesis_id
+        WHERE e.investigation_id = #{investigationId}
+        ORDER BY e.id
+    </select>
+
+    <select id="selectDiagnoses" resultMap="diagnosisSummaryRow">
+        SELECT version_no, conclusion_type, summary, created_at
+        FROM diagnosis
+        WHERE investigation_id = #{investigationId}
+        ORDER BY version_no
+    </select>
+
+    <select id="selectDiagnosis" resultMap="diagnosisRow">
+        SELECT d.version_no, d.run_no, d.conclusion_type, d.primary_hypothesis_id, h.title AS primary_hypothesis_title,
+               d.summary, d.impact_summary, d.termination_reason, d.created_at, d.id
+        FROM diagnosis d
+        LEFT JOIN hypothesis h ON h.id = d.primary_hypothesis_id
+        WHERE d.investigation_id = #{investigationId}
+          AND d.version_no = #{version}
+    </select>
+
+    <select id="selectDiagnosisEvidence" resultMap="evidenceView">
+        SELECT <include refid="evidenceColumns"/>
+        FROM diagnosis_evidence_ref ref
+        JOIN evidence e ON e.id = ref.evidence_id
+        JOIN observation o ON o.id = e.observation_id
+        JOIN hypothesis h ON h.id = e.hypothesis_id
+        WHERE ref.diagnosis_id = #{diagnosisId}
+        ORDER BY e.id
+    </select>
+</mapper>

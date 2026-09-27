@@ -8,6 +8,8 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Repository;
 
@@ -37,6 +39,16 @@ class MyBatisEvidenceRepository implements EvidenceRepository {
     public Optional<Evidence> findByObservationAndHypothesis(long observationId, long hypothesisId) {
         return Optional.ofNullable(mapper.selectByObservationAndHypothesisForShare(observationId, hypothesisId))
                 .map(MyBatisEvidenceRepository::toDomain);
+    }
+
+    @Override
+    public List<Evidence> findByIds(Collection<Long> ids) {
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        return mapper.selectByIds(ids).stream()
+                .map(MyBatisEvidenceRepository::toDomain)
+                .toList();
     }
 
     private static Evidence toDomain(EvidenceRow row) {

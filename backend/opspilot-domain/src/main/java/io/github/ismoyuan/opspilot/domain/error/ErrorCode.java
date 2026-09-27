@@ -14,6 +14,14 @@ public enum ErrorCode {
     INCIDENT_VERSION_CONFLICT(ErrorCategory.CONFLICT, "故障已被其他操作更新，请刷新后重试。"),
     PENDING_APPROVAL_EXISTS(ErrorCategory.CONFLICT, "存在待审批的处理方案，请先拒绝或撤回审批。"),
     RESOURCE_NOT_IN_SYSTEM(ErrorCategory.RULE_VIOLATION, "指定的组件不属于该业务系统。"),
+    DIAGNOSIS_NOT_FOUND(ErrorCategory.NOT_FOUND, "诊断版本不存在。"),
+    /** Diagnosis 草稿的主假设、引用证据或支持证据不满足 01 §20 / 04 §34。 */
+    DIAGNOSIS_INVARIANT_VIOLATION(ErrorCategory.RULE_VIOLATION, "诊断结论缺少合法的主假设或支持证据。"),
+    /**
+     * 结果所属 run 已不是当前 run（01 §11、05 §93）：内部审计处置，旧轮结果只保留审计、不产生领域写入；
+     * 不是 Incident 状态，也不由公开 API 返回。
+     */
+    STALE_RUN_RESULT(ErrorCategory.CONFLICT, "该结果属于已结束的调查轮次，未被采用。"),
     /** 同一 Observation × Hypothesis 已有 Evidence：Intent 拒绝码，原关系保持不变（05 §83、§93）。 */
     EVIDENCE_LINK_ALREADY_EXISTS(ErrorCategory.CONFLICT, "该观测与假设之间已存在证据关系，不能重复或改写。"),
     /** credentialRef 无法解析为可用凭据（08 TASK-009）；属部署配置错误，不在 05 §93 公开目录。 */
