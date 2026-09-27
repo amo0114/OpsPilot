@@ -35,6 +35,14 @@ public interface IncidentRepository {
      */
     Incident apply(IncidentTransition transition, Instant at);
 
+    /**
+     * 不改变状态的运行控制变更（如 Stop，05 §27）使 Incident 版本加一：以当前 status 与 lock_version 为条件，
+     * 状态保持不变。不是通用状态更新入口。
+     *
+     * @throws io.github.ismoyuan.opspilot.application.error.ApplicationException 未命中时与 {@link #apply} 相同的冲突分类
+     */
+    Incident incrementVersion(Incident current, Instant at);
+
     /** 当日已用的最大编号序号，没有则为 0；只用于分配候选编号，唯一性由 uk_incident_key 保证。 */
     int lastSequenceOn(LocalDate day);
 

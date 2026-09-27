@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 故障页面投影（07 §24）。外部输入的键在索引等值之外再按字节比较。 -->
+<mapper namespace="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.incident.IncidentQueryMapper">
+
+    <resultMap id="incidentSummaryRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.incident.IncidentSummaryRow">
+        <constructor>
+            <arg column="incident_key" javaType="String"/>
+            <arg column="title" javaType="String"/>
+            <arg column="system_name" javaType="String"/>
+            <arg column="status" javaType="String"/>
+            <arg column="impact_summary" javaType="String"/>
+            <arg column="detected_at" javaType="java.time.LocalDateTime"/>
+            <arg column="updated_at" javaType="java.time.LocalDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="incidentDetailRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.incident.IncidentDetailRow">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="incident_key" javaType="String"/>
+            <arg column="title" javaType="String"/>
+            <arg column="description" javaType="String"/>
+            <arg column="system_key" javaType="String"/>
+            <arg column="system_name" javaType="String"/>
+            <arg column="status" javaType="String"/>
+            <arg column="lock_version" javaType="_long"/>
+            <arg column="impact_summary" javaType="String"/>
+            <arg column="started_at" javaType="java.time.LocalDateTime"/>
+            <arg column="detected_at" javaType="java.time.LocalDateTime"/>
+            <arg column="resolved_at" javaType="java.time.LocalDateTime"/>
+            <arg column="current_run_no" javaType="Integer"/>
+            <arg column="stop_requested_at" javaType="java.time.LocalDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="affectedResourceView" type="io.github.ismoyuan.opspilot.application.incident.query.AffectedResourceView">
+        <constructor>
+            <arg column="resource_key" javaType="String"/>
+            <arg column="name" javaType="String"/>
+            <arg column="resource_type" javaType="io.github.ismoyuan.opspilot.domain.system.ResourceType"/>
+        </constructor>
+    </resultMap>
+
+    <sql id="filter">
+        <where>
+            <if test="systemKey != null">
+                s.system_key = #{systemKey}
+                AND CAST(s.system_key AS BINARY) = CAST(#{systemKey} AS BINARY)
+            </if>
+            <if test="status != null">
+                AND i.status = #{status}
+            </if>
+        </where>
+    </sql>
+
+    <select id="countIncidents" resultType="_long">
+        SELECT COUNT(*)
+        FROM incident i
+        JOIN managed_system s ON s.id = i.managed_system_id
+        <include refid="filter"/>
+    </select>
+
+    <select id="selectIncidents" resultMap="incidentSummaryRow">
+        SELECT i.incident_key, i.title, s.name AS system_name, i.status, i.impact_summary, i.detected_at, i.updated_at
+        FROM incident i
+        JOIN managed_system s ON s.id = i.managed_system_id
+        <include refid="filter"/>
+        ORDER BY i.detected_at DESC, i.id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="selectDetail" resultMap="incidentDetailRow">
+        SELECT i.id, i.incident_key, i.title, i.description, s.system_key, s.name AS system_name, i.status,
+               i.lock_version, i.impact_summary, i.started_at, i.detected_at, i.resolved_at,
+               v.current_run_no, v.stop_requested_at
+        FROM incident i
+        JOIN managed_system s ON s.id = i.managed_system_id
+        LEFT JOIN investigation v ON v.incident_id = i.id
+        WHERE i.incident_key = #{incidentKey}
+          AND CAST(i.incident_key AS BINARY) = CAST(#{incidentKey} AS BINARY)
+    </select>
+
+    <select id="selectAffectedResources" resultMap="affectedResourceView">
+        SELECT r.resource_key, r.name, r.resource_type
+        FROM incident_affected_resource a
+        JOIN managed_resource r ON r.id = a.managed_resource_id
+        WHERE a.incident_id = #{incidentId}
+        ORDER BY r.resource_key
+    </select>
+</mapper>

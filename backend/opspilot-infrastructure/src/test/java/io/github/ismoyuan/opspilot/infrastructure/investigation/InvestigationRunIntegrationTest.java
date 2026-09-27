@@ -11,10 +11,14 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import io.github.ismoyuan.opspilot.application.dispatch.WorkDispatcher;
+import io.github.ismoyuan.opspilot.application.incident.CancelIncidentCommand;
+import io.github.ismoyuan.opspilot.application.incident.CancelIncidentResult;
+import io.github.ismoyuan.opspilot.application.incident.IncidentApplicationService;
 import io.github.ismoyuan.opspilot.application.investigation.ContinueInvestigationCommand;
 import io.github.ismoyuan.opspilot.application.investigation.InvestigationApplicationService;
 import io.github.ismoyuan.opspilot.application.investigation.InvestigationRunResult;
 import io.github.ismoyuan.opspilot.application.investigation.StartInvestigationCommand;
+import io.github.ismoyuan.opspilot.application.investigation.StopInvestigationCommand;
 import io.github.ismoyuan.opspilot.application.timeline.TimelineRepository;
 import io.github.ismoyuan.opspilot.domain.error.ErrorCode;
 import io.github.ismoyuan.opspilot.domain.error.OpsPilotException;
@@ -34,6 +38,8 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -54,7 +60,11 @@ import org.testcontainers.mysql.MySQLContainer;
  */
 @SpringBootTest(properties = "opspilot.investigation.max-capability-calls=7")
 @Testcontainers
-@Import({InvestigationApplicationService.class, InvestigationRunIntegrationTest.FixedClock.class})
+@Import({
+    InvestigationApplicationService.class,
+    IncidentApplicationService.class,
+    InvestigationRunIntegrationTest.FixedClock.class
+})
 class InvestigationRunIntegrationTest {
 
     static final Instant NOW = Instant.parse("2026-09-27T08:00:00.250Z");
@@ -80,6 +90,9 @@ class InvestigationRunIntegrationTest {
 
     @Autowired
     InvestigationApplicationService service;
+
+    @Autowired
+    IncidentApplicationService incidentService;
 
     @MockitoBean
     WorkDispatcher dispatcher;
@@ -315,13 +328,148 @@ class InvestigationRunIntegrationTest {
         assertThat(count("incident_timeline_event")).isEqualTo(1);
     }
 
+    /**
+     * 首次 Stop 同事务写停止时间/身份、Incident 与 Investigation 版本各加一、一条停止事件；同一活跃 run 的重复 Stop
+     * （含带旧版本的重试）返回既有接受结果，不再写事件或版本（05 §27、08 TASK-018）。
+     */
+    @Test
+    void firstStopIsRecordedOnceAndRepeatedStopIsIdempotent() {
+        service.startInvestigation(new StartInvestigationCommand(KEY, 0, "demo-user"));
+        InvestigationRunResult stopped =
+                new InvestigationRunResult(new IncidentKey(KEY), IncidentStatus.INVESTIGATING, 2, 1, true);
+
+        assertThat(service.stopInvestigation(new StopInvestigationCommand(KEY, 1, "demo-user")))
+                .isEqualTo(stopped);
+        assertThat(service.stopInvestigation(new StopInvestigationCommand(KEY, 1, "demo-user")))
+                .isEqualTo(stopped);
+        assertThat(service.stopInvestigation(new StopInvestigationCommand(KEY, 2, "other-user")))
+                .isEqualTo(stopped);
+
+        assertThat(jdbc.queryForMap(
+                        "SELECT i.status, i.lock_version AS incident_version, v.lock_version AS investigation_version,"
+                                + " v.current_run_no, v.stop_requested_by,"
+                                + " DATE_FORMAT(v.stop_requested_at, '%H:%i:%s.%f') AS stop_at"
+                                + " FROM incident i JOIN investigation v ON v.incident_id = i.id"))
+                .containsAllEntriesOf(Map.of(
+                        "status",
+                        "INVESTIGATING",
+                        "incident_version",
+                        java.math.BigInteger.TWO,
+                        "investigation_version",
+                        java.math.BigInteger.ONE,
+                        "current_run_no",
+                        1L,
+                        "stop_requested_by",
+                        "demo-user",
+                        "stop_at",
+                        "08:00:00.250000"));
+        assertThat(jdbc.queryForList(
+                        "SELECT CONCAT(event_type, ':', actor_id, ':', payload->>'$.runNo')"
+                                + " FROM incident_timeline_event ORDER BY id",
+                        String.class))
+                .containsExactly("INVESTIGATION_STARTED:demo-user:1", "INVESTIGATION_STOP_REQUESTED:demo-user:1");
+        verify(dispatcher).dispatchInvestigation(incidentId, 1);
+    }
+
+    /** 未在调查中按状态冲突拒绝；尚未 Stop 时以旧版本请求按版本冲突拒绝；均无写入。 */
+    @Test
+    void stopRequiresInvestigatingAndCurrentVersion() {
+        assertThatThrownBy(() -> service.stopInvestigation(new StopInvestigationCommand(KEY, 0, "demo-user")))
+                .isInstanceOfSatisfying(OpsPilotException.class, ex -> {
+                    assertThat(ex.errorCode()).isEqualTo(ErrorCode.INCIDENT_STATE_CONFLICT);
+                    assertThat(ex.details()).containsEntry("currentStatus", "CREATED");
+                });
+        service.startInvestigation(new StartInvestigationCommand(KEY, 0, "demo-user"));
+
+        assertThatThrownBy(() -> service.stopInvestigation(new StopInvestigationCommand(KEY, 0, "demo-user")))
+                .isInstanceOfSatisfying(
+                        OpsPilotException.class,
+                        ex -> assertThat(ex.errorCode()).isEqualTo(ErrorCode.INCIDENT_VERSION_CONFLICT));
+        assertThat(jdbc.queryForMap("SELECT stop_requested_at, lock_version FROM investigation"))
+                .containsEntry("stop_requested_at", null)
+                .containsEntry("lock_version", java.math.BigInteger.ZERO);
+        assertThat(count("incident_timeline_event")).isEqualTo(1);
+    }
+
+    /** 状态机允许的来源取消为 CANCELLED，迁移与 INCIDENT_CANCELLED 时间线同事务（05 §33、08 TASK-019）。 */
+    @ParameterizedTest
+    @ValueSource(strings = {"CREATED", "INVESTIGATING", "DIAGNOSED"})
+    void cancelFromAllowedSourceRecordsTimeline(String source) {
+        jdbc.update("UPDATE incident SET status = ?, lock_version = 4", source);
+
+        CancelIncidentResult result =
+                incidentService.cancelIncident(new CancelIncidentCommand(KEY, 4, "  确认是测试数据，停止处理。 ", "demo-user"));
+
+        assertThat(result).isEqualTo(new CancelIncidentResult(new IncidentKey(KEY), IncidentStatus.CANCELLED, 5));
+        assertThat(jdbc.queryForMap(
+                        "SELECT event_type, actor_id, summary, payload->>'$.previousStatus' AS previous_status,"
+                                + " payload->>'$.reason' AS reason FROM incident_timeline_event"))
+                .containsAllEntriesOf(Map.of(
+                        "event_type", "INCIDENT_CANCELLED",
+                        "actor_id", "demo-user",
+                        "summary", "取消故障处理：确认是测试数据，停止处理。",
+                        "previous_status", source,
+                        "reason", "确认是测试数据，停止处理。"));
+    }
+
+    /**
+     * 不允许的来源被拒；时间线失败时回滚；等待审批时占位端口失败使整笔取消回滚，不宣称已撤销审批（TASK-067 补真实实现）。
+     */
+    @Test
+    void cancelIsRejectedOrRolledBackWithoutPartialWrites() {
+        jdbc.update("UPDATE incident SET status = 'EXECUTING', lock_version = 6");
+        assertThatThrownBy(() -> incidentService.cancelIncident(new CancelIncidentCommand(KEY, 6, null, "demo-user")))
+                .isInstanceOfSatisfying(
+                        OpsPilotException.class,
+                        ex -> assertThat(ex.errorCode()).isEqualTo(ErrorCode.INCIDENT_STATE_CONFLICT));
+
+        jdbc.update("UPDATE incident SET status = 'DIAGNOSED'");
+        doThrow(new IllegalStateException("timeline down")).when(timeline).append(any());
+        assertThatThrownBy(() -> incidentService.cancelIncident(new CancelIncidentCommand(KEY, 6, null, "demo-user")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("timeline down");
+        org.mockito.Mockito.reset(timeline);
+
+        jdbc.update("UPDATE incident SET status = 'AWAITING_APPROVAL'");
+        assertThatThrownBy(() -> incidentService.cancelIncident(new CancelIncidentCommand(KEY, 6, null, "demo-user")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("TASK-067");
+
+        assertThat(jdbc.queryForMap("SELECT status, lock_version FROM incident"))
+                .containsEntry("status", "AWAITING_APPROVAL")
+                .containsEntry("lock_version", java.math.BigInteger.valueOf(6));
+        assertThat(count("incident_timeline_event")).isZero();
+    }
+
+    /** 同时发起的 Cancel 与 Start 在 Incident 行锁上串行，只有一个成功。 */
+    @Test
+    void concurrentCancelAndStartAdmitExactlyOne() throws Exception {
+        List<Object> outcomes = race(
+                () -> incidentService.cancelIncident(new CancelIncidentCommand(KEY, 0, null, "demo-user")),
+                () -> service.startInvestigation(new StartInvestigationCommand(KEY, 0, "demo-user")));
+
+        assertThat(outcomes).filteredOn(OpsPilotException.class::isInstance).hasSize(1);
+        String status = jdbc.queryForObject("SELECT status FROM incident", String.class);
+        assertThat(status).isIn("CANCELLED", "INVESTIGATING");
+        assertThat(jdbc.queryForObject("SELECT lock_version FROM incident", Integer.class))
+                .isEqualTo(1);
+        assertThat(count("incident_timeline_event")).isEqualTo(1);
+        assertThat(count("investigation")).isEqualTo(status.equals("INVESTIGATING") ? 1 : 0);
+    }
+
     /** 同时执行同一操作两次，返回各自的结果或异常。 */
     List<Object> race(java.util.concurrent.Callable<Object> action) throws Exception {
+        return race(action, action);
+    }
+
+    /** 同时执行两个操作，返回各自的结果或异常。 */
+    List<Object> race(java.util.concurrent.Callable<Object> first, java.util.concurrent.Callable<Object> second)
+            throws Exception {
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
             CountDownLatch start = new CountDownLatch(1);
             List<Future<Object>> futures = new ArrayList<>();
-            for (int i = 0; i < 2; i++) {
+            for (java.util.concurrent.Callable<Object> action : List.of(first, second)) {
                 futures.add(executor.submit(() -> {
                     start.await(30, TimeUnit.SECONDS);
                     try {

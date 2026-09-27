@@ -43,6 +43,18 @@
                 #{maxDurationSeconds}, #{agentStepTimeoutSeconds}, #{maxConsecutiveAiFailures}, #{now}, #{now}, 0)
     </insert>
 
+    <update id="requestStop">
+        UPDATE investigation
+        SET stop_requested_at = #{stopRequestedAt},
+            stop_requested_by = #{stopRequestedBy},
+            updated_at = #{stopRequestedAt},
+            lock_version = lock_version + 1
+        WHERE id = #{id}
+          AND current_run_no = #{expectedRunNo}
+          AND lock_version = #{expectedVersion}
+          AND stop_requested_at IS NULL
+    </update>
+
     <!-- 累计 capability_call_count、started_at 与限制快照不在此处修改（01 §9） -->
     <update id="startNextRun">
         UPDATE investigation

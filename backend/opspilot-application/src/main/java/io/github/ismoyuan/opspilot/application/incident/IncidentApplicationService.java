@@ -1,5 +1,6 @@
 package io.github.ismoyuan.opspilot.application.incident;
 
+import io.github.ismoyuan.opspilot.application.approval.PendingApprovalCanceller;
 import io.github.ismoyuan.opspilot.application.correlation.Correlation;
 import io.github.ismoyuan.opspilot.application.error.ApplicationException;
 import io.github.ismoyuan.opspilot.application.system.ManagedResourceRepository;
@@ -9,9 +10,13 @@ import io.github.ismoyuan.opspilot.domain.error.ErrorCode;
 import io.github.ismoyuan.opspilot.domain.incident.Incident;
 import io.github.ismoyuan.opspilot.domain.incident.IncidentKey;
 import io.github.ismoyuan.opspilot.domain.incident.IncidentSource;
+import io.github.ismoyuan.opspilot.domain.incident.IncidentStatus;
+import io.github.ismoyuan.opspilot.domain.incident.IncidentTransition;
+import io.github.ismoyuan.opspilot.domain.incident.IncidentTrigger;
 import io.github.ismoyuan.opspilot.domain.incident.NewIncident;
 import io.github.ismoyuan.opspilot.domain.system.ManagedResource;
 import io.github.ismoyuan.opspilot.domain.system.ManagedSystem;
+import io.github.ismoyuan.opspilot.domain.timeline.IncidentCancelledPayloadV1;
 import io.github.ismoyuan.opspilot.domain.timeline.IncidentCreatedPayloadV1;
 import io.github.ismoyuan.opspilot.domain.timeline.NewTimelineEvent;
 import io.github.ismoyuan.opspilot.domain.timeline.TimelineActorType;
@@ -46,6 +51,7 @@ public class IncidentApplicationService {
     private final ManagedResourceRepository resources;
     private final IncidentRepository incidents;
     private final TimelineRepository timeline;
+    private final PendingApprovalCanceller pendingApprovals;
     private final TransactionTemplate transaction;
     private final Clock clock;
 
@@ -54,12 +60,14 @@ public class IncidentApplicationService {
             ManagedResourceRepository resources,
             IncidentRepository incidents,
             TimelineRepository timeline,
+            PendingApprovalCanceller pendingApprovals,
             PlatformTransactionManager transactionManager,
             Clock clock) {
         this.systems = systems;
         this.resources = resources;
         this.incidents = incidents;
         this.timeline = timeline;
+        this.pendingApprovals = pendingApprovals;
         this.transaction = new TransactionTemplate(transactionManager);
         this.clock = clock;
     }
@@ -76,6 +84,50 @@ public class IncidentApplicationService {
                 }
             }
         }
+    }
+
+    /**
+     * 取消故障处理（05 §33、08 TASK-019）：只允许状态机规定的来源；迁移与时间线同事务。等待审批时同事务经
+     * {@link PendingApprovalCanceller} 取消 PENDING Approval 与未执行 Plan。取消调查中的 Incident 后，旧 run 的迟到结果
+     * 由调查准入按 Incident 状态拒绝（TASK-039/041）。
+     */
+    public CancelIncidentResult cancelIncident(CancelIncidentCommand command) {
+        String reason = optionalReason(command.reason());
+        return transaction.execute(status -> {
+            Instant now = clock.instant().truncatedTo(ChronoUnit.MILLIS);
+            Incident incident = IncidentLocks.lockByKey(incidents, command.incidentKey());
+            IncidentTransition transition =
+                    incident.transitionFor(IncidentTrigger.CANCEL_INCIDENT, command.expectedVersion());
+            if (incident.status() == IncidentStatus.AWAITING_APPROVAL) {
+                pendingApprovals.cancelPendingApprovalAndPlans(incident.id(), now, command.actor());
+            }
+            Incident cancelled = incidents.apply(transition, now);
+            timeline.append(new NewTimelineEvent(
+                    incident.id(),
+                    TimelineEventType.INCIDENT_CANCELLED,
+                    now,
+                    TimelineActorType.USER,
+                    command.actor(),
+                    reason == null ? "取消故障处理" : "取消故障处理：" + reason,
+                    new IncidentCancelledPayloadV1(
+                            incident.incidentKey().value(), incident.status().name(), reason),
+                    Correlation.currentId()));
+            return new CancelIncidentResult(cancelled.incidentKey(), cancelled.status(), cancelled.version());
+        });
+    }
+
+    private static String optionalReason(String reason) {
+        if (reason == null || reason.isBlank()) {
+            return null;
+        }
+        String text = reason.strip();
+        if (text.codePointCount(0, text.length()) > CancelIncidentCommand.REASON_MAX) {
+            throw new ApplicationException(
+                    ErrorCode.REQUEST_VALIDATION_FAILED,
+                    "Cancel reason too long",
+                    Map.of("field", "reason", "reason", "TOO_LONG"));
+        }
+        return text;
     }
 
     private CreateIncidentResult createInTransaction(CreateIncidentCommand command, List<String> resourceKeys) {

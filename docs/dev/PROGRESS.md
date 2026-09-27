@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-27（B02 DONE，c0deb3c；B03 未开始）
+> 最近更新：2026-09-27（B03 P1 修复完成，待复核）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -25,9 +25,9 @@
 | TASK-015 | B01 | 创建 Incident | DONE | commit ced26e0（B01，Base 5cc63e0） | B01-V1 verify exit 0＋成员专项证据；B01-R1 PASS；见 PROGRESS「B01」 |
 | TASK-016 | B02 | 开始调查 | DONE | commit c0deb3c（B02，Base cb69440） | B02-V1 verify exit 0＋成员专项证据；B02-R1 PASS；见 PROGRESS「B02」 |
 | TASK-017 | B02 | Continue Investigation | DONE | commit c0deb3c（B02，Base cb69440） | B02-V1 verify exit 0＋成员专项证据；B02-R1 PASS；见 PROGRESS「B02」 |
-| TASK-018 | B03 | Stop Investigation Request | TODO | — | NOT RUN |
-| TASK-019 | B03 | Cancel Incident | TODO | — | NOT RUN |
-| TASK-020 | B03 | Incident 基础 API | TODO | — | NOT RUN |
+| TASK-018 | B03 | Stop Investigation Request | REVIEW | 未提交（B03，Base 4630f27） | 见 PROGRESS「B03」成员进度与 B03-V1；B03-R2 PASS，待提交 |
+| TASK-019 | B03 | Cancel Incident | REVIEW | 未提交（B03，Base 4630f27） | 见 PROGRESS「B03」成员进度与 B03-V1；B03-R2 PASS，待提交 |
+| TASK-020 | B03 | Incident 基础 API | REVIEW | 未提交（B03，Base 4630f27） | 见 PROGRESS「B03」成员进度与 B03-V1；B03-R2 PASS，待提交 |
 | TASK-021 | B04 | 调查事实数据库结构 | TODO | — | NOT RUN |
 | TASK-022 | B04 | Observation Domain / Persistence | TODO | — | NOT RUN |
 | TASK-023 | B05 | Hypothesis Domain | TODO | — | NOT RUN |
@@ -161,6 +161,29 @@
 - B02-R1：独立 Reviewer；范围 cb69440 到当前工作树（含未跟踪文件），未发现 B03 功能提前进入；结论 PASS，无 P0/P1；实测 `./mvnw -B clean verify` exit 0（domain 23/23、infrastructure 198/198、web 21/21，无跳过），Enforcer、Spotless、`git diff --check` 通过，7 个真实 MySQL 用例覆盖原子性、回滚、提交后派发与并发准入；正式 boot jar＋demo＋独立 MySQL 8.4.11 health 200，新 Service/Repository/Dispatcher/配置 Bean 装配，临时进程与容器已清理；确认配置覆盖值写入库、Continue 不以当前配置覆盖原快照、回滚不派发、派发异常日志不含原始异常内容；真实 Worker、MySQL 8.0.16、Windows Wrapper NOT VERIFIED（不阻塞）；非阻塞意见（真实 PENDING Approval 同锁复核、占位 Dispatcher 由 TASK-035～043 接替）已在待处理问题；Commit Recommendation YES
 - 提交：代码提交 c0deb3ce63f47342a79cd8453ec3309df14c8a4a（feat(investigation): start and continue investigation runs (TASK-016–017)）；SHA 回填为后续 docs 提交
 
+### B03 — 停止、取消与基础 Incident API
+
+- 状态：REVIEW（B03-R2 PASS，已通过，待提交）
+- 成员及顺序：TASK-018 → TASK-019 → TASK-020；批外前置：TASK-017 DONE（c0deb3c，B02-R1 PASS）
+- Base SHA：4630f27ee3aece7138c79338ee39042c427f3287
+- 范围：domain（ErrorCode、incident、investigation、timeline 载荷）；application（investigation Stop、incident Cancel、审批取消端口、incident 查询）；infrastructure（incident/investigation 条件更新、审批取消占位实现、incident 查询投影）；web（IncidentController、请求/响应 DTO、严格 JSON 反序列化）；boot（HTTP 契约集成测试及测试依赖）；docs/dev。明确不做：approval/plan 表与真实联动（TASK-062/066/067）、availableActions（TASK-086）、完整 IncidentDetailView（TASK-085）、Timeline API（TASK-084）、SSE（TASK-087）、Stop 后的收束与迟到结果（TASK-039～043）
+- 规格：08 TASK-018～020；01 §3～§4、§33、§35；04 §13～§16、§57；05 §4～§11、§20～§28、§33、§91、§93～§94；07 §26～§29、§35～§37、§42
+- 关键不变量：Stop 按 Incident→Investigation 锁序；首次 Stop 同事务写 stop 时间/身份、Incident 与 Investigation 版本各加一、只追加一条 INVESTIGATION_STOP_REQUESTED；同一活跃 run 重复 Stop 返回既有接受结果、不重复事件或版本；Stop 不是新状态；Cancel 只允许状态机来源，迁移与时间线同事务；AWAITING_APPROVAL 的审批/方案取消只建端口，不建表、不宣称已验证；API 以 incidentKey 为公开身份，Controller 不访问 Mapper，错误/状态码/expectedVersion/requestId/响应结构符合 05；Start/Continue 复用 B02 用例
+- 开工已有修改：无（工作树干净）
+- 成员进度：
+  - TASK-018：实现并针对性验证完成。domain：Investigation.withStopRequested、INVESTIGATION_STOP_REQUESTED 与 InvestigationStopRequestedPayloadV1；application：StopInvestigationCommand、InvestigationApplicationService.stopInvestigation（锁 Incident→校验 INVESTIGATING→锁 Investigation→已 Stop 则返回既有结果→校验版本→saveStopRequest→incrementVersion→时间线，不派发）、IncidentRepository.incrementVersion（状态不变的条件版本加一，非通用状态更新）、InvestigationRepository.saveStopRequest；infrastructure：IncidentMapper.incrementVersion（WHERE id AND status AND lock_version）、InvestigationMapper.requestStop（WHERE id AND 原轮号 AND 原版本 AND stop_requested_at IS NULL）、冲突分类改为共用。InvestigationRunIntegrationTest 新增 Stop 2 例（真实 MySQL：首次 Stop 后 Incident v1→v2、Investigation v0→v1、停止时间/身份写入、一条事件；带旧版本与其他用户的重复 Stop 返回同一结果且不再写；CREATED 状态冲突；旧版本冲突且无写入）；MyBatisIncidentTransitionTest 8/8 回归；变异：去掉已 Stop 的幂等返回 → 1 例失败，已还原
+  - TASK-019：实现并针对性验证完成。application：CancelIncidentCommand/Result、IncidentApplicationService.cancelIncident（一事务：按 key 锁 Incident→transitionFor(CANCEL_INCIDENT, expectedVersion)→AWAITING_APPROVAL 时调用 PendingApprovalCanceller→条件迁移→INCIDENT_CANCELLED 时间线；reason 可空、≤500 字符）、approval/PendingApprovalCanceller 端口、incident/IncidentLocks（按 key 加锁读取，Investigation 服务共用）；domain：IncidentCancelledPayloadV1、TimelineEventType.INCIDENT_CANCELLED；infrastructure：UnavailablePendingApprovalCanceller 占位实现故意失败使取消回滚（不建审批表、不宣称审批已撤销）。InvestigationRunIntegrationTest 新增 Cancel 5 例（真实 MySQL：CREATED/INVESTIGATING/DIAGNOSED 取消为 CANCELLED、版本加一、时间线含 previousStatus 与 reason；EXECUTING 状态冲突；时间线失败回滚；AWAITING_APPROVAL 占位失败整笔回滚、无事件；Cancel 与 Start 并发恰一成功）；变异：跳过审批取消调用 → 1 例失败，已还原
+  - TASK-020：实现并针对性验证完成。application：incident/query（IncidentQueryRepository 端口、IncidentQueryService 只读事务、IncidentFilter、IncidentSummaryView、IncidentDetailView、AffectedResourceView、InvestigationRunView）、PageResult.map；infrastructure：IncidentQueryMapper＋XML（列表按 detected_at、id 倒序，systemKey 与 incidentKey 按字节精确，详情 LEFT JOIN investigation 取 runNo/stop）、MyBatisIncidentQueryRepository；web：IncidentController（POST /api/v1/incidents 201、GET 列表分页 200、GET /{incidentKey} 200、start/continue/stop 202、cancel 200，复用 B02 用例，actor=demo-user）、请求 DTO（expectedVersion @NotNull @PositiveOrZero）、IncidentResponses（时间固定毫秒 ISO UTC，详情只含已实现字段：system、statusLabel、impact、resolvedAt、affectedResources、investigation{runNo,stopRequested}，不含 currentAssessment/remediation/recovery/availableActions）、ApiTimes、ApiJsonConfiguration（请求体未知字段 → 400，关闭 TASK-008 记录的宽松反序列化问题）；boot：测试范围 spring-boot-starter-test、testcontainers-mysql、testcontainers-junit-jupiter。IncidentApiContractTest 2 例（真实 HTTP 随机端口＋真实 MySQL＋demo Seed：创建 201 与 requestId 回显、列表过滤分页与时间格式、详情结构且无内部 id、Start 202、重复 Start 409、Stop 202 两次版本不变、DB 置 DIAGNOSED 后 Continue 202 run 2、Cancel 200、取消后 Continue 409、时间线顺序；422 RESOURCE_NOT_IN_SYSTEM、404 SYSTEM_NOT_FOUND、空标题 400 带 field、未知字段 400、缺/负 expectedVersion 400、旧版本 409 带 version、未 INVESTIGATING Stop 409、不存在/小写编号 404、非法 status 与 size 400）；变异：去掉 FAIL_ON_UNKNOWN_PROPERTIES → 1 例失败，已还原
+- 本批修改文件：domain（ErrorCode 未改；investigation/Investigation.withStopRequested、timeline 事件类型与 IncidentCancelledPayloadV1、InvestigationStopRequestedPayloadV1）；application（investigation 服务与 StopInvestigationCommand、InvestigationRepository.saveStopRequest、incident/IncidentRepository.incrementVersion、IncidentApplicationService.cancelIncident、CancelIncidentCommand/Result、IncidentLocks、incident/query/、approval/PendingApprovalCanceller、query/PageResult.map）；infrastructure（IncidentMapper/XML/仓储、IncidentQueryMapper/XML/行/仓储、InvestigationMapper/XML/仓储、approval/UnavailablePendingApprovalCanceller、测试 InvestigationRunIntegrationTest）；web（config/ApiJsonConfiguration、response/ApiTimes、incident/）；boot（pom 测试依赖、测试 IncidentApiContractTest）；docs/dev；无迁移、无新运行时依赖
+- B03-V1：backend/；`./mvnw -B clean verify`；2026-09-27 本机 JDK 21＋Docker（Testcontainers mysql:8.4.11）；exit 0，Enforcer 与 6 模块 spotless:check 通过；domain 23/23、infrastructure 205/205、web 21/21、boot 2/2，无跳过；受测代码为 Base 4630f27＋当前未提交工作树；覆盖 TASK-018～020
+- 专项证据/NOT RUN：Stop 幂等与版本、Cancel 回滚/并发、真实 HTTP 契约见成员进度；OpenAPI Incidents 标签由 B03-R1 核实；真实审批取消联动 NOT RUN（TASK-067）；Stop 后收束、迟到结果拒绝 NOT RUN（TASK-039～043）；MySQL 8.0.16、Windows mvnw.cmd NOT RUN
+- 验证矩阵：018 真实 MySQL（首次 Stop 版本与事件、重复 Stop 幂等、非 INVESTIGATING 冲突）；019 真实 MySQL（允许来源、回滚、与 Start 并发只一胜、AWAITING_APPROVAL 端口行为）；020 真实 HTTP＋MySQL 契约（201/200/202/400/404/409/422、requestId、分页、按 key）；批尾 `cd backend && ./mvnw -B clean verify`
+- B03-R1：独立 Reviewer；范围 4630f27 到当前工作树（含未跟踪文件），无 B04 提前实现或范围外修改；结论 PASS AFTER PATCH，Commit Recommendation NO。P1：expectedVersion 的小数被 Jackson 截断（正式 jar＋独立 MySQL 实测 {"expectedVersion":0.9} 对 version 0 的 Incident 返回 202 并迁移为 INVESTIGATING v1）。Reviewer 实测：全量构建 exit 0（domain 23、infrastructure 205、web 21、boot 2）；正式 jar health 200、Stop 重试不加版本、取消后 Stop 409、OpenAPI 7 个操作均带 Incidents 标签；Stop 锁序/双版本/幂等与 Cancel 事务/回滚无阻塞问题；MySQL 8.0.16、Windows Wrapper NOT VERIFIED
+- B03-R1 修复：ApiJsonConfiguration 关闭 DeserializationFeature.ACCEPT_FLOAT_AS_INT（动作与取消请求共用）；IncidentApiContractTest 增加反例：start-investigation 与 cancel 提交 expectedVersion 0.9 均 400 REQUEST_VALIDATION_FAILED，Incident 仍 CREATED v0、时间线只有 INCIDENT_CREATED；变异：恢复 ACCEPT_FLOAT_AS_INT → 反例失败，已还原
+- B03-V2（修复后）：backend/；`./mvnw -B clean verify`；2026-09-27；exit 0，Enforcer 与 6 模块 spotless:check 通过；domain 23/23、infrastructure 205/205、web 21/21、boot 2/2，无跳过；`git diff --check` 通过；受测代码为 Base 4630f27＋当前工作树
+- B03-R2（复核）：独立 Reviewer；基线仍为 4630f27，含未跟踪文件，无范围扩大；结论 PASS，无 P0/P1，原 P1 关闭：ACCEPT_FLOAT_AS_INT 已关闭，真实 HTTP＋MySQL 下 Start 与 Cancel 对 expectedVersion 0.9 均 400 REQUEST_VALIDATION_FAILED，Incident 保持 CREATED/v0、时间线只有创建事件；独立重跑 `./mvnw -B clean verify` exit 0（domain 23、infrastructure 205、web 21、boot 2，无跳过），6 模块 Enforcer/Spotless 与 `git diff --check` 通过；本轮未重复独立 jar 冒烟；MySQL 8.0.16、Windows Wrapper NOT VERIFIED；Commit Recommendation YES
+- 提交：未提交（Review 通过，按用户授权提交中）
+
 ### 工作流文档变更（不属于 TASK-012 或 B01）
 
 - 2026-09-27：用户确认批次流程，新增 BATCH-PLAN，同步 Agent 入口、07/08 工作流条款、Manifest、启动指南及进度/交接。
@@ -191,7 +214,7 @@
 | 注册表不校验绑定 schema 与连接 providerType 是否一致（如 Prometheus 选择器挂在 Loki 连接上） | JacksonSchemaCodecRegistry | Provider 解析时按 providerType 选定期望类型并校验，错配按未配置处理 | TASK-046 |
 | PrometheusMetricBindingV1 只有 queryTemplate、unit；模板占位符与秒→毫秒换算尚未定义 | domain/system/binding | TASK-052 固定模板与换算；若需新增字段，在 Seed 数据依赖前修改 V1 或新增 V2，不做兼容猜测 | TASK-052 |
 | 注册表只有 decode；尚无写入 JSON 的调用方 | application/schema | 首个写入载荷的 Task（如 CapabilityInvocation/Observation 持久化）再加 encode，并与 CanonicalJsonWriter（07 §58）划清职责 | TASK-047/048 |
-| Jackson 3 默认 FAIL_ON_UNKNOWN_PROPERTIES=false（变异检查实测）；Web 请求 DTO 与 AI 协议默认会静默忽略未知字段 | Spring 自动配置的 JsonMapper | 05 §93 要求 AI 协议未知字段返回 AI_OUTPUT_INVALID；协议与公开 API 实现时显式开启严格反序列化 | TASK-030/034 与公开 API Task |
+| （公开 API 部分已关闭，B03/TASK-020）Jackson 3 默认 FAIL_ON_UNKNOWN_PROPERTIES=false；公开 API 请求体已由 ApiJsonConfiguration 开启严格反序列化 | web/config/ApiJsonConfiguration | AI 内部协议（05 §93 AI_OUTPUT_INVALID）仍须在协议实现时以独立严格解码处理 | TASK-030/034 |
 | SchemaPayloadException 的字段路径可能含载荷中的动态键（Review 实测 labels 下的键名、未知字段名会进入 message） | infrastructure/schema/JacksonSchemaCodecRegistry#describe | 当前响应与日志均不输出该 message；任何 Task 若要把它写入日志、Timeline 或返回给调用方，须先隐藏 Map 键与未知字段名，不能把路径视为已脱敏 | 首个输出 Schema 诊断的 Task |
 | Redis 名称禁止 glob、MySQL databaseName 标识符校验只是配置约束 | domain/system/binding | Provider 仍须使用精确键命令（XINFO 等，不用 SCAN/KEYS 模式），MySQL 仍须用绑定参数与固定 SQL | TASK-054/055/056 |
 | SECRET_NOT_FOUND 不在 05 §93 公开目录，按 08 TASK-009 加入 ErrorCode，类别 INTERNAL（同步 API 若直接遇到返回 500 与固定文案）；格式不合法的引用也归为 SECRET_NOT_FOUND，以 Reason.UNSUPPORTED_REF 区分 | domain/error/ErrorCode；application/secret | Provider 调用中遇到时按 05 §95 记 CapabilityInvocation FAILED，不让调查整体 500 | TASK-048/058 |
@@ -222,3 +245,7 @@
 | resumeInvestigation 为私有，只服务 Start/Continue；VerificationFailed → INVESTIGATING（新 run）尚未接入 | InvestigationApplicationService | 在同一方法增加 VERIFICATION_FAILED 来源，由验证结果事务调用；不开放给启动恢复 | TASK-082 |
 | Start/Continue 的派发用 afterCommit 同步注册：外层事务存在时派发推迟到外层提交；派发异常只记录（事实已提交，由补派发恢复） | InvestigationApplicationService.dispatchAfterCommit | TASK-035 补派发与启动扫描覆盖“已提交但未唤醒”的 run | TASK-035/043 |
 | INVESTIGATION_STARTED 同时用于 Start 与 Continue，以载荷 source（START_INVESTIGATION/CONTINUE_INVESTIGATION）、previousRunNo、runNo、本轮额度区分；发起方均为 USER | domain/timeline/InvestigationStartedPayloadV1 | 01 §35 只列 INVESTIGATION_STARTED；TASK-082 的 VerificationFailed 来源用同一事件、发起方 SYSTEM | TASK-082 |
+| 取消 AWAITING_APPROVAL 的 Incident 目前经 UnavailablePendingApprovalCanceller 故意失败并回滚（审批/方案表未建，当前无用例能进入该状态） | infrastructure/approval/UnavailablePendingApprovalCanceller | TASK-062/066 建表后以真实实现替换：同一事务把 PENDING Approval 与未执行 Plan 置 CANCELLED；TASK-067 补真实 Plan/Approval 集成验证 | TASK-062/066/067 |
+| Stop 只落账停止意图，不唤醒 Worker；取消 INVESTIGATING 后旧 run 的迟到结果尚无准入拒绝（尚无调查循环） | InvestigationApplicationService.stopInvestigation、IncidentApplicationService.cancelIncident | Stop 后收束、补派发可达与按 run/状态拒绝迟到结果由 TASK-039～043 实现 | TASK-039～043 |
+| 详情 API 为阶段版本：无 currentAssessment、remediation、recovery、availableActions；创建响应也不含 availableActions | web/incident/IncidentResponses | TASK-085 IncidentDetailView、TASK-086 availableActions 按 05 §23 补齐 | TASK-085/086 |
+| Cancel reason 可空、上限 500 字符（本批自定），写入时间线载荷与摘要 | IncidentApplicationService、CancelIncidentCommand | 05 §33 未给上限 | — |

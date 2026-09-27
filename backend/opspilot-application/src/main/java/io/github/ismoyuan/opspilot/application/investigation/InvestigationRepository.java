@@ -20,4 +20,11 @@ public interface InvestigationRepository {
      * @return 写入后的 Investigation
      */
     Investigation saveNextRun(Investigation previous, Investigation next);
+
+    /**
+     * 写入 {@link Investigation#withStopRequested} 的结果：以原轮号、原版本且尚未 Stop 为条件，lock_version 加一。
+     *
+     * @return 写入后的 Investigation
+     */
+    Investigation saveStopRequest(Investigation previous, Investigation stopped);
 }

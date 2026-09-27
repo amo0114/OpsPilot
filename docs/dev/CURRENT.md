@@ -2,21 +2,21 @@
 
 更新时间：2026-09-27（本地）
 仓库/分支：/root/projects/OpsPilot-V0.1-IMPLEMENTATION，main；无 remote
-当前批次/状态：B02 DONE（代码 c0deb3c，B02-R1 PASS）；B03 未开始
-成员 Task 及顺序：B02 = TASK-016 → 017（均 DONE）；下一批 B03 = TASK-018 → 019 → 020
-固定 Base SHA：B02 为 cb694401f955ecf6a63202c19ad900dbeec38e18；B03 开工时读取当时 HEAD
-批外前置核实：B03 的批外前置 TASK-017 DONE（c0deb3c）
-允许目录 / 明确不做 / 关键不变量：B03 开工时按 BATCH-PLAN 与 08 TASK-018～020 固定
-本批规格章节及 PROGRESS 记录：PROGRESS「B02」
-当前成员及位置：无进行中批次
-已实现并针对性验证的成员：B01、B02 全部
-未完成 / 未执行验证：B02 真实 Worker（TASK-035 起）、MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
-未提交文件（含既有无关修改）：无（本交接卡与 PROGRESS 回填随 docs(progress) 提交）
-共同验证及独立 Review 证据编号：B02-V1、B02-R1
-后续任务（见 PROGRESS 待处理问题）：TASK-035 替换 DeferredWorkDispatcher；TASK-036～043 调查循环与恢复；TASK-062/066/067 真实 PENDING Approval 同锁复核；TASK-082 VerificationFailed 新 run
+当前批次/状态：B03 REVIEW（B03-R2 PASS，提交中）
+成员 Task 及顺序：TASK-018 → TASK-019 → TASK-020（均 REVIEW）
+固定 Base SHA：4630f27ee3aece7138c79338ee39042c427f3287
+批外前置核实：TASK-017 DONE（c0deb3c）；B02 DONE
+允许目录 / 明确不做 / 关键不变量：见 PROGRESS「B03」记录
+本批规格章节及 PROGRESS 记录：PROGRESS「B03」
+当前成员及位置：B03-R1 P1（expectedVersion 小数截断）已修复并验证；等待复核
+已实现并针对性验证的成员：TASK-018（Stop 2 例＋变异）；TASK-019（Cancel 5 例＋变异）；TASK-020（HTTP 契约 2 例＋变异）
+未完成 / 未执行验证：真实审批取消联动（TASK-067）、Stop 收束与迟到结果（TASK-039～043）NOT RUN；MySQL 8.0.16、Windows mvnw.cmd NOT RUN
+未提交文件（含既有无关修改）：全部为 B03 改动，见 PROGRESS「B03」本批修改文件（含未跟踪目录）；无既有无关修改
+共同验证及独立 Review 证据编号：B03-V1；B03-R1 PASS AFTER PATCH（P1）；B03-V2 修复后全量 verify exit 0（domain 23、infrastructure 205、web 21、boot 2）；B03-R2 PASS
 下一步具体动作：
-1. 等待用户指示开始 B03（停止、取消与基础 Incident API，TASK-018 → 019 → 020）
-2. B03 开工：核对 Git、固定 HEAD 为 Base；Stop 须按 05 §27 同时递增 Incident 与 Investigation 版本；Cancel 等待审批时同事务处理审批（表未建，记录边界）；TASK-020 HTTP 入口按 incidentKey 查找
+1. 独立 Reviewer 复核 P1 修复（ApiJsonConfiguration 关闭 ACCEPT_FLOAT_AS_INT、IncidentApiContractTest 小数反例），基线仍为 4630f27
+2. Review PASS 且获用户提交授权后提交（建议标题 feat(incident): stop, cancel and basic incident API (TASK-018–020)），回填 SHA，B03 与成员一起 DONE
+3. 未提交/未 DONE 前不开始 B04
 本地启动 Demo 配置：在 OPSPILOT_DB_* 环境变量基础上加 --spring.profiles.active=demo
 
 后续 UI 约定（TASK-096/099 实施）：

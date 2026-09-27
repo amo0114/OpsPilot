@@ -76,6 +76,15 @@
         </foreach>
     </insert>
 
+    <update id="incrementVersion">
+        UPDATE incident
+        SET updated_at = #{updatedAt},
+            lock_version = lock_version + 1
+        WHERE id = #{id}
+          AND status = #{expectedStatus}
+          AND lock_version = #{expectedVersion}
+    </update>
+
     <update id="transition">
         UPDATE incident
         SET status = #{targetStatus},

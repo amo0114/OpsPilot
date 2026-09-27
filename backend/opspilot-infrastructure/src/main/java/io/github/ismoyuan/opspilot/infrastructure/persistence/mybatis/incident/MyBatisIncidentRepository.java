@@ -60,7 +60,26 @@ class MyBatisIncidentRepository implements IncidentRepository {
         if (updated == 1) {
             return toDomain(mapper.selectById(transition.incidentId()));
         }
-        throw conflict(transition, mapper.selectByIdForShare(transition.incidentId()));
+        throw conflict(
+                transition.incidentId(),
+                null,
+                transition.expectedStatus(),
+                "transition " + transition.trigger(),
+                mapper.selectByIdForShare(transition.incidentId()));
+    }
+
+    @Override
+    public Incident incrementVersion(Incident current, Instant at) {
+        int updated = mapper.incrementVersion(current.id(), current.status().name(), current.version(), utc(at));
+        if (updated == 1) {
+            return toDomain(mapper.selectById(current.id()));
+        }
+        throw conflict(
+                current.id(),
+                current.incidentKey().value(),
+                current.status(),
+                "version increment",
+                mapper.selectByIdForShare(current.id()));
     }
 
     @Override
@@ -98,25 +117,27 @@ class MyBatisIncidentRepository implements IncidentRepository {
         }
     }
 
-    private static ApplicationException conflict(IncidentTransition transition, IncidentRow current) {
+    private static ApplicationException conflict(
+            long incidentId, String incidentKey, IncidentStatus expectedStatus, String operation, IncidentRow current) {
         if (current == null) {
             return new ApplicationException(
-                    ErrorCode.INCIDENT_NOT_FOUND, "Incident not found", Map.of("incidentId", transition.incidentId()));
+                    ErrorCode.INCIDENT_NOT_FOUND,
+                    "Incident not found",
+                    incidentKey == null ? Map.of("incidentId", incidentId) : Map.of("incidentKey", incidentKey));
         }
-        if (!current.status().equals(transition.expectedStatus().name())) {
+        if (!current.status().equals(expectedStatus.name())) {
             return new ApplicationException(
                     ErrorCode.INCIDENT_STATE_CONFLICT,
-                    "Incident status changed before transition " + transition.trigger(),
+                    "Incident status changed before " + operation,
                     Map.of(
                             "incidentKey", current.incidentKey(),
                             "currentStatus", current.status(),
-                            "expectedStatuses",
-                                    List.of(transition.expectedStatus().name()),
+                            "expectedStatuses", List.of(expectedStatus.name()),
                             "version", current.lockVersion()));
         }
         return new ApplicationException(
                 ErrorCode.INCIDENT_VERSION_CONFLICT,
-                "Incident version changed before transition " + transition.trigger(),
+                "Incident version changed before " + operation,
                 Map.of(
                         "incidentKey", current.incidentKey(),
                         "currentStatus", current.status(),

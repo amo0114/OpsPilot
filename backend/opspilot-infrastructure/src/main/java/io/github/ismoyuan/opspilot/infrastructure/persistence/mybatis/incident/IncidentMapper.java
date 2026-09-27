@@ -17,6 +17,13 @@ interface IncidentMapper {
     /** 条件更新失败后读取最新已提交版本以区分冲突原因（共享锁读，不受事务快照影响）。 */
     IncidentRow selectByIdForShare(@Param("id") long id);
 
+    /** 版本加一、状态不变：WHERE id AND status AND lock_version。 */
+    int incrementVersion(
+            @Param("id") long id,
+            @Param("expectedStatus") String expectedStatus,
+            @Param("expectedVersion") long expectedVersion,
+            @Param("updatedAt") LocalDateTime updatedAt);
+
     int selectLastSequence(@Param("dayPrefix") String dayPrefix);
 
     /** 以 CREATED、lock_version 0 插入；状态字面量固定在 SQL 中。 */

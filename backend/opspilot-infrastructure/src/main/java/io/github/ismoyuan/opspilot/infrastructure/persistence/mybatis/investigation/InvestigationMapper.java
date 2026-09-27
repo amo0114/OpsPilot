@@ -17,6 +17,14 @@ interface InvestigationMapper {
             @Param("agentStepTimeoutSeconds") int agentStepTimeoutSeconds,
             @Param("maxConsecutiveAiFailures") int maxConsecutiveAiFailures);
 
+    /** 当前 run 首次 Stop：条件为原轮号、原版本且尚未 Stop。 */
+    int requestStop(
+            @Param("id") long id,
+            @Param("expectedRunNo") int expectedRunNo,
+            @Param("expectedVersion") long expectedVersion,
+            @Param("stopRequestedAt") LocalDateTime stopRequestedAt,
+            @Param("stopRequestedBy") String stopRequestedBy);
+
     /** run 切换：只改本轮字段与活动时间，条件为原轮号与原版本。 */
     int startNextRun(
             @Param("id") long id,

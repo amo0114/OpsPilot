@@ -4,5 +4,8 @@ package io.github.ismoyuan.opspilot.domain.timeline;
 public enum TimelineEventType {
     INCIDENT_CREATED,
     /** Start、Continue 等进入新一轮调查（01 §9），载荷记录来源与轮号。 */
-    INVESTIGATION_STARTED
+    INVESTIGATION_STARTED,
+    /** 当前 run 的协作式停止意图已落账（05 §27），状态仍为 INVESTIGATING。 */
+    INVESTIGATION_STOP_REQUESTED,
+    INCIDENT_CANCELLED
 }

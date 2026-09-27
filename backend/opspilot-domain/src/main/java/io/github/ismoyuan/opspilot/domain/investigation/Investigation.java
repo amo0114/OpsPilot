@@ -49,6 +49,29 @@ public record Investigation(
     }
 
     /**
+     * 当前 run 的协作式停止意图（05 §27）：只写停止时间与身份，不改变轮号、计数或 Incident 状态。
+     */
+    public Investigation withStopRequested(Instant at, String actor) {
+        if (stopRequested()) {
+            throw new IllegalStateException("stop already requested for run " + currentRunNo);
+        }
+        return new Investigation(
+                id,
+                incidentId,
+                startedAt,
+                lastActivityAt,
+                currentRunNo,
+                currentRunStartedAt,
+                currentRunCapabilityCount,
+                capabilityCallCount,
+                consecutiveAiFailureCount,
+                at,
+                Objects.requireNonNull(actor, "actor"),
+                limits,
+                version);
+    }
+
+    /**
      * 显式进入下一轮（resumeInvestigation，01 §9）：轮号加一，只重置本轮起点、本轮计数、连续 AI 失败与 Stop；
      * 首次开始时间、累计调用数与限制快照不变。应用重启不得调用（07 §52）。
      */
