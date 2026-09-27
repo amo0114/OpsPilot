@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-27（B01 REVIEW，待独立 Review）
+> 最近更新：2026-09-27（B01 DONE，ced26e0；B02 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -20,9 +20,9 @@
 | TASK-010 | 单项 | ShortLink Demo 系统 Seed | DONE | TASK-010 commit（紧随 509ccc5）：infrastructure db/demo/R__shortlink_demo_seed.sql（可重复迁移，按唯一键 upsert）；boot application-demo.yml（demo profile 追加 classpath:db/demo）；infrastructure 测试 ShortLinkDemoSeedTest | 2026-09-26 实测（mysql:8.4.11）：`./mvnw -B clean verify` exit 0（infrastructure 114/114、web 10/10，门禁通过）；ShortLinkDemoSeedTest 6/6（系统与 5 资源类型；5 连接 providerType、仅 env:// 引用；7 条资源绑定与 06 §131 一致且全部经 SchemaCodecRegistry 解码为对应 V1 类型，含 8 个 09 §7 语义指标；8 条能力绑定与 06 §131 一致、均 enabled、均属 7 个 V0.1 能力；篡改名称/状态/enabled/选择器后重跑脚本行数不变且收敛；flyway_schema_history 记为 repeatable）；变异检查：绑定 join 键拼错 → 2 例失败，已还原；boot jar：默认 profile 仅应用 V001、managed_system 0 行，demo profile 应用 R__ 后 1/5/5/7/8 行，再次启动 up to date，health 均 200；容器已删除；独立 Review PASS（无 P0/P1；复核 `./mvnw -B clean verify` exit 0、Seed 6/6、infrastructure 114/114、web 10/10；正式 jar 默认及 production profile 仅 V001 且配置表为空，demo 1/5/5/7/8 行，二次启动行数与迁移记录不变，四次 health 200；`git diff --check` 通过）；MySQL 8.0.16、mvnw.cmd NOT VERIFIED |
 | TASK-011 | 单项 | Systems Read API | DONE | TASK-011 commit（紧随 334e388）：domain/capability（CapabilityMode、CapabilityKey：7 个冻结能力及 mode）；domain ErrorCode（SYSTEM_NOT_FOUND）；application/query/PageResult；application/system/query（SystemQueryRepository Port、SystemQueryService、7 个 View/Projection record）；application POM（spring-context、spring-tx）；infrastructure SystemQueryMapper＋XML、2 个 Row、MyBatisSystemQueryRepository；web/response（ApiResponse、ApiPageResponse）、web/system/SystemController；测试 MyBatisSystemQueryRepositoryTest、SystemControllerTest；ApiErrorContractTest 限定为探针控制器 | 2026-09-26 实测：`./mvnw -B clean verify` exit 0（infrastructure 123/123、web 21/21，门禁通过）；MyBatisSystemQueryRepositoryTest 9/9（真实 MySQL：分页按 key、资源计数、详情资源排序与 null 描述、跨系统同名资源隔离、只取 enabled 能力、系统键与资源键大小写/重音变体 6 例不命中）；SystemControllerTest 11/11（分页包络与默认 0/20、5 种非法分页 400 且不查询、详情包络、SYSTEM_NOT_FOUND 与 RESOURCE_NOT_FOUND 区分、能力 mode 映射且丢弃未知键、recoveryPolicy 为 null）；变异检查：去掉按字节比较 → 6 例失败，去掉 enabled 过滤 → 1 例失败，均已还原；boot jar＋demo profile 连 MySQL 8.4.11：三个端点输出与 05 §15～§17 结构一致（resourceCount 5、statistics-consumer 能力 logs.search/service.inspect OBSERVE、service.restart CHANGE），变体键 404、缺失资源 404、size=0 400，响应不含端点/凭据，/v3/api-docs 含三条路径；容器已删除；独立 Review PASS（无 P0/P1；复核 `./mvnw -B clean verify` exit 0、infrastructure 123/123、web 21/21；正式 jar＋MySQL 8.4.11 三接口、分页、requestId、mode 符合契约；6 种非法分页 400，9 种不存在/键变体（含大小写、重音、末尾空格）404；OpenAPI 三个 GET 均带 Systems 标签；`git diff --check` 通过）；MySQL 8.0.16、mvnw.cmd NOT VERIFIED |
 | TASK-012 | 单项 | Incident / Investigation 基础表 | DONE | TASK-012 commit（紧随 625489e）：infrastructure db/migration/V002__create_incident_investigation_tables.sql（incident、incident_affected_resource、investigation、incident_timeline_event）；测试 IncidentInvestigationSchemaTest；SystemIntegrationSchemaTest 改为断言 V001 已应用且含 5 张表（不再要求最新版本为 001、表恰为 5 张） | 2026-09-27 实测（mysql:8.4.11）：`./mvnw -B clean verify` exit 0（infrastructure 163/163、web 21/21，门禁通过）；IncidentInvestigationSchemaTest 40/40（版本 002、4 表与 04 §89 关键索引；合法工作空间含 run 2、stop 成对、RESOLVED＋resolved_at、CANCELLED、5 位序号；incident_key/受影响资源/一事故一调查唯一；FK 孤儿与 RESTRICT 删除；35 个 CHECK 用例均 3819＋约束名：8 状态外/小写/末尾空格、键格式、空标题/影响、来源、空创建者、resolved_at 与 RESOLVED 双向、run_no 0、本轮计数超快照上限、stop 半填/空白、四个限制值为 0、事件类型格式、actor_type、空 actor_id/summary、payload 非对象/缺 schemaName/缺 schemaVersion/空白/数字/null 名称/版本 0/字符串/小数）；SystemIntegrationSchemaTest 29/29；首次建表时发现 CHECK 中 IFNULL 非布尔被 MySQL 拒绝（3812），改为 (…) IS TRUE；变异检查：去掉 IS TRUE → 缺 schemaName/schemaVersion 2 例被放行，已还原；boot jar＋demo：先 --spring.flyway.target=1 启动（V001＋R__），再正常启动升级应用 V002、R__ 不重跑、4 表存在、资源 5 行，health 均 200；独立 Review PASS（无 P0/P1；复核 `./mvnw -B clean verify` exit 0、Schema 40/40、infrastructure 163/163、web 21/21；正式 jar 自 V001＋Demo Seed 升级应用 V002、四表存在、Seed 未重跑且配置完整、两次 health 200；确认四项预算限制无库默认值；`git diff --check` 通过）；MySQL 8.0.16、mvnw.cmd NOT VERIFIED |
-| TASK-013 | B01 | Incident Domain Model | REVIEW | 未提交（B01，Base 5cc63e0） | 见 PROGRESS「B01」成员进度与 B01-V1；B01-R1 PASS，待提交 |
-| TASK-014 | B01 | Incident 状态转换 Repository | REVIEW | 未提交（B01，Base 5cc63e0） | 见 PROGRESS「B01」成员进度与 B01-V1；B01-R1 PASS，待提交 |
-| TASK-015 | B01 | 创建 Incident | REVIEW | 未提交（B01，Base 5cc63e0） | 见 PROGRESS「B01」成员进度与 B01-V1；B01-R1 PASS，待提交 |
+| TASK-013 | B01 | Incident Domain Model | DONE | commit ced26e0（B01，Base 5cc63e0） | B01-V1 verify exit 0＋成员专项证据；B01-R1 PASS；见 PROGRESS「B01」 |
+| TASK-014 | B01 | Incident 状态转换 Repository | DONE | commit ced26e0（B01，Base 5cc63e0） | B01-V1 verify exit 0＋成员专项证据；B01-R1 PASS；见 PROGRESS「B01」 |
+| TASK-015 | B01 | 创建 Incident | DONE | commit ced26e0（B01，Base 5cc63e0） | B01-V1 verify exit 0＋成员专项证据；B01-R1 PASS；见 PROGRESS「B01」 |
 | TASK-016 | B02 | 开始调查 | TODO | — | NOT RUN |
 | TASK-017 | B02 | Continue Investigation | TODO | — | NOT RUN |
 | TASK-018 | B03 | Stop Investigation Request | TODO | — | NOT RUN |
@@ -124,7 +124,7 @@
 
 ### B01 — Incident 模型、受控状态更新、创建事务
 
-- 状态：REVIEW（独立 Review PASS，已通过，待提交）
+- 状态：DONE（B01-R1 PASS，已提交 ced26e0）
 - 成员及顺序：TASK-013 → TASK-014 → TASK-015；批外前置：TASK-012 DONE（9d482d0，独立 Review PASS）；流程文档 5cc63e0 已提交
 - Base SHA：5cc63e03c57b560184127ba94c4581e3e077dbff
 - 范围：domain/incident、domain/timeline、domain/error；application/incident、application/timeline；infrastructure persistence/mybatis/incident、timeline 及测试；system/resource 键精确查找（ManagedSystemMapper、ManagedResourceMapper，TASK-015 外部输入前处理）；docs/dev。明确不做：Start/Continue/Stop/Cancel 用例、HTTP API（TASK-020）、AI 调查、TASK-021 事实表。规格：08 TASK-013～015；01 §2～§4、§31～§36、§39；04 §13～§15、§55～§58、§84～§87；05 §9、§11、§13、§20～§21、§93；07 §34～§37、§127～§128
@@ -140,7 +140,7 @@
 - 按用户 2026-09-27 指示精简：不再追加多轮加压、getter/DTO 测试或防御逻辑；已删除 10 轮竞争循环、与服务层重复的系统键变体仓储测试、时间线载荷 schema 字段冲突检查（改为最后写入 schema 字段）
 - 验证矩阵：013 纯规则单测（全部 from×trigger 组合）；014 真实 MySQL 条件更新、冲突分类、确定性阻塞并发与多线程竞争；015 真实 MySQL 创建成功/失败回滚、归属与键精确匹配、编号并发；批尾 `cd backend && ./mvnw -B clean verify`
 - B01-R1：独立 Reviewer；范围 5cc63e0 到当前工作树（含未跟踪文件），未发现 B02 功能提前进入；结论 PASS，无 P0/P1；实测 `./mvnw -B clean verify` exit 0（domain 22/22、infrastructure 191/191、web 21/21，无跳过），Enforcer、Spotless、`git diff --check` 通过，真实 MySQL 条件更新、并发竞争、创建事务回滚与编号分配已核实；boot jar 启动、MySQL 8.0.16、Windows Wrapper NOT VERIFIED；非阻塞意见已记入待处理问题；Commit Recommendation YES
-- 提交：未提交（Review 通过，按用户授权提交中）
+- 提交：代码提交 ced26e02e9e8c15eed55e6e2a3b5842544f158ac（feat(incident): add incident creation and guarded transitions (TASK-013–015)）；SHA 回填为后续 docs 提交
 
 ### 工作流文档变更（不属于 TASK-012 或 B01）
 
