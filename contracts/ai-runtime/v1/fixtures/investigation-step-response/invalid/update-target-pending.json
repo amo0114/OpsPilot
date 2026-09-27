@@ -1,0 +1,11 @@
+{
+  "protocolVersion": 1,
+  "runNo": 2,
+  "stepId": 42,
+  "intentType": "UPDATE_HYPOTHESIS",
+  "updateHypothesis": {
+    "hypothesisId": 21,
+    "targetStatus": "PENDING",
+    "reason": "当前信息不足以判断 Consumer 是否是主要原因。"
+  }
+}

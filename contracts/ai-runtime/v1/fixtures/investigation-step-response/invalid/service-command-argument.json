@@ -1,0 +1,14 @@
+{
+  "protocolVersion": 1,
+  "runNo": 2,
+  "stepId": 42,
+  "intentType": "REQUEST_CAPABILITY",
+  "requestCapability": {
+    "capabilityKey": "service.inspect",
+    "resourceId": 12,
+    "arguments": {
+      "command": "docker ps"
+    },
+    "purpose": "核对当前状态。"
+  }
+}

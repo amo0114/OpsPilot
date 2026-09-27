@@ -1,0 +1,17 @@
+{
+  "protocolVersion": 1,
+  "correlationId": "corr_remediation_01",
+  "intentType": "PROPOSE_REMEDIATION",
+  "proposal": {
+    "title": "恢复统计消息消费能力",
+    "summary": "建议重新启动已停止的 Statistics Consumer。",
+    "action": {
+      "capabilityKey": "service.restart",
+      "targetResourceId": 12,
+      "parameters": {},
+      "summary": "重新启动 Statistics Consumer",
+      "expectedImpactSummary": "服务将发生短暂重启。",
+      "riskLevel": "LOW"
+    }
+  }
+}

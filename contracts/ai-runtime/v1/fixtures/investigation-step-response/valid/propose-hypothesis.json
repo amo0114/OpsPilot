@@ -1,0 +1,10 @@
+{
+  "protocolVersion": 1,
+  "runNo": 2,
+  "stepId": 42,
+  "intentType": "PROPOSE_HYPOTHESIS",
+  "proposeHypothesis": {
+    "title": "Statistics Consumer 已停止",
+    "description": "消息仍持续进入 Stream，但长时间没有新的消费确认。"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "protocolVersion": 1,
+  "correlationId": "corr_remediation_01",
+  "incident": {
+    "incidentKey": "INC-20260925-0001",
+    "impactSummary": "统计消息持续积压"
+  },
+  "diagnosis": {
+    "version": 1,
+    "conclusionType": "PRIMARY_CAUSE_IDENTIFIED",
+    "summary": "Statistics Consumer 已停止运行。",
+    "evidence": [
+      {
+        "id": 41,
+        "summary": "Statistics Consumer 当前处于 DOWN"
+      }
+    ]
+  },
+  "allowedActions": [
+    {
+      "capabilityKey": "service.restart",
+      "resourceId": 12,
+      "resourceKey": "statistics-consumer",
+      "resourceName": "Statistics Consumer"
+    }
+  ]
+}

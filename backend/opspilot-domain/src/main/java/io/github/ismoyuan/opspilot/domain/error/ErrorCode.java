@@ -24,6 +24,8 @@ public enum ErrorCode {
     STALE_RUN_RESULT(ErrorCategory.CONFLICT, "该结果属于已结束的调查轮次，未被采用。"),
     /** 同一 Observation × Hypothesis 已有 Evidence：Intent 拒绝码，原关系保持不变（05 §83、§93）。 */
     EVIDENCE_LINK_ALREADY_EXISTS(ErrorCategory.CONFLICT, "该观测与假设之间已存在证据关系，不能重复或改写。"),
+    /** AI Runtime 输出不符合 v1 协议（05 §93）：未知字段、联合类型不合法、缺字段或越界；不回显原始输出。 */
+    AI_OUTPUT_INVALID(ErrorCategory.DEPENDENCY_INVALID_RESPONSE, "AI 服务返回的内容不符合协议。"),
     /** credentialRef 无法解析为可用凭据（08 TASK-009）；属部署配置错误，不在 05 §93 公开目录。 */
     SECRET_NOT_FOUND(ErrorCategory.INTERNAL, "所需凭据未配置，请检查部署环境。"),
     /** 未预期的程序错误；不属于 05 §93 业务目录，仅作兜底。 */

@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opspilot.local/contracts/ai-runtime/v1/remediation-draft-response.schema.json",
+  "title": "RemediationDraftResponse",
+  "description": "AI Runtime -> Java (05 §88). A proposal only: no riskLevel, requiresApproval, RecoveryPolicy or container/execution context; risk and approval are deterministic Java policy. service.restart parameters are an explicit empty object (06 §105).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocolVersion",
+    "correlationId",
+    "intentType",
+    "proposal"
+  ],
+  "properties": {
+    "protocolVersion": {
+      "const": 1
+    },
+    "correlationId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$"
+    },
+    "intentType": {
+      "const": "PROPOSE_REMEDIATION"
+    },
+    "proposal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "summary",
+        "action"
+      ],
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "[^\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028-\\u2029\\u202F\\u205F\\u3000]"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "pattern": "[^\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028-\\u2029\\u202F\\u205F\\u3000]"
+        },
+        "action": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "capabilityKey",
+            "targetResourceId",
+            "parameters",
+            "summary",
+            "expectedImpactSummary"
+          ],
+          "properties": {
+            "capabilityKey": {
+              "const": "service.restart"
+            },
+            "targetResourceId": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "parameters": {
+              "title": "ServiceRestartParametersV1",
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {}
+            },
+            "summary": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500,
+              "pattern": "[^\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028-\\u2029\\u202F\\u205F\\u3000]"
+            },
+            "expectedImpactSummary": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000,
+              "pattern": "[^\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028-\\u2029\\u202F\\u205F\\u3000]"
+            }
+          }
+        }
+      }
+    }
+  }
+}

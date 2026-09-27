@@ -1,0 +1,23 @@
+{
+  "protocolVersion": 1,
+  "runNo": 2,
+  "stepId": 42,
+  "intentType": "REQUEST_CAPABILITY",
+  "requestCapability": {
+    "capabilityKey": "logs.search",
+    "resourceId": 12,
+    "arguments": {
+      "windowKey": "INCIDENT_CONTEXT",
+      "severity": [
+        "ERROR",
+        "WARN"
+      ],
+      "keywords": [
+        "redis",
+        "timeout"
+      ],
+      "logql": "{app=\"x\"} |= \"password\""
+    },
+    "purpose": "核对当前状态。"
+  }
+}

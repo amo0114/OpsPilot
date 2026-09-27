@@ -1,0 +1,20 @@
+{
+  "protocolVersion": 1,
+  "runNo": 2,
+  "stepId": 42,
+  "intentType": "REQUEST_CAPABILITY",
+  "requestCapability": {
+    "capabilityKey": "metrics.query",
+    "resourceId": 14,
+    "arguments": {
+      "metricKey": "http.request.latency.p99",
+      "windowKey": "INCIDENT_CONTEXT",
+      "comparePreviousWindow": true
+    },
+    "purpose": "核对当前状态。"
+  },
+  "hypothesisUpdate": {
+    "hypothesisId": 21,
+    "targetStatus": "SUPPORTED"
+  }
+}

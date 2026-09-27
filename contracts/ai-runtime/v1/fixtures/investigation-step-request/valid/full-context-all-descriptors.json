@@ -1,0 +1,139 @@
+{
+  "protocolVersion": 1,
+  "investigationId": 7,
+  "runNo": 2,
+  "stepId": 42,
+  "correlationId": "corr_step_42",
+  "incident": {
+    "incidentKey": "INC-20260925-0001",
+    "title": "统计消息持续积压",
+    "impactSummary": "统计数据无法及时更新",
+    "startedAt": "2026-09-25T07:00:00.000Z"
+  },
+  "affectedResources": [
+    {
+      "resourceId": 12,
+      "resourceKey": "statistics-consumer",
+      "resourceType": "CONSUMER"
+    }
+  ],
+  "hypotheses": [
+    {
+      "id": 21,
+      "title": "消费者已停止",
+      "description": "消息持续进入 Stream，但没有新的消费确认。",
+      "status": "PENDING"
+    }
+  ],
+  "observations": [
+    {
+      "id": 31,
+      "runNo": 2,
+      "resourceKey": "statistics-stream",
+      "kind": "QUEUE_STATUS",
+      "summary": "所选组lag=2180",
+      "observedAt": "2026-09-25T07:21:00.000Z"
+    }
+  ],
+  "evidence": [
+    {
+      "id": 41,
+      "observationId": 31,
+      "hypothesisId": 21,
+      "relation": "SUPPORTS",
+      "reason": "所选消费者组存在积压。"
+    }
+  ],
+  "currentDiagnosis": {
+    "version": 1,
+    "runNo": 1,
+    "conclusionType": "POSSIBLE_CAUSE",
+    "primaryHypothesisId": 21,
+    "summary": "可能是统计消费者停止。",
+    "evidenceIds": [
+      41
+    ]
+  },
+  "availableCapabilities": [
+    {
+      "descriptorType": "METRICS_QUERY",
+      "key": "metrics.query",
+      "resourceId": 14,
+      "resourceKey": "redirect-service",
+      "metricKeys": [
+        "http.request.latency.p99",
+        "http.request.error_rate"
+      ],
+      "windowKeys": [
+        "INCIDENT_CONTEXT",
+        "LAST_15_MIN",
+        "LAST_30_MIN",
+        "LAST_60_MIN"
+      ],
+      "supportsPreviousWindowComparison": true
+    },
+    {
+      "descriptorType": "LOGS_SEARCH",
+      "key": "logs.search",
+      "resourceId": 12,
+      "resourceKey": "statistics-consumer",
+      "windowKeys": [
+        "INCIDENT_CONTEXT",
+        "LAST_15_MIN"
+      ],
+      "severities": [
+        "ERROR",
+        "WARN"
+      ],
+      "maxKeywords": 5,
+      "maxKeywordLength": 64
+    },
+    {
+      "descriptorType": "DATABASE_INSPECT",
+      "key": "database.inspect",
+      "resourceId": 15,
+      "resourceKey": "shortlink-mysql",
+      "inspectionTypes": [
+        "SERVER_SUMMARY",
+        "CONNECTION_SUMMARY",
+        "SLOW_QUERIES",
+        "LOCK_WAITS"
+      ],
+      "limitMin": 1,
+      "limitMax": 20
+    },
+    {
+      "descriptorType": "CACHE_INSPECT",
+      "key": "cache.inspect",
+      "resourceId": 16,
+      "resourceKey": "shortlink-redis"
+    },
+    {
+      "descriptorType": "QUEUE_INSPECT",
+      "key": "queue.inspect",
+      "resourceId": 13,
+      "resourceKey": "statistics-stream"
+    },
+    {
+      "descriptorType": "SERVICE_INSPECT",
+      "key": "service.inspect",
+      "resourceId": 12,
+      "resourceKey": "statistics-consumer"
+    }
+  ],
+  "budget": {
+    "scope": "ACTIVE_RUN",
+    "capabilityCallsUsed": 1,
+    "capabilityCallsLimit": 12,
+    "remainingCapabilityCalls": 11,
+    "elapsedSeconds": 31,
+    "durationLimitSeconds": 480
+  },
+  "recentTimeline": [
+    {
+      "eventType": "INVESTIGATION_STARTED",
+      "occurredAt": "2026-09-25T07:20:00.000Z",
+      "summary": "继续调查（第 2 轮）"
+    }
+  ]
+}

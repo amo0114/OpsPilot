@@ -1,0 +1,15 @@
+{
+  "protocolVersion": 1,
+  "runNo": 2,
+  "stepId": 42,
+  "intentType": "REQUEST_CAPABILITY",
+  "requestCapability": {
+    "capabilityKey": "database.inspect",
+    "resourceId": 15,
+    "arguments": {
+      "inspectionType": "SLOW_QUERIES",
+      "limit": 21
+    },
+    "purpose": "核对当前状态。"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "protocolVersion": 1,
+  "runNo": 2,
+  "stepId": 42,
+  "intentType": "COMPLETE_INVESTIGATION",
+  "completeInvestigation": {
+    "diagnosis": {
+      "conclusionType": "UNDETERMINED",
+      "summary": "统计消费者停止运行，消息持续进入但未能继续消费。",
+      "impactSummary": "访问统计更新滞后，短链跳转服务仍在运行。",
+      "evidenceIds": []
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "protocolVersion": 1,
+  "runNo": 2,
+  "stepId": 42,
+  "intentType": "REQUEST_CAPABILITY",
+  "requestCapability": {
+    "capabilityKey": "database.inspect",
+    "resourceId": 15,
+    "arguments": {
+      "inspectionType": "ARBITRARY_SQL",
+      "limit": 10
+    },
+    "purpose": "核对当前状态。"
+  }
+}

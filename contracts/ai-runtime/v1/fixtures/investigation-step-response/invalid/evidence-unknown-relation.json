@@ -1,0 +1,16 @@
+{
+  "protocolVersion": 1,
+  "runNo": 2,
+  "stepId": 42,
+  "intentType": "PROPOSE_EVIDENCE_LINK",
+  "proposeEvidenceLink": {
+    "observationId": 31,
+    "hypothesisId": 21,
+    "relation": "CONTRADICTS",
+    "reason": "所选消费者组存在未投递消息积压，与消费停滞假设一致。"
+  },
+  "hypothesisUpdate": {
+    "hypothesisId": 21,
+    "targetStatus": "SUPPORTED"
+  }
+}

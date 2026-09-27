@@ -1,0 +1,11 @@
+{
+  "protocolVersion": 1,
+  "runNo": 2,
+  "stepId": 42,
+  "intentType": "UPDATE_HYPOTHESIS",
+  "updateHypothesis": {
+    "hypothesisId": 21,
+    "targetStatus": "INSUFFICIENT_EVIDENCE",
+    "reason": null
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "protocolVersion": 1,
+  "runNo": 2,
+  "stepId": 42,
+  "intentType": "PROPOSE_EVIDENCE_LINK",
+  "proposeEvidenceLink": {
+    "observationId": 31,
+    "hypothesisId": 21,
+    "relation": "SUPPORTS",
+    "reason": " "
+  },
+  "hypothesisUpdate": {
+    "hypothesisId": 21,
+    "targetStatus": "SUPPORTED"
+  }
+}

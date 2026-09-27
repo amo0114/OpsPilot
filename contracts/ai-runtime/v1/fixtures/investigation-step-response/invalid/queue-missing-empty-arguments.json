@@ -1,0 +1,11 @@
+{
+  "protocolVersion": 1,
+  "runNo": 2,
+  "stepId": 42,
+  "intentType": "REQUEST_CAPABILITY",
+  "requestCapability": {
+    "capabilityKey": "queue.inspect",
+    "resourceId": 13,
+    "purpose": "核对当前状态。"
+  }
+}

@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-27（B06 DONE，df5bfdd；B07 未开始）
+> 最近更新：2026-09-27（B07 REVIEW，B07-R2 PASS，提交中）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -35,11 +35,11 @@
 | TASK-025 | B06 | Diagnosis Domain | DONE | commit df5bfdd（B06，Base c1042ff） | B06-V1 verify exit 0＋DiagnosisRulesTest 4/4；B06-R1 PASS；见 PROGRESS「B06」 |
 | TASK-026 | B06 | Diagnosis 创建事务 | DONE | commit df5bfdd（B06，Base c1042ff） | B06-V1 verify exit 0＋DiagnosisIntegrationTest 5/5（真实 MySQL）；B06-R1 PASS；见 PROGRESS「B06」 |
 | TASK-027 | B06 | Investigation 技术详情 Query | DONE | commit df5bfdd（B06，Base c1042ff） | B06-V1 verify exit 0＋InvestigationApiContractTest 2/2（真实 HTTP＋MySQL）；B06-R1 PASS；见 PROGRESS「B06」 |
-| TASK-028 | B07 | Canonical AI Protocol Schema | TODO | — | NOT RUN |
-| TASK-029 | B07 | Capability Arguments Protocol | TODO | — | NOT RUN |
-| TASK-030 | B07 | Java Protocol Model | TODO | — | NOT RUN |
-| TASK-031 | B07 | Python Pydantic Protocol | TODO | — | NOT RUN |
-| TASK-032 | B07 | Java / Python Contract Test | TODO | — | NOT RUN |
+| TASK-028 | B07 | Canonical AI Protocol Schema | REVIEW | 未提交（B07，Base 3df010c；文件见 PROGRESS「B07」） | B07-V2（backend verify exit 0、ai-runtime 检查 exit 0）；Schema×108 fixture 实测；B07-R1 PASS AFTER PATCH → B07-R2 PASS |
+| TASK-029 | B07 | Capability Arguments Protocol | REVIEW | 未提交（B07，Base 3df010c；文件见 PROGRESS「B07」） | B07-V2；六种参数与 Descriptor 正/负 fixture 三方一致；B07-R1 PASS AFTER PATCH → B07-R2 PASS |
+| TASK-030 | B07 | Java Protocol Model | REVIEW | 未提交（B07，Base 3df010c；文件见 PROGRESS「B07」） | B07-V2；AiProtocolContractTest 110/110；B07-R1 PASS AFTER PATCH → B07-R2 PASS |
+| TASK-031 | B07 | Python Pydantic Protocol | REVIEW | 未提交（B07，Base 3df010c；文件见 PROGRESS「B07」） | B07-V2；pytest 115 passed（含无基础设施客户端检查、模式一致性）；B07-R1 PASS AFTER PATCH → B07-R2 PASS |
+| TASK-032 | B07 | Java / Python Contract Test | REVIEW | 未提交（B07，Base 3df010c；文件见 PROGRESS「B07」） | B07-V2；同一 108 份 fixture 双端＋Schema 一致；B07-R1 PASS AFTER PATCH → B07-R2 PASS |
 | TASK-033 | B08 | AI Runtime 最小推理服务 | TODO | — | NOT RUN |
 | TASK-034 | B08 | Java AiRuntimeClient | TODO | — | NOT RUN |
 | TASK-035 | B09 | WorkDispatcher | TODO | — | NOT RUN |
@@ -251,6 +251,49 @@
 - B06-R1：独立 Reviewer；范围 c1042ff 到当前工作树（含未跟踪文件）；结论 PASS，无 P0/P1；确认 PRIMARY/POSSIBLE 的支持证据须在本 Diagnosis 引用集合内且属同一 Investigation，创建事务按 Incident → Investigation 锁序、Diagnosis/引用/状态迁移/时间线同提交或同回滚，旧 run 拒绝、版本分配受父行锁保护，查询按 Investigation 隔离且不含恢复 Observation，历史 Diagnosis 返回冻结证据集；独立实测 `./mvnw -B clean verify` exit 0（domain 30、infrastructure 261、web 21、boot 4，无跳过），Enforcer、Spotless、`git diff --check` 通过；接受的取舍：收束原因必填、发起方按原因选择、不禁止 REFUTED 主假设、STALE_RUN_RESULT 仅内部使用，概览 durationSeconds 应理解为截顶的本轮预算用时而非实际总时长；非阻塞：Plan 占位由 TASK-062/067 处理，Stop/deadline 收束由 TASK-039～042 验证，Invocation 技术接口的后端实现须在 TASK-103 前明确归属批次（TASK-103 只含前端，不直接承接后端），Observation 列表 SQL 读取了最终不返回的 payload，可在后续查询调整时移除、本批无需补测；NOT VERIFIED：并发创建 Diagnosis、真实 Plan supersede、Stop/deadline 收束、独立 jar 冒烟、MySQL 8.0.16、Windows、ccg 关卡；Commit Recommendation YES
 - 提交：代码提交 df5bfdd7eb2fbcbddda9397752d68bdd847e5b4a（feat(investigation): versioned diagnosis and investigation queries (TASK-025–027)）；SHA 回填为后续 docs 提交；范围外问题：见「待处理问题」中 B06 行
 
+### B07 — AI 协议、Java/Python 类型与共享契约测试
+
+- 状态：REVIEW（B07-R2 PASS，提交中）
+- 成员及顺序：TASK-028 → TASK-029 → TASK-030 → TASK-031 → TASK-032；批外前置：TASK-027 DONE（df5bfdd，B06-R1 PASS）
+- Base SHA：3df010c5ff3ff06867efb36d773d2831ca7bb37d
+- 范围：contracts/ai-runtime/v1（4 份 Canonical JSON Schema＋共享正/负 fixture）；backend application/ai（AiDecisionPort 与 v1 协议 record/sealed/enum）、infrastructure/ai（严格 JSON 编解码）及合同测试；ai-runtime src/opspilot_ai/protocol/v1（Pydantic v2 判别联合）及合同测试；docs/dev。明确不做：Python 推理服务与 LLM 调用、/investigation/step 与 /remediation/draft 端点（TASK-033）、Java AI HTTP Client 与超时/认证（TASK-034）、Context Builder（TASK-037）、Intent 分派与业务校验（TASK-040；runNo 是否当前、引用是否存在不在协议层）、Capability Registry/Descriptor 构造（TASK-044/045）
+- 规格：08 TASK-028～032；02 §14～§19、§43 BND-003/013/014/015；05 §74～§90、§93；06 §21～§22、§39～§42、§49～§50、§61、§70～§72、§85、§95、§105、§118、§122；07 §18、§75～§84、§110、§125
+- 关键不变量：语言中立 Schema 是协议事实，Java record/sealed/enum 与 Pydantic 判别联合各自强类型、无 Map<String,Object>、不做 codegen（07 §80～§83）；调查请求/响应含 protocolVersion、runNo、stepId，Java 掌握 investigationId 与权威轮号；响应恰一个主 Intent，判别联合拒绝多主 payload 与未知字段，仅 PROPOSE_EVIDENCE_LINK 可附同一 Hypothesis 的 hypothesisUpdate；arguments 按 capabilityKey 判别为六种 OBSERVE 强类型，无参数也须显式 {}；service.restart 不属于调查联合；Descriptor 按 06 §22 六种 descriptorType 及受控参数域；Remediation 输出禁止 riskLevel、requiresApproval、RecoveryPolicy 与容器/执行上下文；Python 不含 Redis/MySQL/Docker 客户端
+- 验证要求：同一组正例 fixture 须 JSON Schema、Java（反序列化/校验/序列化）、Pydantic（校验/序列化）全部通过；负例三者全部拒绝；backend `./mvnw -B clean verify`（不跳过 Enforcer/Spotless）；ai-runtime `uv sync --locked`、`ruff format --check`、`ruff check`、`pytest`
+- 开工已有修改：无（工作树干净）
+- 成员进度：
+  - TASK-028：实现与针对性验证完成。contracts/ai-runtime/v1：investigation-step-request/response、remediation-draft-request/response 四份 Draft 2020-12 Schema（全部 additionalProperties:false；调查请求含 protocolVersion=1、investigationId、runNo、stepId、correlationId；响应按 intentType 五选一 oneOf，每个变体只允许其主 payload，仅 PROPOSE_EVIDENCE_LINK 可附 hypothesisUpdate；COMPLETE 的 diagnosis 用 if/then 要求 PRIMARY/POSSIBLE 给主假设，evidenceIds 唯一且≤50；Remediation 请求只允许 PRIMARY/POSSIBLE 与 service.restart allowedActions，响应无 riskLevel/requiresApproval/RecoveryPolicy/容器字段、parameters 为显式 {}）；README 说明约定；删除原占位 .gitkeep
+  - TASK-029：实现与针对性验证完成。requestCapability 按 capabilityKey 判别六种 OBSERVE 参数（MetricsQuery/LogsSearch/DatabaseInspect/CacheInspect/QueueInspect/ServiceInspectArgumentsV1），无参数者必须显式 {}；availableCapabilities 按 descriptorType 判别六种 Descriptor，key 与类型一一对应并给出 06 §22 受控参数域（metricKeys/windowKeys/supportsPreviousWindowComparison；windowKeys/severities/maxKeywords=5/maxKeywordLength=64；inspectionTypes/limitMin=1/limitMax=20）；service.restart 不在调查联合
+  - TASK-030：实现与针对性验证完成。application/ai/AiDecisionPort（decideInvestigationStep、draftRemediation，实现属 TASK-034）；application/ai/protocol/v1：record＋sealed interface（InvestigationStepResponse 五种 Step、RequestCapability 六变体、CapabilityDescriptor 六变体、CapabilityArguments）＋enum（WindowKey、LogSeverity、InspectionType、InvestigationIntentType；HypothesisStatus/EvidenceRelation/DiagnosisConclusionType/ObservationKind/ResourceType 复用领域枚举），构造器按 Schema 逐条校验（ProtocolChecks，只报字段名）；application 新增 jackson-annotations（Boot 管理 2.21，已在 classpath，仅用于判别联合标注；07 §125：JDK 无法映射判别联合，冻结需求 06 §21/07 §82，手写反序列化器远超 50 行）；infrastructure/ai/AiProtocolCodec：拒绝未知字段、重复键、尾随内容与标量隐式转换，时间固定 UTC 毫秒且须为真实日历时间，空可选字段不输出，失败统一 AI_OUTPUT_INVALID（ErrorCode 新增，05 §93，DEPENDENCY_INVALID_RESPONSE→502）
+  - TASK-031：实现与针对性验证完成。ai-runtime/src/opspilot_ai/protocol/v1（common、capability、investigation、remediation）：Pydantic v2 严格模型（camelCase 别名、extra=forbid、strict、frozen），Literal 判别联合（intentType、capabilityKey、descriptorType），跨字段与主假设规则用 model_validator，时间校验日历有效性；pyproject 显式声明 pydantic==2.13.5（此前经 fastapi 间接依赖），dev 组新增 jsonschema==4.26.0（仅合同测试用 Draft 2020-12 校验；07 §125：标准库无 JSON Schema 校验器，冻结需求 07 §110 三方一致，不可 50 行替代）；uv.lock 按 pypi.org 生成（清除 UV_DEFAULT_INDEX）；源码与依赖不含 Redis/MySQL/Docker 客户端（测试以 AST 扫描 import 与 pyproject 校验）
+  - TASK-032：实现与针对性验证完成。共享 fixture 96 份：valid 25（含六种能力、五种 Intent、可选字段缺省/为 null 两种写法）、invalid 69（旧轮字段缺失 runNo/stepId/investigationId、protocolVersion=2、错误联合/多主 payload/缺主 payload、hypothesisUpdate 附在其他 Intent、incidentStatus/execute/riskLevel/requiresApproval/RecoveryPolicy/containerName 等越权字段、promql/logql/sql/command/key 等任意查询命令参数、ARBITRARY_SQL、缺省或 null 的空 arguments、非空的无参数 arguments、超限/越界/空白/控制字符、PENDING 目标、"2" 形式整数、Descriptor 常量被改等），invalid-model-only 2（hypothesisUpdate 指向其他 Hypothesis、2026-02-30 时间：JSON Schema 无法表达，Schema 接受、两端模型拒绝）；B07-R1 修复后为 108 份：valid 25、invalid 78、invalid-model-only 5（见 B07-R1 修复）。每个负例是在某一通过的正例上只改一处。Java AiProtocolContractTest 与 Python test_protocol_v1_contract.py 读取同一目录；另比对 Schema 枚举与 Java 枚举、每份 Schema 必须同时有正负例
+- 本批修改文件：修改 ai-runtime/pyproject.toml、uv.lock，backend/opspilot-application/pom.xml，ErrorCode；删除 contracts/ai-runtime/v1/.gitkeep；新增 contracts/ai-runtime/v1/{4 份 *.schema.json, README.md, fixtures/**（96 份）}、application/ai/AiDecisionPort 与 protocol/v1 下 25 个类型、infrastructure/ai/AiProtocolCodec、测试 AiProtocolContractTest；ai-runtime src/opspilot_ai/protocol/{__init__,v1/__init__,v1/common,v1/capability,v1/investigation,v1/remediation}.py、tests/test_protocol_v1_contract.py；docs/dev。Migration 无
+- B07-V1（最终代码树，均为本机实测）：
+  - backend/：`./mvnw -B clean verify`；2026-09-27 14:06～14:12 UTC，JDK 21＋Docker（Testcontainers mysql:8.4.11）；exit 0；Enforcer 与 6 模块 spotless:check 通过；domain 30/30、infrastructure 359/359（含 AiProtocolContractTest 98）、web 21/21、boot 4/4，无跳过
+  - ai-runtime/（清除 UV_DEFAULT_INDEX）：`uv sync --locked` exit 0；`uv run --locked ruff format --check .` exit 0；`uv run --locked ruff check .` exit 0；`uv run --locked pytest` 102 passed exit 0（2026-09-27 14:06 UTC）
+  - 仓库根：`git diff --check` exit 0
+  - 覆盖 TASK-028～032；受测代码为 Base 3df010c＋当前未提交工作树
+- 专项证据/NOT RUN：
+  - Schema 独立核对：scratchpad 临时环境 jsonschema Draft202012Validator 对 4 份 Schema check_schema 通过，96 份 fixture 期望全部吻合（valid/model-only 接受、invalid 拒绝）
+  - 变异（均已还原并逐字节核对）：Python 把 extra 改为 ignore → 21 例失败、关闭 strict → 2 例失败；Java 关闭 FAIL_ON_UNKNOWN_PROPERTIES → 21 例失败、开启 ALLOW_COERCION_OF_SCALARS → 2 例失败（两端失败用例一致）；变异执行于日历校验改动之前的代码树，一次性构建曾用 -Dspotless.check.skip，不作门禁证据
+  - 实施中发现并修正：Java 省略 null 而 Schema 原本拒绝显式 null → 统一“可选字段缺省与 null 等价、序列化省略”，Schema 改为 anyOf null 并增加 null 写法正例；Instant.parse 对不存在日期抛 DateTimeParseException 会绕过 AI_OUTPUT_INVALID → 转为协议拒绝，Python 同步增加日历校验
+  - 已知差异（无 fixture）：重复 JSON 键 Java 拒绝、Pydantic 取后者；闰秒 23:59:60 两端解析不同。只影响 Java 生成的请求，不放宽 Java 对 AI 输出的校验。（原记录“JSON Schema 的 integer 接受 2.0 而两端模型拒绝”对普通整数字段成立，但 Python 整数常量 Literal 当时会接受 1.0/true，B07-R1 指出后已修正并以 fixture 覆盖，见下）
+  - NOT RUN：真实 LLM 与 /investigation/step、/remediation/draft 端点（TASK-033）；Java HTTP Client、超时与内部认证（TASK-034）；Context Builder 生成真实请求（TASK-037）；Descriptor 由受信配置构造（TASK-045）；ccg 质量关卡（本机未安装）；MySQL 8.0.16、Windows mvnw.cmd NOT RUN
+- B07-R1：独立 Reviewer；范围 3df010c 到当时工作树（含未跟踪文件）；结论 PASS AFTER PATCH，不可提交。问题：P1 AiProtocolCodec 直接返回 readValue，decode("null") 返回 null 而 Schema 与 Python 拒绝；P2 Python 整数常量 Literal（protocolVersion、maxKeywords、maxKeywordLength、limitMin、limitMax）接受 true 与 1.0；P2 非空白判断不一致：Java String.isBlank 接受仅含 U+00A0 的标题，Python 与 Schema 拒绝。Reviewer 实测：ai-runtime sync/ruff 通过、pytest 102 passed；backend 完整 clean verify exit 1（原有 InvestigationRunIntegrationTest 在 Flyway 初始化时 "Connection is closed"，14 个测试上下文加载失败），随后单独重跑该类与协议合同测试 112/112 exit 0（不计为完整通过）；`git diff --check` 通过；其余协议边界、依赖与自定取值无阻塞问题；端点、HTTP Client、真实 LLM、MySQL 8.0.16、Windows、ccg NOT VERIFIED
+- B07-R1 修复（同批次、同 Base）：
+  - P1：AiProtocolCodec.decode 对 readValue 结果为 null 同样抛 AI_OUTPUT_INVALID；新增 invalid/top-level-null（调查请求、调查响应、Remediation 响应各一）
+  - P2 整数常量：Python 新增 ExactInt（BeforeValidator，原始值必须是 JSON 整数而非 true/1.0），用于 ProtocolVersion 与 Descriptor 的 maxKeywords、maxKeywordLength、limitMin、limitMax；新增 invalid/protocol-version-boolean、descriptor-limit-min-boolean（Schema 与两端都拒），invalid-model-only/protocol-version-float、descriptor-max-keywords-float、run-no-float（JSON Schema 按数值相等接受 1.0/5.0/2.0，两端模型拒绝）
+  - P2 空白：三方统一为显式 Unicode White_Space 集合（U+0009～000D、0020、0085、00A0、1680、2000～200A、2028、2029、202F、205F、3000）。Schema 15 处 "\S" 与关键字模式改为由码点区间生成的显式字符类（纯 ASCII \uXXXX 转义）；Python 以同一区间生成 NON_BLANK_PATTERN 与 KEYWORD_PATTERN，并新增测试断言 Schema 模式与模型模式逐字相同；Java ProtocolChecks.text 改用 isWhiteSpace 显式集合（不再用 isBlank）。新增 invalid/hypothesis-title-no-break-space、title-no-break-space、title-ideographic-and-en-space、logs-keyword-no-break-space。附带发现：各引擎 \s 本身不一致（Python re 把 U+001C～001F 视为空白、Pydantic 的 Rust 引擎不视为空白，isBlank 把 U+001C～001F 视为空白却不认 U+00A0），显式集合同时消除这些差异
+  - 变异（均已还原并逐字节核对）：去掉顶层 null 判断 → Java 3 例失败；恢复 isBlank → Java 3 例失败；去掉 ExactInt → Python 4 例失败（一次性构建曾用 -Dspotless.check.skip，不作门禁证据）
+  - 工具注意：本会话命令文本中可打印字符的 \uXXXX 转义会被转成字面字符，故 Schema/fixture 的特殊字符均用码点区间与 chr() 生成，并核对 Schema 仅含 ASCII 与说明中的 §、～
+- B07-V2（修复后最终代码树，本机实测）：
+  - ai-runtime/（清除 UV_DEFAULT_INDEX）：`uv sync --locked` exit 0；`ruff format --check .` exit 0；`ruff check .` exit 0；`pytest` 115 passed exit 0（2026-09-27 14:37 UTC）
+  - backend/：`./mvnw -B clean verify`；2026-09-27 14:37～14:42 UTC，JDK 21＋Docker（Testcontainers mysql:8.4.11）；exit 0；Enforcer 与 6 模块 spotless:check 通过；domain 30/30、infrastructure 371/371（含 AiProtocolContractTest 110）、web 21/21、boot 4/4，无跳过；日志中无 "Connection is closed"
+  - 仓库根：`git diff --check` exit 0；scratchpad jsonschema 独立核对 4 份 Schema check_schema 通过、108 份 fixture 期望全部吻合
+  - Reviewer 所见 InvestigationRunIntegrationTest "Connection is closed"：本机此次完整 verify 未复现（1 次）；B07 未改动该测试、数据库或 Spring 配置，不宣称已修复，记入待处理问题观察
+- B07-R2：独立 Reviewer 复核；Base 仍为 3df010c，范围至修复后工作树（含未跟踪文件）；结论 PASS，可提交，无新增阻塞项；确认三项原问题关闭：四类消息顶层 null 均返回 AI_OUTPUT_INVALID，Python 整数常量在转换前拒绝布尔与浮点，三方空白定义一致且关键字控制字符限制保留；独立实测 `./mvnw -B clean verify` exit 0（domain 30、infrastructure 371、web 21、boot 4，无跳过），Enforcer、Spotless 通过；ai-runtime 锁定同步与 Ruff 通过，pytest 115 passed（含 108 份共享 fixture）；`git diff --check` 通过；此前失败的 InvestigationRunIntegrationTest 本轮 14/14 通过，连接错误保留观察、不宣称根因已修复；端点、HTTP Client、真实 LLM、MySQL 8.0.16、Windows、ccg NOT VERIFIED；Commit Recommendation YES
+- 提交：未提交（等待独立 Review 与用户提交授权）；范围外问题：见「待处理问题」中 B07 行
+
 ### 工作流文档变更（不属于 TASK-012 或 B01）
 
 - 2026-09-27：用户确认批次流程，新增 BATCH-PLAN，同步 Agent 入口、07/08 工作流条款、Manifest、启动指南及进度/交接。
@@ -334,3 +377,8 @@
 | 调查概览：未开始调查返回 404 RESOURCE_NOT_FOUND（details.resource=investigation）；budget.scope 固定 ACTIVE_RUN（run 已结束时表示最近一轮）；durationSeconds 终点为本轮 Diagnosis 时间/当前时间/Incident updated_at（本批自定） | application/investigation/query/InvestigationQueryService | 05 §50 未规定未开始与已结束时的表达；TASK-097/099 前端如需不同语义在此调整 | TASK-097/099 |
 | Observation 详情原样输出库内 payload | web/investigation/InvestigationResponses | 依赖写入前脱敏（TASK-049 Sanitizer、TASK-051 Extractor）；查询层不再改写 | TASK-049/051 |
 | 调查 Observation 列表 SQL 与详情共用列片段，读取了列表最终不返回的 payload | infrastructure InvestigationQueryMapper.xml observationColumns | 后续调整查询时为列表去掉 payload 等大字段（B06-R1 非阻塞，无需补测） | 后续触及该查询的 Task |
+| 协议取值为本批自定：LogSeverity={ERROR,WARN,INFO,DEBUG}；purpose≤500；COMPLETE evidenceIds≤50；logs severity 至少 1 个、keywords 必填可为空；database limit 可缺省；metrics comparePreviousWindow 必填；Remediation title≤200、summary≤2000、action.summary≤500、expectedImpactSummary≤1000、resourceName≤128 | contracts/ai-runtime/v1、application/ai/protocol/v1、opspilot_ai/protocol/v1 | 改动须同时改 Schema、两端模型与 fixture；TASK-052/053 Provider、TASK-062 Plan 列长度沿用这些上限 | TASK-052/053/062 |
+| 调查请求在 05 §77 示例外补充：observations 含 resourceKey、evidence 条目字段、hypotheses 可带 description、可选 currentDiagnosis（02 §15）、recentTimeline 条目字段；历史观测以 observation.runNo 小于请求 runNo 标识 | investigation-step-request.schema.json | TASK-037 Context Builder 按此构造；不得放入 Ground Truth、控制日志、凭证 | TASK-037 |
+| AiProtocolCodec 为普通类（未注册 Bean），AiDecisionPort 尚无实现 | infrastructure/ai | TASK-034 HTTP Client 使用该编解码，并把 AI_OUTPUT_INVALID 记入 AgentStep 审计；Python 端点（TASK-033）响应前也用同一模型校验 | TASK-033/034 |
+| 协议层只校验结构：echo 的 runNo/stepId 与已登记 Step 比对、Descriptor 中是否允许所选 metricKey/window/inspectionType、ID 是否存在与归属，均不在协议层 | application/ai/protocol/v1 | TASK-038～041 与 TASK-047/048 在业务事务中校验 | TASK-038～048 |
+| Reviewer 在 B07-R1 完整 verify 中见 InvestigationRunIntegrationTest 于 Flyway 初始化报 "Connection is closed"（14 个上下文加载失败），单独重跑通过；本机 B07-V2 完整 verify 未复现 | opspilot-infrastructure 集成测试（Testcontainers MySQL） | 疑为环境/容器资源时序问题，未定位根因；再次出现时保留 surefire 报告与容器日志排查，不以单独重跑替代完整门禁 | 观察（后续批次完整 verify） |

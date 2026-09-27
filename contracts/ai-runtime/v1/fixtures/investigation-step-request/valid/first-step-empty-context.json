@@ -1,0 +1,27 @@
+{
+  "protocolVersion": 1,
+  "investigationId": 7,
+  "runNo": 1,
+  "stepId": 42,
+  "correlationId": "corr_step_42",
+  "incident": {
+    "incidentKey": "INC-20260925-0001",
+    "title": "统计消息持续积压",
+    "impactSummary": "统计数据无法及时更新",
+    "startedAt": "2026-09-25T07:00:00.000Z"
+  },
+  "affectedResources": [],
+  "hypotheses": [],
+  "observations": [],
+  "evidence": [],
+  "availableCapabilities": [],
+  "budget": {
+    "scope": "ACTIVE_RUN",
+    "capabilityCallsUsed": 1,
+    "capabilityCallsLimit": 12,
+    "remainingCapabilityCalls": 11,
+    "elapsedSeconds": 31,
+    "durationLimitSeconds": 480
+  },
+  "recentTimeline": []
+}

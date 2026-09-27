@@ -1,0 +1,613 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opspilot.local/contracts/ai-runtime/v1/investigation-step-response.schema.json",
+  "title": "InvestigationStepResponse",
+  "description": "AI Runtime -> Java (05 §78～§86). Exactly one primary Intent, discriminated by intentType; protocolVersion, runNo and stepId are echoes, never authority (BND-015). Only PROPOSE_EVIDENCE_LINK may carry hypothesisUpdate, and its hypothesisId must equal proposeEvidenceLink.hypothesisId (cross-field rule enforced by the typed models; JSON Schema 2020-12 cannot express it). Optional fields may be absent or null with the same meaning; serializers omit them.",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocolVersion",
+        "runNo",
+        "stepId",
+        "intentType",
+        "requestCapability"
+      ],
+      "properties": {
+        "protocolVersion": {
+          "const": 1
+        },
+        "runNo": {
+          "$ref": "#/$defs/runNo"
+        },
+        "stepId": {
+          "$ref": "#/$defs/id"
+        },
+        "intentType": {
+          "const": "REQUEST_CAPABILITY"
+        },
+        "requestCapability": {
+          "$ref": "#/$defs/requestCapability"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocolVersion",
+        "runNo",
+        "stepId",
+        "intentType",
+        "proposeHypothesis"
+      ],
+      "properties": {
+        "protocolVersion": {
+          "const": 1
+        },
+        "runNo": {
+          "$ref": "#/$defs/runNo"
+        },
+        "stepId": {
+          "$ref": "#/$defs/id"
+        },
+        "intentType": {
+          "const": "PROPOSE_HYPOTHESIS"
+        },
+        "proposeHypothesis": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "title"
+          ],
+          "properties": {
+            "title": {
+              "$ref": "#/$defs/text200"
+            },
+            "description": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/text2000"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocolVersion",
+        "runNo",
+        "stepId",
+        "intentType",
+        "updateHypothesis"
+      ],
+      "properties": {
+        "protocolVersion": {
+          "const": 1
+        },
+        "runNo": {
+          "$ref": "#/$defs/runNo"
+        },
+        "stepId": {
+          "$ref": "#/$defs/id"
+        },
+        "intentType": {
+          "const": "UPDATE_HYPOTHESIS"
+        },
+        "updateHypothesis": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "hypothesisId",
+            "targetStatus"
+          ],
+          "properties": {
+            "hypothesisId": {
+              "$ref": "#/$defs/id"
+            },
+            "targetStatus": {
+              "$ref": "#/$defs/targetStatus"
+            },
+            "reason": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/text1000"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocolVersion",
+        "runNo",
+        "stepId",
+        "intentType",
+        "proposeEvidenceLink"
+      ],
+      "properties": {
+        "protocolVersion": {
+          "const": 1
+        },
+        "runNo": {
+          "$ref": "#/$defs/runNo"
+        },
+        "stepId": {
+          "$ref": "#/$defs/id"
+        },
+        "intentType": {
+          "const": "PROPOSE_EVIDENCE_LINK"
+        },
+        "proposeEvidenceLink": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "observationId",
+            "hypothesisId",
+            "relation",
+            "reason"
+          ],
+          "properties": {
+            "observationId": {
+              "$ref": "#/$defs/id"
+            },
+            "hypothesisId": {
+              "$ref": "#/$defs/id"
+            },
+            "relation": {
+              "enum": [
+                "SUPPORTS",
+                "REFUTES",
+                "CONTEXT"
+              ]
+            },
+            "reason": {
+              "$ref": "#/$defs/text1000"
+            }
+          }
+        },
+        "hypothesisUpdate": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "hypothesisId",
+                "targetStatus"
+              ],
+              "properties": {
+                "hypothesisId": {
+                  "$ref": "#/$defs/id"
+                },
+                "targetStatus": {
+                  "$ref": "#/$defs/targetStatus"
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocolVersion",
+        "runNo",
+        "stepId",
+        "intentType",
+        "completeInvestigation"
+      ],
+      "properties": {
+        "protocolVersion": {
+          "const": 1
+        },
+        "runNo": {
+          "$ref": "#/$defs/runNo"
+        },
+        "stepId": {
+          "$ref": "#/$defs/id"
+        },
+        "intentType": {
+          "const": "COMPLETE_INVESTIGATION"
+        },
+        "completeInvestigation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "diagnosis"
+          ],
+          "properties": {
+            "diagnosis": {
+              "$ref": "#/$defs/diagnosisDraft"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "id": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    },
+    "runNo": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2147483647
+    },
+    "text200": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "[^\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028-\\u2029\\u202F\\u205F\\u3000]"
+    },
+    "text500": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "pattern": "[^\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028-\\u2029\\u202F\\u205F\\u3000]"
+    },
+    "text1000": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000,
+      "pattern": "[^\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028-\\u2029\\u202F\\u205F\\u3000]"
+    },
+    "text2000": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000,
+      "pattern": "[^\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028-\\u2029\\u202F\\u205F\\u3000]"
+    },
+    "targetStatus": {
+      "description": "PENDING is only the initial state and is never a target (01 §13～§14).",
+      "enum": [
+        "SUPPORTED",
+        "INSUFFICIENT_EVIDENCE",
+        "REFUTED"
+      ]
+    },
+    "metricKey": {
+      "type": "string",
+      "pattern": "^[a-z0-9_]+(\\.[a-z0-9_]+)*$",
+      "maxLength": 128
+    },
+    "windowKey": {
+      "enum": [
+        "INCIDENT_CONTEXT",
+        "LAST_15_MIN",
+        "LAST_30_MIN",
+        "LAST_60_MIN"
+      ]
+    },
+    "logSeverity": {
+      "enum": [
+        "ERROR",
+        "WARN",
+        "INFO",
+        "DEBUG"
+      ]
+    },
+    "keyword": {
+      "description": "Plain text only; no control characters (06 §50).",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[^\\u0000-\\u001F\\u007F]*[^\\u0000-\\u0020\\u007F\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028-\\u2029\\u202F\\u205F\\u3000][^\\u0000-\\u001F\\u007F]*$"
+    },
+    "emptyArguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    },
+    "requestCapability": {
+      "description": "Discriminated by capabilityKey; arguments are the matching OBSERVE type (06 §21～§22). No-argument capabilities still require an explicit {}.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "capabilityKey",
+            "resourceId",
+            "arguments",
+            "purpose"
+          ],
+          "properties": {
+            "capabilityKey": {
+              "const": "metrics.query"
+            },
+            "resourceId": {
+              "$ref": "#/$defs/id"
+            },
+            "purpose": {
+              "$ref": "#/$defs/text500"
+            },
+            "arguments": {
+              "title": "MetricsQueryArgumentsV1",
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "metricKey",
+                "windowKey",
+                "comparePreviousWindow"
+              ],
+              "properties": {
+                "metricKey": {
+                  "$ref": "#/$defs/metricKey"
+                },
+                "windowKey": {
+                  "$ref": "#/$defs/windowKey"
+                },
+                "comparePreviousWindow": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "capabilityKey",
+            "resourceId",
+            "arguments",
+            "purpose"
+          ],
+          "properties": {
+            "capabilityKey": {
+              "const": "logs.search"
+            },
+            "resourceId": {
+              "$ref": "#/$defs/id"
+            },
+            "purpose": {
+              "$ref": "#/$defs/text500"
+            },
+            "arguments": {
+              "title": "LogsSearchArgumentsV1",
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "windowKey",
+                "severity",
+                "keywords"
+              ],
+              "properties": {
+                "windowKey": {
+                  "$ref": "#/$defs/windowKey"
+                },
+                "severity": {
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": {
+                    "$ref": "#/$defs/logSeverity"
+                  }
+                },
+                "keywords": {
+                  "type": "array",
+                  "maxItems": 5,
+                  "uniqueItems": true,
+                  "items": {
+                    "$ref": "#/$defs/keyword"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "capabilityKey",
+            "resourceId",
+            "arguments",
+            "purpose"
+          ],
+          "properties": {
+            "capabilityKey": {
+              "const": "database.inspect"
+            },
+            "resourceId": {
+              "$ref": "#/$defs/id"
+            },
+            "purpose": {
+              "$ref": "#/$defs/text500"
+            },
+            "arguments": {
+              "title": "DatabaseInspectArgumentsV1",
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "inspectionType"
+              ],
+              "properties": {
+                "inspectionType": {
+                  "enum": [
+                    "SERVER_SUMMARY",
+                    "CONNECTION_SUMMARY",
+                    "SLOW_QUERIES",
+                    "LOCK_WAITS"
+                  ]
+                },
+                "limit": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 20
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "capabilityKey",
+            "resourceId",
+            "arguments",
+            "purpose"
+          ],
+          "properties": {
+            "capabilityKey": {
+              "const": "cache.inspect"
+            },
+            "resourceId": {
+              "$ref": "#/$defs/id"
+            },
+            "purpose": {
+              "$ref": "#/$defs/text500"
+            },
+            "arguments": {
+              "title": "CacheInspectArgumentsV1",
+              "$ref": "#/$defs/emptyArguments"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "capabilityKey",
+            "resourceId",
+            "arguments",
+            "purpose"
+          ],
+          "properties": {
+            "capabilityKey": {
+              "const": "queue.inspect"
+            },
+            "resourceId": {
+              "$ref": "#/$defs/id"
+            },
+            "purpose": {
+              "$ref": "#/$defs/text500"
+            },
+            "arguments": {
+              "title": "QueueInspectArgumentsV1",
+              "$ref": "#/$defs/emptyArguments"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "capabilityKey",
+            "resourceId",
+            "arguments",
+            "purpose"
+          ],
+          "properties": {
+            "capabilityKey": {
+              "const": "service.inspect"
+            },
+            "resourceId": {
+              "$ref": "#/$defs/id"
+            },
+            "purpose": {
+              "$ref": "#/$defs/text500"
+            },
+            "arguments": {
+              "title": "ServiceInspectArgumentsV1",
+              "$ref": "#/$defs/emptyArguments"
+            }
+          }
+        }
+      ]
+    },
+    "diagnosisDraft": {
+      "description": "PRIMARY/POSSIBLE require primaryHypothesisId; UNDETERMINED may omit it or send null (05 §85). Whether ids exist and belong to the Investigation is checked by Java, not the protocol.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "conclusionType",
+        "summary",
+        "impactSummary",
+        "evidenceIds"
+      ],
+      "properties": {
+        "conclusionType": {
+          "enum": [
+            "PRIMARY_CAUSE_IDENTIFIED",
+            "POSSIBLE_CAUSE",
+            "UNDETERMINED"
+          ]
+        },
+        "primaryHypothesisId": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "summary": {
+          "$ref": "#/$defs/text2000"
+        },
+        "impactSummary": {
+          "$ref": "#/$defs/text1000"
+        },
+        "evidenceIds": {
+          "type": "array",
+          "maxItems": 50,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "conclusionType": {
+            "enum": [
+              "PRIMARY_CAUSE_IDENTIFIED",
+              "POSSIBLE_CAUSE"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "primaryHypothesisId"
+        ],
+        "properties": {
+          "primaryHypothesisId": {
+            "$ref": "#/$defs/id"
+          }
+        }
+      }
+    }
+  }
+}

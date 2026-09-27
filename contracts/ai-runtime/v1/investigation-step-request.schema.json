@@ -1,0 +1,618 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opspilot.local/contracts/ai-runtime/v1/investigation-step-request.schema.json",
+  "title": "InvestigationStepRequest",
+  "description": "Java -> AI Runtime: POST /internal/v1/investigation/step (05 §77). Java owns investigationId, runNo and stepId; the AI Runtime only echoes them. Optional fields may be absent or null with the same meaning; serializers omit them. Timestamps must also exist on the calendar, which the typed models check (JSON Schema only fixes the shape).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocolVersion",
+    "investigationId",
+    "runNo",
+    "stepId",
+    "correlationId",
+    "incident",
+    "affectedResources",
+    "hypotheses",
+    "observations",
+    "evidence",
+    "availableCapabilities",
+    "budget",
+    "recentTimeline"
+  ],
+  "properties": {
+    "protocolVersion": {
+      "const": 1
+    },
+    "investigationId": {
+      "$ref": "#/$defs/id"
+    },
+    "runNo": {
+      "$ref": "#/$defs/runNo"
+    },
+    "stepId": {
+      "$ref": "#/$defs/id"
+    },
+    "correlationId": {
+      "$ref": "#/$defs/correlationId"
+    },
+    "incident": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "incidentKey",
+        "title",
+        "impactSummary",
+        "startedAt"
+      ],
+      "properties": {
+        "incidentKey": {
+          "type": "string",
+          "pattern": "^INC-[0-9]{8}-[0-9]{4,}$"
+        },
+        "title": {
+          "$ref": "#/$defs/text200"
+        },
+        "impactSummary": {
+          "$ref": "#/$defs/text1000"
+        },
+        "startedAt": {
+          "$ref": "#/$defs/timestamp"
+        }
+      }
+    },
+    "affectedResources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "resourceId",
+          "resourceKey",
+          "resourceType"
+        ],
+        "properties": {
+          "resourceId": {
+            "$ref": "#/$defs/id"
+          },
+          "resourceKey": {
+            "$ref": "#/$defs/resourceKey"
+          },
+          "resourceType": {
+            "enum": [
+              "SERVICE",
+              "DATABASE",
+              "CACHE",
+              "MESSAGE_QUEUE",
+              "CONSUMER",
+              "EXTERNAL_DEPENDENCY"
+            ]
+          }
+        }
+      }
+    },
+    "hypotheses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/id"
+          },
+          "title": {
+            "$ref": "#/$defs/text200"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/text2000"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "PENDING",
+              "SUPPORTED",
+              "INSUFFICIENT_EVIDENCE",
+              "REFUTED"
+            ]
+          }
+        }
+      }
+    },
+    "observations": {
+      "description": "Current-run observations and, when referenced by an earlier frozen Diagnosis, historical ones; runNo marks the origin.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "runNo",
+          "resourceKey",
+          "kind",
+          "summary",
+          "observedAt"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/id"
+          },
+          "runNo": {
+            "$ref": "#/$defs/runNo"
+          },
+          "resourceKey": {
+            "$ref": "#/$defs/resourceKey"
+          },
+          "kind": {
+            "enum": [
+              "METRIC",
+              "LOG_PATTERN",
+              "SERVICE_STATUS",
+              "DATABASE_STATUS",
+              "CACHE_STATUS",
+              "QUEUE_STATUS",
+              "OTHER"
+            ]
+          },
+          "summary": {
+            "$ref": "#/$defs/text1000"
+          },
+          "observedAt": {
+            "$ref": "#/$defs/timestamp"
+          }
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "observationId",
+          "hypothesisId",
+          "relation",
+          "reason"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/id"
+          },
+          "observationId": {
+            "$ref": "#/$defs/id"
+          },
+          "hypothesisId": {
+            "$ref": "#/$defs/id"
+          },
+          "relation": {
+            "enum": [
+              "SUPPORTS",
+              "REFUTES",
+              "CONTEXT"
+            ]
+          },
+          "reason": {
+            "$ref": "#/$defs/text1000"
+          }
+        }
+      }
+    },
+    "currentDiagnosis": {
+      "anyOf": [
+        {
+          "description": "Latest frozen Diagnosis of this Investigation, absent when none exists (02 §15).",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "version",
+            "runNo",
+            "conclusionType",
+            "summary",
+            "evidenceIds"
+          ],
+          "properties": {
+            "version": {
+              "$ref": "#/$defs/runNo"
+            },
+            "runNo": {
+              "$ref": "#/$defs/runNo"
+            },
+            "conclusionType": {
+              "enum": [
+                "PRIMARY_CAUSE_IDENTIFIED",
+                "POSSIBLE_CAUSE",
+                "UNDETERMINED"
+              ]
+            },
+            "primaryHypothesisId": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/id"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "summary": {
+              "$ref": "#/$defs/text2000"
+            },
+            "evidenceIds": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/id"
+              }
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "availableCapabilities": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/capabilityDescriptor"
+      }
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "capabilityCallsUsed",
+        "capabilityCallsLimit",
+        "remainingCapabilityCalls",
+        "elapsedSeconds",
+        "durationLimitSeconds"
+      ],
+      "properties": {
+        "scope": {
+          "const": "ACTIVE_RUN"
+        },
+        "capabilityCallsUsed": {
+          "$ref": "#/$defs/count"
+        },
+        "capabilityCallsLimit": {
+          "$ref": "#/$defs/count"
+        },
+        "remainingCapabilityCalls": {
+          "$ref": "#/$defs/count"
+        },
+        "elapsedSeconds": {
+          "$ref": "#/$defs/count"
+        },
+        "durationLimitSeconds": {
+          "$ref": "#/$defs/count"
+        }
+      }
+    },
+    "recentTimeline": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "eventType",
+          "occurredAt",
+          "summary"
+        ],
+        "properties": {
+          "eventType": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]{0,63}$"
+          },
+          "occurredAt": {
+            "$ref": "#/$defs/timestamp"
+          },
+          "summary": {
+            "$ref": "#/$defs/text1000"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    },
+    "runNo": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2147483647
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "correlationId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    },
+    "resourceKey": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+    },
+    "text200": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "[^\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028-\\u2029\\u202F\\u205F\\u3000]"
+    },
+    "text1000": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000,
+      "pattern": "[^\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028-\\u2029\\u202F\\u205F\\u3000]"
+    },
+    "text2000": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000,
+      "pattern": "[^\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028-\\u2029\\u202F\\u205F\\u3000]"
+    },
+    "metricKey": {
+      "type": "string",
+      "pattern": "^[a-z0-9_]+(\\.[a-z0-9_]+)*$",
+      "maxLength": 128
+    },
+    "windowKey": {
+      "enum": [
+        "INCIDENT_CONTEXT",
+        "LAST_15_MIN",
+        "LAST_30_MIN",
+        "LAST_60_MIN"
+      ]
+    },
+    "logSeverity": {
+      "enum": [
+        "ERROR",
+        "WARN",
+        "INFO",
+        "DEBUG"
+      ]
+    },
+    "inspectionType": {
+      "enum": [
+        "SERVER_SUMMARY",
+        "CONNECTION_SUMMARY",
+        "SLOW_QUERIES",
+        "LOCK_WAITS"
+      ]
+    },
+    "capabilityDescriptor": {
+      "description": "Typed descriptor discriminated by descriptorType (06 §22). service.restart is not an investigation descriptor.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "descriptorType",
+            "key",
+            "resourceId",
+            "resourceKey",
+            "metricKeys",
+            "windowKeys",
+            "supportsPreviousWindowComparison"
+          ],
+          "properties": {
+            "descriptorType": {
+              "const": "METRICS_QUERY"
+            },
+            "key": {
+              "const": "metrics.query"
+            },
+            "resourceId": {
+              "$ref": "#/$defs/id"
+            },
+            "resourceKey": {
+              "$ref": "#/$defs/resourceKey"
+            },
+            "metricKeys": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/metricKey"
+              }
+            },
+            "windowKeys": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/windowKey"
+              }
+            },
+            "supportsPreviousWindowComparison": {
+              "type": "boolean"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "descriptorType",
+            "key",
+            "resourceId",
+            "resourceKey",
+            "windowKeys",
+            "severities",
+            "maxKeywords",
+            "maxKeywordLength"
+          ],
+          "properties": {
+            "descriptorType": {
+              "const": "LOGS_SEARCH"
+            },
+            "key": {
+              "const": "logs.search"
+            },
+            "resourceId": {
+              "$ref": "#/$defs/id"
+            },
+            "resourceKey": {
+              "$ref": "#/$defs/resourceKey"
+            },
+            "windowKeys": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/windowKey"
+              }
+            },
+            "severities": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/logSeverity"
+              }
+            },
+            "maxKeywords": {
+              "const": 5
+            },
+            "maxKeywordLength": {
+              "const": 64
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "descriptorType",
+            "key",
+            "resourceId",
+            "resourceKey",
+            "inspectionTypes",
+            "limitMin",
+            "limitMax"
+          ],
+          "properties": {
+            "descriptorType": {
+              "const": "DATABASE_INSPECT"
+            },
+            "key": {
+              "const": "database.inspect"
+            },
+            "resourceId": {
+              "$ref": "#/$defs/id"
+            },
+            "resourceKey": {
+              "$ref": "#/$defs/resourceKey"
+            },
+            "inspectionTypes": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/inspectionType"
+              }
+            },
+            "limitMin": {
+              "const": 1
+            },
+            "limitMax": {
+              "const": 20
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "descriptorType",
+            "key",
+            "resourceId",
+            "resourceKey"
+          ],
+          "properties": {
+            "descriptorType": {
+              "const": "CACHE_INSPECT"
+            },
+            "key": {
+              "const": "cache.inspect"
+            },
+            "resourceId": {
+              "$ref": "#/$defs/id"
+            },
+            "resourceKey": {
+              "$ref": "#/$defs/resourceKey"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "descriptorType",
+            "key",
+            "resourceId",
+            "resourceKey"
+          ],
+          "properties": {
+            "descriptorType": {
+              "const": "QUEUE_INSPECT"
+            },
+            "key": {
+              "const": "queue.inspect"
+            },
+            "resourceId": {
+              "$ref": "#/$defs/id"
+            },
+            "resourceKey": {
+              "$ref": "#/$defs/resourceKey"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "descriptorType",
+            "key",
+            "resourceId",
+            "resourceKey"
+          ],
+          "properties": {
+            "descriptorType": {
+              "const": "SERVICE_INSPECT"
+            },
+            "key": {
+              "const": "service.inspect"
+            },
+            "resourceId": {
+              "$ref": "#/$defs/id"
+            },
+            "resourceKey": {
+              "$ref": "#/$defs/resourceKey"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "protocolVersion": 1,
+  "runNo": 2,
+  "stepId": 42,
+  "intentType": "REQUEST_CAPABILITY",
+  "requestCapability": {
+    "capabilityKey": "cache.inspect",
+    "resourceId": 16,
+    "arguments": {
+      "key": "short:link:abc"
+    },
+    "purpose": "核对当前状态。"
+  }
+}

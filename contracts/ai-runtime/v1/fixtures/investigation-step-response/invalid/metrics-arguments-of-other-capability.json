@@ -1,0 +1,15 @@
+{
+  "protocolVersion": 1,
+  "runNo": 2,
+  "stepId": 42,
+  "intentType": "REQUEST_CAPABILITY",
+  "requestCapability": {
+    "capabilityKey": "metrics.query",
+    "resourceId": 14,
+    "arguments": {
+      "inspectionType": "SLOW_QUERIES",
+      "limit": 5
+    },
+    "purpose": "核对当前状态。"
+  }
+}
