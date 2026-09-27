@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.timeline.TimelineEventMapper">
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="event.id" keyColumn="id">
+        INSERT INTO incident_timeline_event (incident_id, event_type, occurred_at, actor_type, actor_id, summary,
+                                             payload, correlation_id, created_at)
+        VALUES (#{event.incidentId}, #{event.eventType}, #{event.occurredAt}, #{event.actorType}, #{event.actorId},
+                #{event.summary}, #{event.payload}, #{event.correlationId}, #{event.createdAt})
+    </insert>
+</mapper>

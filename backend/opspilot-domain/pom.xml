@@ -12,4 +12,18 @@
 
     <artifactId>opspilot-domain</artifactId>
     <name>OpsPilot Domain</name>
+
+    <dependencies>
+        <!-- 纯规则单元测试（07 §107）；版本由 Spring Boot 管理，仅测试范围 -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
 </project>

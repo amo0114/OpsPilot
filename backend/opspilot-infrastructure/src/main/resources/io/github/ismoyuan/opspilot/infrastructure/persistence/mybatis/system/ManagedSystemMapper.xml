@@ -18,5 +18,7 @@
         SELECT id, system_key, name, description, environment, status, lock_version
         FROM managed_system
         WHERE system_key = #{systemKey}
+          <!-- 列为 ai_ci：外部输入的键再按字节比较，大小写或重音变体不命中 -->
+          AND CAST(system_key AS BINARY) = CAST(#{systemKey} AS BINARY)
     </select>
 </mapper>

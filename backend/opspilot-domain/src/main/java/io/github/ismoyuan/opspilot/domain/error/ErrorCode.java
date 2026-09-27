@@ -9,6 +9,10 @@ public enum ErrorCode {
     REQUEST_VALIDATION_FAILED(ErrorCategory.INVALID_REQUEST, "请求参数不合法。"),
     RESOURCE_NOT_FOUND(ErrorCategory.NOT_FOUND, "请求的资源不存在。"),
     SYSTEM_NOT_FOUND(ErrorCategory.NOT_FOUND, "业务系统不存在。"),
+    INCIDENT_NOT_FOUND(ErrorCategory.NOT_FOUND, "故障不存在。"),
+    INCIDENT_STATE_CONFLICT(ErrorCategory.CONFLICT, "当前故障状态不允许执行该操作。"),
+    INCIDENT_VERSION_CONFLICT(ErrorCategory.CONFLICT, "故障已被其他操作更新，请刷新后重试。"),
+    RESOURCE_NOT_IN_SYSTEM(ErrorCategory.RULE_VIOLATION, "指定的组件不属于该业务系统。"),
     /** credentialRef 无法解析为可用凭据（08 TASK-009）；属部署配置错误，不在 05 §93 公开目录。 */
     SECRET_NOT_FOUND(ErrorCategory.INTERNAL, "所需凭据未配置，请检查部署环境。"),
     /** 未预期的程序错误；不属于 05 §93 业务目录，仅作兜底。 */

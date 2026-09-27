@@ -16,6 +16,11 @@ public final class Correlation {
         return "corr_" + UUID.randomUUID().toString().replace("-", "");
     }
 
+    /** 当前线程的 correlationId；不在请求或 Worker 作用域内时为 null。 */
+    public static String currentId() {
+        return MDC.get(MDC_KEY);
+    }
+
     /** 在当前线程设置 correlationId，关闭时恢复先前值。 */
     public static Scope open(String correlationId) {
         String previous = MDC.get(MDC_KEY);

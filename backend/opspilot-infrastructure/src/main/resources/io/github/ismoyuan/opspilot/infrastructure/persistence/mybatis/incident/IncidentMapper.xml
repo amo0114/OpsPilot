@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.incident.IncidentMapper">
+
+    <resultMap id="incidentRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.incident.IncidentRow">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="incident_key" javaType="String"/>
+            <arg column="managed_system_id" javaType="_long"/>
+            <arg column="title" javaType="String"/>
+            <arg column="description" javaType="String"/>
+            <arg column="impact_summary" javaType="String"/>
+            <arg column="status" javaType="String"/>
+            <arg column="created_source" javaType="String"/>
+            <arg column="created_by" javaType="String"/>
+            <arg column="started_at" javaType="java.time.LocalDateTime"/>
+            <arg column="detected_at" javaType="java.time.LocalDateTime"/>
+            <arg column="resolved_at" javaType="java.time.LocalDateTime"/>
+            <arg column="lock_version" javaType="_long"/>
+        </constructor>
+    </resultMap>
+
+    <sql id="columns">
+        id, incident_key, managed_system_id, title, description, impact_summary, status, created_source, created_by,
+        started_at, detected_at, resolved_at, lock_version
+    </sql>
+
+    <select id="selectById" resultMap="incidentRow">
+        SELECT <include refid="columns"/>
+        FROM incident
+        WHERE id = #{id}
+    </select>
+
+    <select id="selectByKey" resultMap="incidentRow">
+        SELECT <include refid="columns"/>
+        FROM incident
+        WHERE incident_key = #{incidentKey}
+          AND CAST(incident_key AS BINARY) = CAST(#{incidentKey} AS BINARY)
+    </select>
+
+    <select id="selectByIdForShare" resultMap="incidentRow">
+        SELECT <include refid="columns"/>
+        FROM incident
+        WHERE id = #{id}
+        FOR SHARE
+    </select>
+
+    <!-- 编号由应用层按 INC-YYYYMMDD-NNNN 生成，库内 CHECK 保证格式，因此前缀固定 13 个字符 -->
+    <select id="selectLastSequence" resultType="_int">
+        SELECT COALESCE(MAX(CAST(SUBSTRING(incident_key, 14) AS UNSIGNED)), 0)
+        FROM incident
+        WHERE incident_key LIKE CONCAT(#{dayPrefix}, '%')
+    </select>
+
+    <insert id="insertCreated">
+        INSERT INTO incident (incident_key, managed_system_id, title, description, impact_summary, status,
+                              created_source, created_by, started_at, detected_at, resolved_at, created_at,
+                              updated_at, lock_version)
+        VALUES (#{incidentKey}, #{managedSystemId}, #{title}, #{description}, #{impactSummary}, 'CREATED',
+                #{createdSource}, #{createdBy}, #{startedAt}, #{detectedAt}, NULL, #{createdAt}, #{createdAt}, 0)
+    </insert>
+
+    <insert id="insertAffectedResources">
+        INSERT INTO incident_affected_resource (incident_id, managed_resource_id, created_at)
+        VALUES
+        <foreach collection="managedResourceIds" item="resourceId" separator=",">
+            (#{incidentId}, #{resourceId}, #{createdAt})
+        </foreach>
+    </insert>
+
+    <update id="transition">
+        UPDATE incident
+        SET status = #{targetStatus},
+            resolved_at = #{resolvedAt},
+            updated_at = #{updatedAt},
+            lock_version = lock_version + 1
+        WHERE id = #{id}
+          AND status = #{expectedStatus}
+          AND lock_version = #{expectedVersion}
+    </update>
+</mapper>

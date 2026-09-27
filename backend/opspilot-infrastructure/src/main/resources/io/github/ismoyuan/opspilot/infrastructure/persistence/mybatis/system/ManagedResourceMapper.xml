@@ -30,6 +30,8 @@
         FROM managed_resource
         WHERE managed_system_id = #{managedSystemId}
           AND resource_key = #{resourceKey}
+          <!-- 列为 ai_ci：外部输入的键再按字节比较，大小写或重音变体不命中 -->
+          AND CAST(resource_key AS BINARY) = CAST(#{resourceKey} AS BINARY)
     </select>
 
     <select id="selectAllBySystemId" resultMap="managedResourceRow">

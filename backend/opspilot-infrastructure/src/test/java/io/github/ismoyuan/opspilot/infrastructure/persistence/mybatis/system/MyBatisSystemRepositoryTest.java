@@ -15,6 +15,7 @@ import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -136,6 +137,15 @@ class MyBatisSystemRepositoryTest {
                 assertThat(resource.status()).isEqualTo(status);
             }
         }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"SHORTLINK-REDIS", "Shortlink-redis", "shortlink-rédis", "shortlink-redis "})
+    void resourceKeyLookupIsExact(String variant) {
+        long system = insertSystem("shortlink-platform", "ACTIVE", null);
+        insertResource(system, "shortlink-redis", "CACHE", "ACTIVE");
+
+        assertThat(resources.findBySystemIdAndResourceKey(system, variant)).isEmpty();
     }
 
     @ParameterizedTest(name = "{0}")
