@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-27（B06 REVIEW，B06-R1 PASS，提交中）
+> 最近更新：2026-09-27（B06 DONE，df5bfdd；B07 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -32,9 +32,9 @@
 | TASK-022 | B04 | Observation Domain / Persistence | DONE | commit b927804（B04，Base f116f8e） | B04-V1 verify exit 0＋成员专项证据；B04-R1 PASS；见 PROGRESS「B04」 |
 | TASK-023 | B05 | Hypothesis Domain | DONE | commit 01c3395（B05，Base c3bdd7d） | B05-V1 verify exit 0＋HypothesisRulesTest 3/3、HypothesisIntegrationTest 5/5（真实 MySQL）；B05-R1 PASS；见 PROGRESS「B05」 |
 | TASK-024 | B05 | Evidence Domain | DONE | commit 01c3395（B05，Base c3bdd7d） | B05-V1 verify exit 0＋EvidenceIntegrationTest 6/6（真实 MySQL）；B05-R1 PASS；见 PROGRESS「B05」 |
-| TASK-025 | B06 | Diagnosis Domain | REVIEW | 未提交（B06，Base c1042ff；文件见 PROGRESS「B06」） | B06-V1 verify exit 0＋DiagnosisRulesTest 4/4；B06-R1 PASS |
-| TASK-026 | B06 | Diagnosis 创建事务 | REVIEW | 未提交（B06，Base c1042ff；文件见 PROGRESS「B06」） | B06-V1 verify exit 0＋DiagnosisIntegrationTest 5/5（真实 MySQL）；B06-R1 PASS |
-| TASK-027 | B06 | Investigation 技术详情 Query | REVIEW | 未提交（B06，Base c1042ff；文件见 PROGRESS「B06」） | B06-V1 verify exit 0＋InvestigationApiContractTest 2/2（真实 HTTP＋MySQL）；B06-R1 PASS |
+| TASK-025 | B06 | Diagnosis Domain | DONE | commit df5bfdd（B06，Base c1042ff） | B06-V1 verify exit 0＋DiagnosisRulesTest 4/4；B06-R1 PASS；见 PROGRESS「B06」 |
+| TASK-026 | B06 | Diagnosis 创建事务 | DONE | commit df5bfdd（B06，Base c1042ff） | B06-V1 verify exit 0＋DiagnosisIntegrationTest 5/5（真实 MySQL）；B06-R1 PASS；见 PROGRESS「B06」 |
+| TASK-027 | B06 | Investigation 技术详情 Query | DONE | commit df5bfdd（B06，Base c1042ff） | B06-V1 verify exit 0＋InvestigationApiContractTest 2/2（真实 HTTP＋MySQL）；B06-R1 PASS；见 PROGRESS「B06」 |
 | TASK-028 | B07 | Canonical AI Protocol Schema | TODO | — | NOT RUN |
 | TASK-029 | B07 | Capability Arguments Protocol | TODO | — | NOT RUN |
 | TASK-030 | B07 | Java Protocol Model | TODO | — | NOT RUN |
@@ -228,7 +228,7 @@
 
 ### B06 — Diagnosis 规则、持久化与调查查询
 
-- 状态：REVIEW（B06-R1 PASS，提交中）
+- 状态：DONE（B06-R1 PASS，已提交 df5bfdd）
 - 成员及顺序：TASK-025 → TASK-026 → TASK-027；批外前置：TASK-024 DONE（01c3395，B05-R1 PASS）
 - Base SHA：c1042ff3fd33b4783c9dcfb348092e54b74e9913
 - 范围：domain/diagnosis、domain/timeline（DIAGNOSIS_CREATED）、domain/error（05 §93 Diagnosis 码与运行控制处置码）；application/diagnosis（仓储端口与创建事务）、application/remediation（未执行 Plan 失效端口，Plan 模块前的占位）、application/investigation/query（只读查询）、EvidenceRepository 按 id 批量读取；infrastructure persistence/mybatis/diagnosis、调查查询 Mapper、remediation 占位实现及测试；web/investigation（05 §50～§56 只读 API）；docs/dev。沿用 V003，不新增迁移。明确不做：AI 协议与 COMPLETE_INVESTIGATION 解码（TASK-028～034）、Intent 分派与 run/Stop/deadline 准入（TASK-039～041）、确定性收束与 UNDETERMINED 自动生成（TASK-042）、Plan 表与真实 supersede（TASK-062/067）、Invocation 技术详情 API（05 §57～§58）、Incident 详情 currentAssessment/availableActions（TASK-085/086）
@@ -249,7 +249,7 @@
   - 测试首轮问题（均为测试侧，已修正）：Plan 端口调用次数断言写错（时间线失败那次也会调用），删除该冗余断言；契约测试以 java.sql.Timestamp 写 DATETIME 受 JVM +08:00 时区影响，改为与应用一致的 UTC LocalDateTime
   - NOT RUN：Invocation 技术详情 API（05 §57～§58，不在 TASK-027 列表）；真实 Plan supersede（TASK-062/067）；Stop/deadline 收束与 UNDETERMINED 自动生成（TASK-039～042）；并发创建 Diagnosis（Incident/Investigation 行锁串行＋UNIQUE(investigation_id, version_no) 保护，未压测）；Observation 载荷脱敏（写入方 TASK-049～051）；ccg 质量关卡（本机未安装）；MySQL 8.0.16、Windows mvnw.cmd NOT RUN
 - B06-R1：独立 Reviewer；范围 c1042ff 到当前工作树（含未跟踪文件）；结论 PASS，无 P0/P1；确认 PRIMARY/POSSIBLE 的支持证据须在本 Diagnosis 引用集合内且属同一 Investigation，创建事务按 Incident → Investigation 锁序、Diagnosis/引用/状态迁移/时间线同提交或同回滚，旧 run 拒绝、版本分配受父行锁保护，查询按 Investigation 隔离且不含恢复 Observation，历史 Diagnosis 返回冻结证据集；独立实测 `./mvnw -B clean verify` exit 0（domain 30、infrastructure 261、web 21、boot 4，无跳过），Enforcer、Spotless、`git diff --check` 通过；接受的取舍：收束原因必填、发起方按原因选择、不禁止 REFUTED 主假设、STALE_RUN_RESULT 仅内部使用，概览 durationSeconds 应理解为截顶的本轮预算用时而非实际总时长；非阻塞：Plan 占位由 TASK-062/067 处理，Stop/deadline 收束由 TASK-039～042 验证，Invocation 技术接口的后端实现须在 TASK-103 前明确归属批次（TASK-103 只含前端，不直接承接后端），Observation 列表 SQL 读取了最终不返回的 payload，可在后续查询调整时移除、本批无需补测；NOT VERIFIED：并发创建 Diagnosis、真实 Plan supersede、Stop/deadline 收束、独立 jar 冒烟、MySQL 8.0.16、Windows、ccg 关卡；Commit Recommendation YES
-- 提交：未提交（等待独立 Review 与用户提交授权）；范围外问题：见「待处理问题」中 B06 行
+- 提交：代码提交 df5bfdd7eb2fbcbddda9397752d68bdd847e5b4a（feat(investigation): versioned diagnosis and investigation queries (TASK-025–027)）；SHA 回填为后续 docs 提交；范围外问题：见「待处理问题」中 B06 行
 
 ### 工作流文档变更（不属于 TASK-012 或 B01）
 
