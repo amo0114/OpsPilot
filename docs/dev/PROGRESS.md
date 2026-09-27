@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-27（B02 REVIEW，待独立 Review）
+> 最近更新：2026-09-27（B02 DONE，c0deb3c；B03 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -23,8 +23,8 @@
 | TASK-013 | B01 | Incident Domain Model | DONE | commit ced26e0（B01，Base 5cc63e0） | B01-V1 verify exit 0＋成员专项证据；B01-R1 PASS；见 PROGRESS「B01」 |
 | TASK-014 | B01 | Incident 状态转换 Repository | DONE | commit ced26e0（B01，Base 5cc63e0） | B01-V1 verify exit 0＋成员专项证据；B01-R1 PASS；见 PROGRESS「B01」 |
 | TASK-015 | B01 | 创建 Incident | DONE | commit ced26e0（B01，Base 5cc63e0） | B01-V1 verify exit 0＋成员专项证据；B01-R1 PASS；见 PROGRESS「B01」 |
-| TASK-016 | B02 | 开始调查 | REVIEW | 未提交（B02，Base cb69440） | 见 PROGRESS「B02」成员进度与 B02-V1；B02-R1 PASS，待提交 |
-| TASK-017 | B02 | Continue Investigation | REVIEW | 未提交（B02，Base cb69440） | 见 PROGRESS「B02」成员进度与 B02-V1；B02-R1 PASS，待提交 |
+| TASK-016 | B02 | 开始调查 | DONE | commit c0deb3c（B02，Base cb69440） | B02-V1 verify exit 0＋成员专项证据；B02-R1 PASS；见 PROGRESS「B02」 |
+| TASK-017 | B02 | Continue Investigation | DONE | commit c0deb3c（B02，Base cb69440） | B02-V1 verify exit 0＋成员专项证据；B02-R1 PASS；见 PROGRESS「B02」 |
 | TASK-018 | B03 | Stop Investigation Request | TODO | — | NOT RUN |
 | TASK-019 | B03 | Cancel Incident | TODO | — | NOT RUN |
 | TASK-020 | B03 | Incident 基础 API | TODO | — | NOT RUN |
@@ -144,7 +144,7 @@
 
 ### B02 — 开始/继续调查与 run 初始化/切换
 
-- 状态：REVIEW（独立 Review PASS，已通过，待提交）
+- 状态：DONE（B02-R1 PASS，已提交 c0deb3c）
 - 成员及顺序：TASK-016 → TASK-017；批外前置：TASK-015 DONE（ced26e0，B01-R1 PASS）
 - Base SHA：cb694401f955ecf6a63202c19ad900dbeec38e18
 - 范围：domain/investigation、domain/timeline、domain/error；application/investigation（用例、Investigation 仓储端口、WorkDispatcher 端口）、application/incident（按 key 加锁读取）；infrastructure persistence/mybatis/investigation、incident、配置（InvestigationProperties）与占位 WorkDispatcher；测试；docs/dev。明确不做：Stop（TASK-018）、Cancel（TASK-019）、HTTP API（TASK-020）、真实 WorkDispatcher/Worker（TASK-035）、调查循环/Guard/AgentStep（TASK-037～043）、启动恢复（TASK-043）、VerificationFailed 回到调查（TASK-082）、Approval 表（TASK-062/066）
@@ -159,7 +159,7 @@
 - 专项证据/NOT RUN：真实 MySQL 原子性、提交后派发、并发准入见成员进度；boot jar＋demo 连 MySQL 8.4.11：health 200，beans 含 investigationApplicationService、deferredWorkDispatcher、investigationLimits、myBatisInvestigationRepository、clock（beans 端点仅本次命令行临时开放，容器已删除）；无 HTTP 入口（TASK-020），真实派发/Worker NOT RUN（TASK-035 起）；MySQL 8.0.16、Windows mvnw.cmd NOT RUN
 - 验证矩阵：016/017 真实 MySQL 用例（原子创建与回滚、run 字段、提交后派发、冲突与 PENDING 审批、2 线程并发 Start/Continue 各一胜者）；纯规则单测只覆盖 run 切换；批尾 `cd backend && ./mvnw -B clean verify`
 - B02-R1：独立 Reviewer；范围 cb69440 到当前工作树（含未跟踪文件），未发现 B03 功能提前进入；结论 PASS，无 P0/P1；实测 `./mvnw -B clean verify` exit 0（domain 23/23、infrastructure 198/198、web 21/21，无跳过），Enforcer、Spotless、`git diff --check` 通过，7 个真实 MySQL 用例覆盖原子性、回滚、提交后派发与并发准入；正式 boot jar＋demo＋独立 MySQL 8.4.11 health 200，新 Service/Repository/Dispatcher/配置 Bean 装配，临时进程与容器已清理；确认配置覆盖值写入库、Continue 不以当前配置覆盖原快照、回滚不派发、派发异常日志不含原始异常内容；真实 Worker、MySQL 8.0.16、Windows Wrapper NOT VERIFIED（不阻塞）；非阻塞意见（真实 PENDING Approval 同锁复核、占位 Dispatcher 由 TASK-035～043 接替）已在待处理问题；Commit Recommendation YES
-- 提交：未提交（Review 通过，按用户授权提交中）
+- 提交：代码提交 c0deb3ce63f47342a79cd8453ec3309df14c8a4a（feat(investigation): start and continue investigation runs (TASK-016–017)）；SHA 回填为后续 docs 提交
 
 ### 工作流文档变更（不属于 TASK-012 或 B01）
 
