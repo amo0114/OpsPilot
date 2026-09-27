@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-27（B07 REVIEW，B07-R2 PASS，提交中）
+> 最近更新：2026-09-27（B07 DONE，d796643；B08 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -35,11 +35,11 @@
 | TASK-025 | B06 | Diagnosis Domain | DONE | commit df5bfdd（B06，Base c1042ff） | B06-V1 verify exit 0＋DiagnosisRulesTest 4/4；B06-R1 PASS；见 PROGRESS「B06」 |
 | TASK-026 | B06 | Diagnosis 创建事务 | DONE | commit df5bfdd（B06，Base c1042ff） | B06-V1 verify exit 0＋DiagnosisIntegrationTest 5/5（真实 MySQL）；B06-R1 PASS；见 PROGRESS「B06」 |
 | TASK-027 | B06 | Investigation 技术详情 Query | DONE | commit df5bfdd（B06，Base c1042ff） | B06-V1 verify exit 0＋InvestigationApiContractTest 2/2（真实 HTTP＋MySQL）；B06-R1 PASS；见 PROGRESS「B06」 |
-| TASK-028 | B07 | Canonical AI Protocol Schema | REVIEW | 未提交（B07，Base 3df010c；文件见 PROGRESS「B07」） | B07-V2（backend verify exit 0、ai-runtime 检查 exit 0）；Schema×108 fixture 实测；B07-R1 PASS AFTER PATCH → B07-R2 PASS |
-| TASK-029 | B07 | Capability Arguments Protocol | REVIEW | 未提交（B07，Base 3df010c；文件见 PROGRESS「B07」） | B07-V2；六种参数与 Descriptor 正/负 fixture 三方一致；B07-R1 PASS AFTER PATCH → B07-R2 PASS |
-| TASK-030 | B07 | Java Protocol Model | REVIEW | 未提交（B07，Base 3df010c；文件见 PROGRESS「B07」） | B07-V2；AiProtocolContractTest 110/110；B07-R1 PASS AFTER PATCH → B07-R2 PASS |
-| TASK-031 | B07 | Python Pydantic Protocol | REVIEW | 未提交（B07，Base 3df010c；文件见 PROGRESS「B07」） | B07-V2；pytest 115 passed（含无基础设施客户端检查、模式一致性）；B07-R1 PASS AFTER PATCH → B07-R2 PASS |
-| TASK-032 | B07 | Java / Python Contract Test | REVIEW | 未提交（B07，Base 3df010c；文件见 PROGRESS「B07」） | B07-V2；同一 108 份 fixture 双端＋Schema 一致；B07-R1 PASS AFTER PATCH → B07-R2 PASS |
+| TASK-028 | B07 | Canonical AI Protocol Schema | DONE | commit d796643（B07，Base 3df010c） | B07-V2（backend verify exit 0、ai-runtime 检查 exit 0）；Schema×108 fixture 实测；B07-R1 PASS AFTER PATCH → B07-R2 PASS；见 PROGRESS「B07」 |
+| TASK-029 | B07 | Capability Arguments Protocol | DONE | commit d796643（B07，Base 3df010c） | B07-V2；六种参数与 Descriptor 正/负 fixture 三方一致；B07-R1 PASS AFTER PATCH → B07-R2 PASS；见 PROGRESS「B07」 |
+| TASK-030 | B07 | Java Protocol Model | DONE | commit d796643（B07，Base 3df010c） | B07-V2；AiProtocolContractTest 110/110；B07-R1 PASS AFTER PATCH → B07-R2 PASS；见 PROGRESS「B07」 |
+| TASK-031 | B07 | Python Pydantic Protocol | DONE | commit d796643（B07，Base 3df010c） | B07-V2；pytest 115 passed（含无基础设施客户端检查、模式一致性）；B07-R1 PASS AFTER PATCH → B07-R2 PASS；见 PROGRESS「B07」 |
+| TASK-032 | B07 | Java / Python Contract Test | DONE | commit d796643（B07，Base 3df010c） | B07-V2；同一 108 份 fixture 双端＋Schema 一致；B07-R1 PASS AFTER PATCH → B07-R2 PASS；见 PROGRESS「B07」 |
 | TASK-033 | B08 | AI Runtime 最小推理服务 | TODO | — | NOT RUN |
 | TASK-034 | B08 | Java AiRuntimeClient | TODO | — | NOT RUN |
 | TASK-035 | B09 | WorkDispatcher | TODO | — | NOT RUN |
@@ -253,7 +253,7 @@
 
 ### B07 — AI 协议、Java/Python 类型与共享契约测试
 
-- 状态：REVIEW（B07-R2 PASS，提交中）
+- 状态：DONE（B07-R2 PASS，已提交 d796643）
 - 成员及顺序：TASK-028 → TASK-029 → TASK-030 → TASK-031 → TASK-032；批外前置：TASK-027 DONE（df5bfdd，B06-R1 PASS）
 - Base SHA：3df010c5ff3ff06867efb36d773d2831ca7bb37d
 - 范围：contracts/ai-runtime/v1（4 份 Canonical JSON Schema＋共享正/负 fixture）；backend application/ai（AiDecisionPort 与 v1 协议 record/sealed/enum）、infrastructure/ai（严格 JSON 编解码）及合同测试；ai-runtime src/opspilot_ai/protocol/v1（Pydantic v2 判别联合）及合同测试；docs/dev。明确不做：Python 推理服务与 LLM 调用、/investigation/step 与 /remediation/draft 端点（TASK-033）、Java AI HTTP Client 与超时/认证（TASK-034）、Context Builder（TASK-037）、Intent 分派与业务校验（TASK-040；runNo 是否当前、引用是否存在不在协议层）、Capability Registry/Descriptor 构造（TASK-044/045）
@@ -292,7 +292,7 @@
   - 仓库根：`git diff --check` exit 0；scratchpad jsonschema 独立核对 4 份 Schema check_schema 通过、108 份 fixture 期望全部吻合
   - Reviewer 所见 InvestigationRunIntegrationTest "Connection is closed"：本机此次完整 verify 未复现（1 次）；B07 未改动该测试、数据库或 Spring 配置，不宣称已修复，记入待处理问题观察
 - B07-R2：独立 Reviewer 复核；Base 仍为 3df010c，范围至修复后工作树（含未跟踪文件）；结论 PASS，可提交，无新增阻塞项；确认三项原问题关闭：四类消息顶层 null 均返回 AI_OUTPUT_INVALID，Python 整数常量在转换前拒绝布尔与浮点，三方空白定义一致且关键字控制字符限制保留；独立实测 `./mvnw -B clean verify` exit 0（domain 30、infrastructure 371、web 21、boot 4，无跳过），Enforcer、Spotless 通过；ai-runtime 锁定同步与 Ruff 通过，pytest 115 passed（含 108 份共享 fixture）；`git diff --check` 通过；此前失败的 InvestigationRunIntegrationTest 本轮 14/14 通过，连接错误保留观察、不宣称根因已修复；端点、HTTP Client、真实 LLM、MySQL 8.0.16、Windows、ccg NOT VERIFIED；Commit Recommendation YES
-- 提交：未提交（等待独立 Review 与用户提交授权）；范围外问题：见「待处理问题」中 B07 行
+- 提交：代码提交 d796643d5d9e176822d9147a56f4dcb807e2ef1c（feat(ai-protocol): canonical v1 schemas, typed Java/Python models and contract tests (TASK-028–032)）；SHA 回填为后续 docs 提交；范围外问题：见「待处理问题」中 B07 行
 
 ### 工作流文档变更（不属于 TASK-012 或 B01）
 
