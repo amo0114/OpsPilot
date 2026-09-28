@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-28（B12 REVIEW，B12-R2 PASS，提交中）
+> 最近更新：2026-09-28（B12 DONE，c4c26c3；TASK-039 死锁修复待开始，B13 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -49,8 +49,8 @@
 | TASK-039 | B10 | Investigation Guard | DONE | commit c3ec168（B10，Base d87037f） | B10-V1 verify exit 0＋StepAdmissionRulesTest 5、InvestigationStepIntegrationTest（准入与 Stop 锁序部分）；B10-V2 verify exit 0；B10-R1 → B10-R2 PASS；见 PROGRESS「B10」 |
 | TASK-040 | B11 | Intent Dispatcher | DONE | commit 9f60002（B11，Base 57371cd） | B11-V1 verify exit 0＋InvestigationOrchestrationIntegrationTest（分派、拒绝审计与回滚隔离、引用范围、Capability Gate、失败阈值部分）、InvestigationStepIntegrationTest 9、boot 装配断言；真实进程端到端到 DIAGNOSED；B11-R1 PASS；见 PROGRESS「B11」 |
 | TASK-041 | B11 | Stop Race Handling | DONE | commit 9f60002（B11，Base 57371cd） | B11-V1 verify exit 0＋InvestigationOrchestrationIntegrationTest（Stop 先提交、AI 运行中 Stop 返回非 COMPLETE/REQUEST_CAPABILITY/COMPLETE、Capability 准入前 Stop、旧 run COMPLETE、取消部分）；B11-R1 PASS；见 PROGRESS「B11」 |
-| TASK-042 | B12 | Deterministic Termination | REVIEW | 未提交（B12，Base c204b1d；文件见 PROGRESS「B12」） | B12-V1/V2 verify exit 0＋StepAdmissionRulesTest 6、InvestigationOrchestrationIntegrationTest（四类收束、只冻结本轮 Evidence、持锁重判部分）；真实进程冒烟（USER_STOPPED、AI_RUNTIME_UNAVAILABLE）；B12-R1 P2（属 TASK-043）已修复，B12-R2 PASS；见 PROGRESS「B12」 |
-| TASK-043 | B12 | Investigation Startup Recovery | REVIEW | 未提交（B12，Base c204b1d；文件见 PROGRESS「B12」） | B12-V1 verify exit 0＋InvestigationOrchestrationIntegrationTest（重启中断标记与原 run 继续、Stop 后崩溃、停机过期、界限与补派发不误标、丢失唤醒部分）、StartupRecoveryCoordinatorTest 1（B12-R1 修复后改写）、DispatchRecovery* 4；B12-V2 verify exit 0；真实进程 kill -9 重启冒烟；B12-R1 P2 已修复，B12-R2 PASS；见 PROGRESS「B12」 |
+| TASK-042 | B12 | Deterministic Termination | DONE | commit c4c26c3（B12，Base c204b1d） | B12-V1/V2 verify exit 0＋StepAdmissionRulesTest 6、InvestigationOrchestrationIntegrationTest（四类收束、只冻结本轮 Evidence、持锁重判部分）；真实进程冒烟（USER_STOPPED、AI_RUNTIME_UNAVAILABLE）；B12-R1 P2（属 TASK-043）已修复，B12-R2 PASS；见 PROGRESS「B12」 |
+| TASK-043 | B12 | Investigation Startup Recovery | DONE | commit c4c26c3（B12，Base c204b1d） | B12-V1 verify exit 0＋InvestigationOrchestrationIntegrationTest（重启中断标记与原 run 继续、Stop 后崩溃、停机过期、界限与补派发不误标、丢失唤醒部分）、StartupRecoveryCoordinatorTest 1（B12-R1 修复后改写）、DispatchRecovery* 4；B12-V2 verify exit 0；真实进程 kill -9 重启冒烟；B12-R1 P2 已修复，B12-R2 PASS；见 PROGRESS「B12」 |
 | TASK-044 | B13 | CapabilityRegistry | TODO | — | NOT RUN |
 | TASK-045 | B13 | Capability Descriptor Builder | TODO | — | NOT RUN |
 | TASK-046 | B13 | Provider Resolver | TODO | — | NOT RUN |
@@ -411,7 +411,7 @@
 
 ### B12 — 调查终止与启动恢复
 
-- 状态：REVIEW（B12-R2 PASS，提交中）
+- 状态：DONE（B12-R2 PASS，已提交 c4c26c3）
 - 成员及顺序：TASK-042 → TASK-043；批外前置：TASK-041 DONE（9f60002，B11-R1 PASS）
 - Base SHA：c204b1df60399f5e699bd094a1ff7f2f27fb4b78
 - 范围：domain/investigation（本轮收束原因判定）、domain/error（运行记录错误码 PROCESS_INTERRUPTED）；application/investigation/orchestration（确定性收束服务、编排器在退出条件下收束）、application/investigation 启动中断记录、application/dispatch（启动恢复先记录旧进程中断再派发）、application/investigation/step（Step 中断更新端口）；infrastructure persistence（旧进程 RUNNING Step 与调查 Invocation 的中断更新、本轮 Evidence 查询）；测试（真实 MySQL；boot 合同测试隔离后台 Worker）；docs/dev。明确不做：Invocation 创建/Capability 准入与预算扣减（TASK-044～048）、COMPLETE 全链路与版本演进验收（TASK-059～061）、Execution/Verification 的恢复（TASK-071/073/079/083）、真实 LLM
@@ -436,7 +436,7 @@
 - B12-R1 修复：StartupRecoveryCoordinator.recordInterruptions 返回是否全部记录成功；recoverAfterStartup 与 redispatchPending 在未成功时不扫描、不派发并返回 0（WARN "Recovery dispatch postponed until interrupted work is recorded"），下一次补派发以构造时的同一界限重试，成功后才扫描派发，此后不再记录；类说明同步。StartupRecoveryCoordinatorTest 改写为 dispatchWaitsUntilTheInterruptedWorkIsRecorded：recorder 与扫描、派发写入同一事件序列，断言启动时只有 record（返回 0）、首次补派发 record→scan→dispatch、第二次补派发只 scan→dispatch，两次界限相同
 - B12-V2（修复后最终代码树，本机实测）：修复后先跑受影响测试 `./mvnw -B -pl opspilot-infrastructure test -Dtest='InvestigationOrchestrationIntegrationTest,DispatchRecovery*,StartupRecoveryCoordinatorTest'` exit 0（21＋1＋3＋1＝26/26；首次尝试时本机 swap 用尽、测试 JVM 启动 380 s 后被工具超时终止 exit 137，结果不计，释放后重跑）；backend `./mvnw -B clean verify` 2026-09-28 09:24～09:31 UTC exit 0，Enforcer 与 6 模块 spotless:check 通过；domain 36/36、infrastructure 436/436（InvestigationOrchestrationIntegrationTest 21、StartupRecoveryCoordinatorTest 1、DispatchRecovery* 4）、web 21/21、boot 5/5，无跳过；日志无 "Connection is closed"，本次未出现 surefire 退出等待告警；`git diff --check` exit 0，未跟踪文件无行尾空白。真实进程冒烟未重跑（修复只改变中断记录失败时的派发时机，成功路径与 B12-V1 冒烟相同；失败路径由单测覆盖）
 - B12-R2：独立 Reviewer 复审；Base 仍为 c204b1d；结论 PASS，可提交，原 P2 已修复，无新增阻塞项；确认中断标记失败时启动与周期扫描都不扫描、不派发，重试保持原界限、全部成功后才派发且之后不重复标记，测试直接验证完整调用顺序；独立实测 MySQL 编排与恢复相关测试 26/26（无跳过）、专项 verify exit 0，Enforcer 与 Spotless 正常执行，`git diff --check` 与未跟踪文件空白检查通过；本轮未重跑完整构建与真实进程冒烟，分别沿用 B12-V2 与 B12-V1；B12 完成后开始约定的 TASK-039 死锁独立修复（只改 Step 编号查询/插入，保留事务与 Investigation 行锁，加跨调查并发回归，不引入通用重试），修复后送审，暂不开始 B13；Commit Recommendation YES
-- 提交：未提交（B12-R2 PASS，提交中）；范围外问题：见「待处理问题」中 B12 行
+- 提交：代码提交 c4c26c3883e03287f055b88a0378c059198bdbad（feat(investigation): deterministic termination and startup recovery (TASK-042–043)）；SHA 回填为后续 docs 提交；范围外问题：见「待处理问题」中 B12 行
 
 ### 工作流文档变更（不属于 TASK-012 或 B01）
 
