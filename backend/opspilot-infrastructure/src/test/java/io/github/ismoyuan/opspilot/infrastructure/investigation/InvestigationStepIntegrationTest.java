@@ -11,8 +11,11 @@ import io.github.ismoyuan.opspilot.application.ai.protocol.v1.ProposeHypothesis;
 import io.github.ismoyuan.opspilot.application.investigation.InvestigationApplicationService;
 import io.github.ismoyuan.opspilot.application.investigation.StopInvestigationCommand;
 import io.github.ismoyuan.opspilot.application.investigation.step.AgentStepRecorder;
+import io.github.ismoyuan.opspilot.application.investigation.step.IntentApplier;
+import io.github.ismoyuan.opspilot.application.investigation.step.IntentDisposition;
 import io.github.ismoyuan.opspilot.application.investigation.step.StepAdmission;
 import io.github.ismoyuan.opspilot.application.investigation.step.StepAdmissionService;
+import io.github.ismoyuan.opspilot.application.investigation.step.StepDecisionOutcome;
 import io.github.ismoyuan.opspilot.application.investigation.step.StepOutcome;
 import io.github.ismoyuan.opspilot.domain.error.ErrorCode;
 import io.github.ismoyuan.opspilot.domain.investigation.StepAdmissionRejection;
@@ -44,6 +47,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mysql.MySQLContainer;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * 真实 MySQL 上验证 AgentStep 生命周期与原子准入（08 TASK-038～039、07 §41～§42）：准入登记 RUNNING、step_no 跨 run 单调；
@@ -241,9 +246,11 @@ class InvestigationStepIntegrationTest {
         investigations.stopInvestigation(new StopInvestigationCommand(key, 0, "demo-user"));
 
         assertRejected(1, StepAdmissionRejection.STOP_REQUESTED);
-        StepOutcome outcome = recorder.recordDecision(inFlight.step().id(), decision(inFlight, 1), 120);
+        StepDecisionOutcome result = recorder.recordDecision(inFlight.step().id(), decision(inFlight, 1), 120, APPLY);
 
-        assertThat(outcome).isEqualTo(new StepOutcome(true, true, 0));
+        // 同轮已 Stop：非 COMPLETE 的输出只审计（TASK-041），不调用处置
+        assertThat(result.outcome()).isEqualTo(new StepOutcome(true, true, 0));
+        assertThat(result.disposition().outcome()).isEqualTo(IntentDisposition.Outcome.STOPPED);
         assertThat(step(inFlight.step().id())).containsEntry("status", "SUCCEEDED");
     }
 
@@ -255,9 +262,10 @@ class InvestigationStepIntegrationTest {
                 proposal(admitted, 1),
                 new AiCallMetadata("openai-compatible", "demo-model", "investigation-v1", 1200, 85));
 
-        StepOutcome outcome = recorder.recordDecision(admitted.step().id(), decision, 842);
+        StepDecisionOutcome result = recorder.recordDecision(admitted.step().id(), decision, 842, APPLY);
 
-        assertThat(outcome).isEqualTo(new StepOutcome(true, false, 0));
+        assertThat(result.outcome()).isEqualTo(new StepOutcome(true, false, 0));
+        assertThat(result.disposition().outcome()).isEqualTo(IntentDisposition.Outcome.APPLIED);
         assertThat(step(admitted.step().id()))
                 .containsEntry("status", "SUCCEEDED")
                 .containsEntry("intent_type", "PROPOSE_HYPOTHESIS")
@@ -274,8 +282,10 @@ class InvestigationStepIntegrationTest {
                 "SELECT output_payload FROM agent_step_record WHERE id = ?",
                 String.class,
                 admitted.step().id());
-        assertThat(new AiProtocolCodec().decode(payload, InvestigationStepResponse.class))
+        JsonNode output = JsonMapper.builder().build().readTree(payload);
+        assertThat(new AiProtocolCodec().decode(output.get("response").toString(), InvestigationStepResponse.class))
                 .isEqualTo(decision.response());
+        assertThat(output.at("/disposition/outcome").asString()).isEqualTo("APPLIED");
         assertThat(failures()).isZero();
     }
 
@@ -294,7 +304,8 @@ class InvestigationStepIntegrationTest {
                 new InvestigationStepResponse.ProposeHypothesisStep(
                         1, 1, mismatched.step().id() + 100, new ProposeHypothesis("Redis 异常", null)),
                 AiCallMetadata.UNKNOWN);
-        assertThat(recorder.recordDecision(mismatched.step().id(), wrongEcho, 30))
+        assertThat(recorder.recordDecision(mismatched.step().id(), wrongEcho, 30, APPLY)
+                        .outcome())
                 .isEqualTo(new StepOutcome(true, false, 2));
 
         assertThat(step(timeout)).containsEntry("status", "FAILED").containsEntry("error_code", "AI_RUNTIME_TIMEOUT");
@@ -313,8 +324,9 @@ class InvestigationStepIntegrationTest {
         run(2, NOW.minusSeconds(5));
         update("consecutive_ai_failure_count = 1");
 
-        assertThat(recorder.recordDecision(oldRun.step().id(), decision(oldRun, 1), 90))
-                .isEqualTo(new StepOutcome(false, false, 1));
+        StepDecisionOutcome late = recorder.recordDecision(oldRun.step().id(), decision(oldRun, 1), 90, APPLY);
+        assertThat(late.outcome()).isEqualTo(new StepOutcome(false, false, 1));
+        assertThat(late.disposition().outcome()).isEqualTo(IntentDisposition.Outcome.NOT_CURRENT);
         assertThat(recorder.recordFailure(oldRunFailing.step().id(), ErrorCode.AI_OUTPUT_INVALID, "invalid", 90))
                 .isEqualTo(new StepOutcome(false, false, 1));
 
@@ -328,7 +340,7 @@ class InvestigationStepIntegrationTest {
     @Test
     void aStepCanOnlyBeFinishedOnce() {
         StepAdmission.Admitted admitted = admitted(1);
-        recorder.recordDecision(admitted.step().id(), decision(admitted, 1), 10);
+        recorder.recordDecision(admitted.step().id(), decision(admitted, 1), 10, APPLY);
         Map<String, Object> finished = step(admitted.step().id());
 
         assertThatThrownBy(() -> recorder.recordFailure(admitted.step().id(), ErrorCode.AI_RUNTIME_TIMEOUT, "late", 10))
@@ -336,6 +348,10 @@ class InvestigationStepIntegrationTest {
         assertThat(step(admitted.step().id())).isEqualTo(finished);
         assertThat(failures()).isZero();
     }
+
+    /** 记录器测试不涉及领域写入：处置者只报告已处置。 */
+    private static final IntentApplier APPLY =
+            (step, response) -> IntentDisposition.of(IntentDisposition.Outcome.APPLIED);
 
     private StepAdmission.Admitted admitted(int runNo) {
         StepAdmission result = admission.admit(incident, runNo);

@@ -1,7 +1,7 @@
 package io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.agentstep;
 
 import io.github.ismoyuan.opspilot.application.ai.AiCallMetadata;
-import io.github.ismoyuan.opspilot.application.ai.protocol.v1.InvestigationStepResponse;
+import io.github.ismoyuan.opspilot.application.investigation.step.AgentStepOutput;
 import io.github.ismoyuan.opspilot.application.investigation.step.AgentStepRepository;
 import io.github.ismoyuan.opspilot.domain.agentstep.AgentStep;
 import io.github.ismoyuan.opspilot.domain.agentstep.AgentStepStatus;
@@ -14,7 +14,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 import org.springframework.stereotype.Repository;
 
-/** 输出按 v1 协议编码保存（只有结构化 Intent，不含 Prompt 或思维链，07 §79）。 */
+/** 输出保存 v1 结构化提议与处置（{@link AgentStepOutput}），不含 Prompt 或思维链（07 §79）。 */
 @Repository
 class MyBatisAgentStepRepository implements AgentStepRepository {
 
@@ -44,15 +44,11 @@ class MyBatisAgentStepRepository implements AgentStepRepository {
 
     @Override
     public void markSucceeded(
-            AgentStep running,
-            InvestigationStepResponse response,
-            AiCallMetadata metadata,
-            long latencyMs,
-            Instant finishedAt) {
+            AgentStep running, AgentStepOutput output, AiCallMetadata metadata, long latencyMs, Instant finishedAt) {
         int updated = mapper.markSucceeded(
                 running.id(),
-                response.intentType().name(),
-                codec.encode(response),
+                output.response().intentType().name(),
+                codec.encode(output),
                 metadata.modelProvider(),
                 metadata.modelName(),
                 metadata.promptTemplateVersion(),

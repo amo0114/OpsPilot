@@ -115,6 +115,14 @@ public record Investigation(
         return Optional.empty();
     }
 
+    /**
+     * 调查 OBSERVE 调用的准入规则（07 §42、§56）：与单步准入相同的 run、Stop、截止与本轮额度检查，不含连续 AI 失败阈值。
+     */
+    public Optional<StepAdmissionRejection> checkCapabilityAdmission(int expectedRunNo, Instant now) {
+        return checkStepAdmission(expectedRunNo, now)
+                .filter(reason -> reason != StepAdmissionRejection.AI_FAILURE_THRESHOLD_REACHED);
+    }
+
     /** 本次 AI 调用最多等待：单步超时与本轮剩余时间的较小值（05 §89）；只在准入通过后使用。 */
     public Duration stepWaitLimit(Instant now) {
         Duration remaining = Duration.between(now, currentRunDeadline());

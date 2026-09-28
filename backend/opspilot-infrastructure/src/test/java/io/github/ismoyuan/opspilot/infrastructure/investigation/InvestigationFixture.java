@@ -74,6 +74,11 @@ record InvestigationFixture(
      * @return Observation id
      */
     long observation(long incident, Long investigationId, String name) {
+        return observationInRun(incident, investigationId, name, 1);
+    }
+
+    /** 同 {@link #observation}，调查观测的来源调用属于 {@code runNo}。 */
+    long observationInRun(long incident, Long investigationId, String name, int runNo) {
         boolean recovery = investigationId == null;
         jdbc.update(
                 "INSERT INTO capability_invocation (incident_id, investigation_id, recovery_verification_id, run_no,"
@@ -86,7 +91,7 @@ record InvestigationFixture(
                 incident,
                 investigationId,
                 recovery ? 9001L : null,
-                recovery ? null : 1,
+                recovery ? null : runNo,
                 recovery ? "stream-lag-drained" : null,
                 recovery ? 1 : null,
                 streamId(),

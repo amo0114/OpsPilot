@@ -1,7 +1,6 @@
 package io.github.ismoyuan.opspilot.application.investigation.step;
 
 import io.github.ismoyuan.opspilot.application.ai.AiCallMetadata;
-import io.github.ismoyuan.opspilot.application.ai.protocol.v1.InvestigationStepResponse;
 import io.github.ismoyuan.opspilot.domain.agentstep.AgentStep;
 import io.github.ismoyuan.opspilot.domain.error.ErrorCode;
 import java.time.Instant;
@@ -22,16 +21,13 @@ public interface AgentStepRepository {
     Optional<AgentStep> findByIdForUpdate(long stepId);
 
     /**
-     * RUNNING → SUCCEEDED：保存 intent_type、协议输出（output_schema_version=1）、调用元数据与耗时。不保存 Prompt 或思维链。
+     * RUNNING → SUCCEEDED：保存 intent_type、结构化提议与处置（{@link AgentStepOutput}，output_schema_version=1）、调用元数据与耗时。
+     * 不保存 Prompt 或思维链。
      *
      * @throws IllegalStateException 该 Step 已不是 RUNNING
      */
     void markSucceeded(
-            AgentStep running,
-            InvestigationStepResponse response,
-            AiCallMetadata metadata,
-            long latencyMs,
-            Instant finishedAt);
+            AgentStep running, AgentStepOutput output, AiCallMetadata metadata, long latencyMs, Instant finishedAt);
 
     /**
      * RUNNING → FAILED：保存错误码与固定的、已脱敏的错误文案。

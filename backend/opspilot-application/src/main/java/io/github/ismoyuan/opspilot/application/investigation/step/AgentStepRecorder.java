@@ -56,8 +56,13 @@ public class AgentStepRecorder {
         this.clock = clock;
     }
 
-    /** 已通过协议校验的结果；回显不符则按 AI_OUTPUT_INVALID 失败记录。 */
-    public StepOutcome recordDecision(long stepId, InvestigationStepDecision decision, long latencyMs) {
+    /**
+     * 记录已通过协议校验的结果并在同一事务内处置它（08 TASK-040～041、07 §41、§43）。回显不符按 AI_OUTPUT_INVALID 失败记录。
+     * 处置规则在持锁后判定：不是当前 run 或 Incident 已不在调查 → NOT_CURRENT；同轮已 Stop 且不是 COMPLETE_INVESTIGATION
+     * → STOPPED；两者都只审计。其余交给 {@code applier}，其领域写入与 Step 审计一起提交。
+     */
+    public StepDecisionOutcome recordDecision(
+            long stepId, InvestigationStepDecision decision, long latencyMs, IntentApplier applier) {
         return transaction.execute(status -> {
             Locked locked = lock(stepId);
             InvestigationStepResponse response = decision.response();
@@ -69,12 +74,40 @@ public class AgentStepRecorder {
                         "AI step echo does not match the registered step",
                         latencyMs,
                         now);
-                return count(locked, FailureEffect.COUNT, now);
+                return new StepDecisionOutcome(
+                        count(locked, FailureEffect.COUNT, now),
+                        IntentDisposition.rejected(ErrorCode.AI_OUTPUT_INVALID.name(), "ECHO_MISMATCH"));
             }
+            IntentDisposition disposition = dispose(locked, response, applier);
             Instant now = now();
-            steps.markSucceeded(locked.step(), response, decision.metadata(), latencyMs, now);
-            return count(locked, FailureEffect.RESET, now);
+            steps.markSucceeded(
+                    locked.step(), new AgentStepOutput(response, disposition), decision.metadata(), latencyMs, now);
+            return new StepDecisionOutcome(count(locked, FailureEffect.RESET, now), disposition);
         });
+    }
+
+    private static IntentDisposition dispose(Locked locked, InvestigationStepResponse response, IntentApplier applier) {
+        Investigation investigation = locked.investigation();
+        if (!current(locked)) {
+            return IntentDisposition.of(IntentDisposition.Outcome.NOT_CURRENT);
+        }
+        if (investigation.stopRequested()
+                && !(response instanceof InvestigationStepResponse.CompleteInvestigationStep)) {
+            return IntentDisposition.of(IntentDisposition.Outcome.STOPPED);
+        }
+        return applier.apply(
+                new ActiveStep(
+                        locked.step().id(),
+                        locked.incident().id(),
+                        investigation.id(),
+                        investigation.currentRunNo(),
+                        investigation.currentRunStartedAt()),
+                response);
+    }
+
+    private static boolean current(Locked locked) {
+        return locked.incident().status() == IncidentStatus.INVESTIGATING
+                && locked.investigation().currentRunNo() == locked.step().runNo();
     }
 
     /**
@@ -123,9 +156,7 @@ public class AgentStepRecorder {
 
     private StepOutcome count(Locked locked, FailureEffect effect, Instant now) {
         Investigation investigation = locked.investigation();
-        boolean current = locked.incident().status() == IncidentStatus.INVESTIGATING
-                && investigation.currentRunNo() == locked.step().runNo();
-        if (!current) {
+        if (!current(locked)) {
             return new StepOutcome(false, investigation.stopRequested(), investigation.consecutiveAiFailureCount());
         }
         Investigation updated = switch (effect) {

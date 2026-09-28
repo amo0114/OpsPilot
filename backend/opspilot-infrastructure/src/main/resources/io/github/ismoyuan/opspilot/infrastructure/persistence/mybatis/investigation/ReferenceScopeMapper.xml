@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  AI 在当前 run 可引用的范围（08 TASK-037/040、B10-R1）：本轮来源的观测、本轮建立的证据，以及以前 Diagnosis 冻结引用的证据与其观测。
+  观测范围不经由本轮新证据扩展，因此旧 run 未被诊断引用的迟到结果无法借新 Evidence 进入。
+-->
+<mapper namespace="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.investigation.ReferenceScopeMapper">
+
+    <select id="countObservationInScope" resultType="_int">
+        SELECT COUNT(*)
+        FROM observation o
+        JOIN capability_invocation ci ON ci.id = o.capability_invocation_id
+        WHERE o.id = #{observationId}
+          AND o.investigation_id = #{investigationId}
+          AND (ci.run_no = #{runNo}
+               OR EXISTS (SELECT 1
+                          FROM evidence e
+                          JOIN diagnosis_evidence_ref r ON r.evidence_id = e.id
+                          JOIN diagnosis d ON d.id = r.diagnosis_id
+                          WHERE e.observation_id = o.id AND d.investigation_id = #{investigationId}))
+    </select>
+
+    <select id="selectEvidenceInScope" resultType="long">
+        SELECT e.id
+        FROM evidence e
+        WHERE e.investigation_id = #{investigationId}
+          AND e.id IN
+          <foreach collection="evidenceIds" item="id" open="(" separator="," close=")">#{id}</foreach>
+          AND (e.created_at &gt;= #{runStartedAt}
+               OR EXISTS (SELECT 1
+                          FROM diagnosis_evidence_ref r
+                          JOIN diagnosis d ON d.id = r.diagnosis_id
+                          WHERE r.evidence_id = e.id AND d.investigation_id = #{investigationId}))
+    </select>
+</mapper>

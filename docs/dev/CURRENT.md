@@ -1,21 +1,21 @@
 # 当前工作
 
-更新时间：2026-09-27（本地）
+更新时间：2026-09-28（本地）
 仓库/分支：/root/projects/OpsPilot-V0.1-IMPLEMENTATION，main；无 remote
-当前批次/状态：B10 DONE（代码 c3ec168，B10-R2 PASS）；B11 未开始
-成员 Task 及顺序：B10 = TASK-037 → 039（均 DONE）；下一批 B11 = TASK-040 → 041
-固定 Base SHA：B10 为 d87037f02713f47d65722a5117428f021d882b1e；B11 开工时读取当时 HEAD
-批外前置核实：B11 开工时按 08 核对 TASK-040/041 的批外前置
-允许目录 / 明确不做 / 关键不变量：B11 开工时按 BATCH-PLAN 与 08 TASK-040/041 固定
-本批规格章节及 PROGRESS 记录：PROGRESS「B10」
-当前成员及位置：无进行中批次
-已实现并针对性验证的成员：B01～B10 全部
-未完成 / 未执行验证：TASK-040 须实现 Observation/Evidence 引用边界（不能依赖 ContextBuilder）；结果记录器 StepOutcome 与 Intent 处理在同一结果事务组合（TASK-040/041）；context_digest；SingleFlight 延后唤醒为最后到达者、真实 Worker 须校验期望 run；真实 LLM 接入归属（TASK-058 前）；锁等待测试以 sleep 推断（触及时改为直接确认）；InvestigationRunIntegrationTest "Connection is closed" 观察项；其余见 PROGRESS 待处理问题；MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
-未提交文件（含既有无关修改）：无（本交接卡与 PROGRESS 回填随 docs(progress) 提交）
-共同验证及独立 Review 证据编号：B10-V1、B10-V2、B10-R1、B10-R2
+当前批次/状态：B11 REVIEW（B11-R1 PASS，提交中）
+成员 Task 及顺序：B11 = TASK-040 → TASK-041
+固定 Base SHA：57371cd5e3d217c5a60b3a4f112307b361bc9617
+批外前置核实：TASK-039 DONE（c3ec168，B10-R2 PASS）；开工时工作树干净
+允许目录 / 明确不做 / 关键不变量：见 PROGRESS「B11」（编排循环、Intent 分派与引用范围、run/Stop 处置、Fake Capability Gate；不做收束、启动恢复、Registry/Invocation/Provider）
+本批规格章节及 PROGRESS 记录：PROGRESS「B11」
+当前成员及位置：TASK-040、TASK-041 均 REVIEW（B11-R1 PASS），提交中
+已实现并针对性验证的成员：TASK-040、TASK-041（B11-V1 verify exit 0；真实进程端到端到 DIAGNOSED）
+未完成 / 未执行验证：NOT RUN 项见 PROGRESS「B11」（收束 TASK-042、启动恢复 TASK-043、真实 Capability/LLM 等）
+未提交文件（含既有无关修改）：见 PROGRESS「B11」本批修改文件（含 PlaceholderInvestigationWorker → UnwiredInvestigationWorker 已暂存的更名）、docs/dev/CURRENT.md、docs/dev/PROGRESS.md；无既有无关修改
+共同验证及独立 Review 证据编号：B11-V1、B11-R1 PASS
 下一步具体动作：
-1. 等待用户指示开始 B11（Intent 分派与 Stop 竞态处理，TASK-040 → 041）
-2. B11 开工：核对 Git、固定 HEAD 为 Base；Intent 分派复用 B05/B06 用例（Hypothesis/Evidence/Diagnosis）与 B10 准入/记录，限定引用范围，旧 run 结果只审计，同轮 Stop 后仅合法 COMPLETE 可收束；REQUEST_CAPABILITY 暂用 Fake Capability Port 但须经合同层
+1. 提交代码（`feat(investigation): orchestration loop, intent dispatch and stop race handling (TASK-040–041)`），回填 SHA 后批次与成员标 DONE
+2. 不推送；未获指示不开始 B12
 本地启动 Demo 配置：在 OPSPILOT_DB_* 环境变量基础上加 --spring.profiles.active=demo
 
 后续 UI 约定（TASK-096/099 实施）：
