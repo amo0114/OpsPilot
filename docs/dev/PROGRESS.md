@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-28（B14 REVIEW，B14-R2 PASS，提交中）
+> 最近更新：2026-09-28（B14 DONE，d97c442；B15 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -54,8 +54,8 @@
 | TASK-044 | B13 | CapabilityRegistry | DONE | commit 36fd25a（B13，Base 6c5d10d） | B13-V1/V2 verify exit 0＋CapabilityRegistryTest 5；B13-R2 PASS；见 PROGRESS「B13」 |
 | TASK-045 | B13 | Capability Descriptor Builder | DONE | commit 36fd25a（B13，Base 6c5d10d） | B13-V1/V2 verify exit 0＋CapabilityDescriptorIntegrationTest（受控空间、序列化不泄漏、超长 MetricKey 只隐藏该能力）、boot demo Seed 断言；真实进程请求捕获；B13-R1 P2 已修复，B13-R2 PASS；见 PROGRESS「B13」 |
 | TASK-046 | B13 | Provider Resolver | DONE | commit 36fd25a（B13，Base 6c5d10d） | B13-V1/V2 verify exit 0＋CapabilityDescriptorIntegrationTest（唯一、0 个、歧义、选择器不可用）；B13-R2 PASS；见 PROGRESS「B13」 |
-| TASK-047 | B14 | Canonical JSON + Duplicate Guard | REVIEW | 未提交（B14，Base 711c6db；文件见 PROGRESS「B14」） | B14-V1/V2 verify exit 0＋JacksonCanonicalJsonWriterTest 4、CapabilityExecutionIntegrationTest（Duplicate 部分）；B14-R1 两个 P2 已修复，B14-R2 PASS；见 PROGRESS「B14」 |
-| TASK-048 | B14 | CapabilityInvocation 执行骨架 | REVIEW | 未提交（B14，Base 711c6db；文件见 PROGRESS「B14」） | B14-V1/V2 verify exit 0＋WindowResolverTest 3、CapabilityExecutionIntegrationTest（准入、窗口解析、拒绝、结果事务、执行骨架、Discarded 部分）；B14-R1 两个 P2 已修复，B14-R2 PASS；见 PROGRESS「B14」 |
+| TASK-047 | B14 | Canonical JSON + Duplicate Guard | DONE | commit d97c442（B14，Base 711c6db） | B14-V1/V2 verify exit 0＋JacksonCanonicalJsonWriterTest 4、CapabilityExecutionIntegrationTest（Duplicate 部分）；B14-R1 两个 P2 已修复，B14-R2 PASS；见 PROGRESS「B14」 |
+| TASK-048 | B14 | CapabilityInvocation 执行骨架 | DONE | commit d97c442（B14，Base 711c6db） | B14-V1/V2 verify exit 0＋WindowResolverTest 3、CapabilityExecutionIntegrationTest（准入、窗口解析、拒绝、结果事务、执行骨架、Discarded 部分）；B14-R1 两个 P2 已修复，B14-R2 PASS；见 PROGRESS「B14」 |
 | TASK-049 | B15 | Sanitizer Framework | TODO | — | NOT RUN |
 | TASK-050 | B15 | RawResultStore | TODO | — | NOT RUN |
 | TASK-051 | B15 | ObservationExtractor | TODO | — | NOT RUN |
@@ -470,7 +470,7 @@
 
 ### B14 — 调用去重、预算与 OBSERVE 执行准入
 
-- 状态：REVIEW（B14-R2 PASS，提交中）
+- 状态：DONE（B14-R2 PASS，已提交 d97c442）
 - 成员及顺序：TASK-047 → TASK-048；批外前置：TASK-046 DONE（36fd25a，B13-R2 PASS）
 - Base SHA：711c6db0384ce41206f02f871e3284034ccf0fa3
 - 范围：application（唯一 CanonicalJsonWriter 端口、调查 Duplicate Guard、统一 OBSERVE 准入短事务、Invocation 结果短事务、执行服务骨架与 CapabilityInvoker 端口；与 Descriptor 共用的能力可用性判定）、domain（本轮 Capability 计数、Capability 相关错误码）、infrastructure（Canonical JSON 实现、Invocation 持久化与去重候选查询、去重窗口配置）；真实 MySQL 测试；docs/dev。明确不做：Sanitizer（TASK-049）、RawResultStore（TASK-050）、ObservationExtractor（TASK-051）、各真实 Provider（TASK-052～057）与 CapabilityInvoker 的生产实现、编排器 REQUEST_CAPABILITY 接入执行服务（TASK-058，B11 的 Fake Gate 保持到 058）；恢复采样的准入（按 Verification/criterion/sample 身份、不扣 run 预算、不经调查去重窗口）由 TASK-078 在 TASK-074 的 recovery_verification 表之后实现，本批结果事务按 Invocation 身份落账、不假设调查上下文
@@ -494,7 +494,7 @@
 - B14-R1 修复修改文件：application/capability/{CapabilityAdmissionService,AdmittedInvocation,CapabilityExecutionResult,CapabilityExecutionService}，新增 application/capability/{QueryWindow,ResolvedWindow,WindowResolver}；测试新增 infrastructure capability/WindowResolverTest，CapabilityExecutionIntegrationTest 新增 2 例
 - B14-V2（修复后最终代码树，本机实测）：WindowResolverTest 3/3（LAST_15/30 比较窗口等长紧邻、LAST_60＋比较拒绝、LAST_60 不比较可用；INCIDENT_CONTEXT 20 分钟＋比较为 [now−20,now) 与 [now−40,now−20)、30 分钟＋比较可用、45 分钟＋比较拒绝、45 分钟不比较为 45 分钟窗口、3 小时前取 60 分钟；开始时刻为 now 或未来时拒绝）；CapabilityExecutionIntegrationTest 13/13，新增 incidentContextIsResolvedAtAdmissionBeforeAnyBudgetIsSpent（开始于 45 分钟前 INCIDENT_CONTEXT＋比较拒绝、无调用、计数 0/0；20 分钟前准入，AdmittedInvocation.window 当前窗口约 20 分钟、终点为准入时刻，前一窗口等长紧邻，计数 1/1）与 lateOutcomesOfAnAlreadyFinishedCallAreReportedAsDiscarded（执行期间被中断标记后返回成功或失败 → 均为 Discarded，库内均为 FAILED/PROCESS_INTERRUPTED、无 Observation）；变异检查（已还原）：准入不因窗口非法而拒绝＋未写入结果报告为 Succeeded → 3 例失败（首次尝试因变异代码未格式化致安装失败、测试仍用旧构建，结果作废后重做）；backend `./mvnw -B clean verify` 2026-09-28 15:44～15:50 UTC exit 0，Enforcer 与 6 模块 spotless:check 通过；domain 41/41、infrastructure 471/471、web 21/21、boot 6/6，无跳过；日志无 "Connection is closed"，本次无 surefire 退出等待告警；`git diff --check` exit 0，未跟踪文件无行尾空白；真实进程冒烟 NOT RUN（原因同 B14-V1）
 - B14-R2：独立 Reviewer 复审；Base 仍为 711c6db；结论 PASS，无阻塞项，两个 P2 均已解决；确认窗口在登记调用与扣预算前解析与校验，执行方收到同一解析结果，60 分钟上限与无有效窗口时拒绝的说明可接受；未写入的成功、失败与补记结果均返回 Discarded；独立实测窗口规则、执行集成、Canonical JSON 与 Descriptor 测试 27/27（无跳过），专项 verify、Enforcer、Spotless、`git diff --check` 通过；真实进程冒烟 NOT RUN；Commit Recommendation YES
-- 提交：未提交（B14-R2 PASS，提交中）
+- 提交：代码提交 d97c442b2dc6db762a6b34f3fb165b9dc1f000fc（feat(capability): canonical json, duplicate guard and observe admission skeleton (TASK-047–048)）；SHA 回填为后续 docs 提交；范围外问题：见「待处理问题」中 B14 行
 
 ### TASK-039 修复 — 准入 step_no 分配并发死锁（B12-R1/R2 约定）
 

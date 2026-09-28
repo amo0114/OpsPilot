@@ -2,21 +2,20 @@
 
 更新时间：2026-09-28（本地）
 仓库/分支：/root/projects/OpsPilot-V0.1-IMPLEMENTATION，main；无 remote
-当前批次/状态：B14 REVIEW（B14-R2 PASS，提交中）
-成员 Task 及顺序：B14 = TASK-047 → TASK-048
-固定 Base SHA：711c6db0384ce41206f02f871e3284034ccf0fa3
-批外前置核实：TASK-046 DONE（36fd25a，B13-R2 PASS）；开工时工作树干净
-允许目录 / 明确不做 / 关键不变量：见 PROGRESS「B14」（Canonical JSON、Duplicate Guard、OBSERVE 准入与结果事务、执行骨架；不做 Sanitizer/RawResult/Extractor/真实 Provider/编排器接入/恢复采样准入）
+当前批次/状态：B14 DONE（代码 d97c442，B14-R2 PASS）；B15 未开始
+成员 Task 及顺序：B14 = TASK-047 → 048（均 DONE）；下一批 B15 = TASK-049 → 051
+固定 Base SHA：B14 为 711c6db0384ce41206f02f871e3284034ccf0fa3；B15 开工时读取当时 HEAD
+批外前置核实：B15 开工时按 08 核对其成员的批外前置
+允许目录 / 明确不做 / 关键不变量：B15 开工时按 BATCH-PLAN 与 08 固定
 本批规格章节及 PROGRESS 记录：PROGRESS「B14」
-当前成员及位置：TASK-047、TASK-048 均 REVIEW；B14-R1 P2（INCIDENT_CONTEXT 窗口未在准入解析、迟到结果被报告为成功）已修复
-已实现并针对性验证的成员：TASK-047～048（B14-V1、B14-V2 verify exit 0）
-未完成 / 未执行验证：B14-R2；真实进程冒烟 NOT RUN（执行服务尚未接入调查循环，属 TASK-058）；其余 NOT RUN 与交接事项见 PROGRESS「B14」及待处理问题
-未提交文件（含既有无关修改）：见 PROGRESS「B14」本批修改文件（12 个修改＋28 个未跟踪 backend 文件，含 B14-R1 修复新增 4 个）、docs/dev/CURRENT.md、docs/dev/PROGRESS.md；无既有无关修改
-共同验证及独立 Review 证据编号：B14-V1、B14-V2（完成）；B14-R1（2 个 P2，已修复）；B14-R2（NOT RUN）
+当前成员及位置：无进行中批次
+已实现并针对性验证的成员：B01～B14 全部，及 B13 前的独立修复
+未完成 / 未执行验证：Sanitizer/RawResultStore/Extractor（TASK-049～051，下一批）；真实 Provider 与 Invoker（TASK-052～057，须使用 AdmittedInvocation.window 并自行约束超时）；执行服务接入调查循环与孤立 Invocation 补完（TASK-058）；恢复采样准入（TASK-078）；AgentStep 输出信封读取方（TASK-100 等）；真实 LLM 接入归属（TASK-058 前）；观察项：surefire 退出等待、Hikari 连接已关闭告警、Fake runtime 偶发 AI_RUNTIME_UNAVAILABLE；其余见 PROGRESS 待处理问题；MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
+未提交文件（含既有无关修改）：无（本交接卡与 PROGRESS 回填随 docs(progress) 提交）
+共同验证及独立 Review 证据编号：B14-V1、B14-V2、B14-R1、B14-R2
 下一步具体动作：
-1. 独立 Reviewer 复审 Base 711c6db 到当前工作树（重点 WindowResolver、准入窗口校验与 Discarded 返回）
-2. PASS 后按用户授权提交（建议 `feat(capability): canonical json, duplicate guard and observe admission skeleton (TASK-047–048)`），回填 SHA 后批次与成员标 DONE
-3. 不推送；未获指示不开始 B15
+1. 等待用户指示开始 B15（TASK-049 → 051，脱敏、原始结果保存与确定性提取）
+2. 不推送
 本地启动 Demo 配置：在 OPSPILOT_DB_* 环境变量基础上加 --spring.profiles.active=demo
 
 后续 UI 约定（TASK-096/099 实施）：
