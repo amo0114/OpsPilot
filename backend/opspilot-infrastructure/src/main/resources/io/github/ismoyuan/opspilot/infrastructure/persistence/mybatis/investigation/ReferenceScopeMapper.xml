@@ -32,4 +32,13 @@
                           JOIN diagnosis d ON d.id = r.diagnosis_id
                           WHERE r.evidence_id = e.id AND d.investigation_id = #{investigationId}))
     </select>
+
+    <!-- 收束时冻结的本轮事实（08 TASK-042）：只取本轮建立的证据，不复制以前 Diagnosis 的引用 -->
+    <select id="selectCurrentRunEvidence" resultType="long">
+        SELECT e.id
+        FROM evidence e
+        WHERE e.investigation_id = #{investigationId}
+          AND e.created_at &gt;= #{runStartedAt}
+        ORDER BY e.id
+    </select>
 </mapper>

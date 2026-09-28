@@ -7,6 +7,7 @@ import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import org.springframework.stereotype.Repository;
 
@@ -30,10 +31,16 @@ class MyBatisReferenceScopeQuery implements ReferenceScopeQuery {
             return Set.of();
         }
         Set<Long> outside = new HashSet<>(evidenceIds);
-        outside.removeAll(mapper.selectEvidenceInScope(
-                investigationId,
-                LocalDateTime.ofInstant(runStartedAt.truncatedTo(ChronoUnit.MILLIS), ZoneOffset.UTC),
-                evidenceIds));
+        outside.removeAll(mapper.selectEvidenceInScope(investigationId, utc(runStartedAt), evidenceIds));
         return Set.copyOf(outside);
+    }
+
+    @Override
+    public List<Long> currentRunEvidenceIds(long investigationId, Instant runStartedAt) {
+        return List.copyOf(mapper.selectCurrentRunEvidence(investigationId, utc(runStartedAt)));
+    }
+
+    private static LocalDateTime utc(Instant instant) {
+        return LocalDateTime.ofInstant(instant.truncatedTo(ChronoUnit.MILLIS), ZoneOffset.UTC);
     }
 }

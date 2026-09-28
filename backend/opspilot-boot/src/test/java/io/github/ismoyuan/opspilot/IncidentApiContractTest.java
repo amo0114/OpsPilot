@@ -3,6 +3,7 @@ package io.github.ismoyuan.opspilot;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.ismoyuan.opspilot.application.dispatch.InvestigationWorker;
+import io.github.ismoyuan.opspilot.application.dispatch.WorkDispatcher;
 import io.github.ismoyuan.opspilot.application.investigation.orchestration.InvestigationOrchestrator;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -17,6 +18,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mysql.MySQLContainer;
@@ -25,7 +27,8 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * 真实 HTTP＋真实 MySQL（demo Seed）上的 Incident API 契约（05 §8～§11、§20～§28、§33、§93～§94，08 TASK-020）。
- * 只验证已实现的动作与事务合同；202 不表示后台调查已完成（调查 Worker 在后台独立运行，未配置 AI 时按失败阈值退出）。
+ * 只验证已实现的动作与事务合同；202 不表示后台调查已完成。派发器为替身：后台调查会在未配置 AI 时按失败阈值收束为 DIAGNOSED，
+ * 与这里逐步断言的状态和版本竞争；调查循环、收束与恢复由 infrastructure 的编排集成测试与真实进程冒烟覆盖。
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("demo")
@@ -52,6 +55,9 @@ class IncidentApiContractTest {
 
     @Autowired
     InvestigationWorker investigationWorker;
+
+    @MockitoBean
+    WorkDispatcher dispatcher;
 
     private final HttpClient http = HttpClient.newHttpClient();
     private final JsonMapper json = JsonMapper.builder().build();

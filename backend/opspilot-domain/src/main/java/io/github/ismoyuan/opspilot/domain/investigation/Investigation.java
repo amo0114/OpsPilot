@@ -1,5 +1,6 @@
 package io.github.ismoyuan.opspilot.domain.investigation;
 
+import io.github.ismoyuan.opspilot.domain.diagnosis.TerminationReason;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
@@ -121,6 +122,14 @@ public record Investigation(
     public Optional<StepAdmissionRejection> checkCapabilityAdmission(int expectedRunNo, Instant now) {
         return checkStepAdmission(expectedRunNo, now)
                 .filter(reason -> reason != StepAdmissionRejection.AI_FAILURE_THRESHOLD_REACHED);
+    }
+
+    /**
+     * 本轮已出现的确定性退出条件对应的收束原因（01 §11、08 TASK-042），判定顺序同单步准入：Stop、截止、额度、连续 AI 失败。
+     * 不是当前 run 或尚无退出条件时为空。
+     */
+    public Optional<TerminationReason> terminationReason(int runNo, Instant now) {
+        return checkStepAdmission(runNo, now).flatMap(StepAdmissionRejection::terminationReason);
     }
 
     /** 本次 AI 调用最多等待：单步超时与本轮剩余时间的较小值（05 §89）；只在准入通过后使用。 */

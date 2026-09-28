@@ -2,6 +2,7 @@ package io.github.ismoyuan.opspilot.application.investigation.orchestration;
 
 import java.time.Instant;
 import java.util.Collection;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -18,4 +19,7 @@ public interface ReferenceScopeQuery {
      * @return 给定 id 中不在范围内的（不属于该调查、既非本轮建立也未被冻结，或不存在）
      */
     Set<Long> evidenceOutOfScope(long investigationId, Instant runStartedAt, Collection<Long> evidenceIds);
+
+    /** 本轮建立的 Evidence（created_at ≥ runStartedAt），按 id 升序；不含以前 Diagnosis 冻结的历史。 */
+    List<Long> currentRunEvidenceIds(long investigationId, Instant runStartedAt);
 }

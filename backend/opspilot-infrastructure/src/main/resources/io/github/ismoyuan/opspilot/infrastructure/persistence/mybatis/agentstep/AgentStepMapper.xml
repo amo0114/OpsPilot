@@ -69,4 +69,26 @@
         WHERE id = #{id}
           AND status = 'RUNNING'
     </update>
+
+    <select id="selectRunningStartedBefore" resultType="long">
+        SELECT id
+        FROM agent_step_record
+        WHERE status = 'RUNNING'
+          AND started_at &lt; #{startedBefore}
+        ORDER BY id
+    </select>
+
+    <!-- 进程中断：耗时未知记空；仍以 RUNNING 为条件，不覆盖已终结的 Step -->
+    <update id="markInterrupted">
+        UPDATE agent_step_record
+        SET status = 'FAILED',
+            error_code = #{errorCode},
+            error_message = #{errorMessage},
+            latency_ms = NULL,
+            finished_at = #{finishedAt},
+            updated_at = #{finishedAt}
+        WHERE id IN
+          <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+          AND status = 'RUNNING'
+    </update>
 </mapper>

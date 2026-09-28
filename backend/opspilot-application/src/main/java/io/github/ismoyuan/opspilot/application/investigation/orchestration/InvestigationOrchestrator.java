@@ -27,11 +27,12 @@ import org.springframework.stereotype.Service;
  *   <li>提交后调用 AI，等待不超过 min(单步超时, 本轮剩余时间)，不透明重试；
  *   <li>结果短事务：记录 Step，并按 run/Stop 规则处置一个主 Intent（TASK-040～041）；
  *   <li>REQUEST_CAPABILITY 在结果提交后经 Capability 准入（当前为 Fake Gate）；
- *   <li>下一步，直到准入拒绝、结果不再属于当前 run、同轮已 Stop 或 Diagnosis 已形成。
+ *   <li>下一步，直到准入拒绝、结果不再属于当前 run 或 Diagnosis 已形成。
  * </ol>
  *
- * 只推进给定 run：run 已切换、Incident 已不在调查时直接退出。本轮退出条件（Stop、到期、额度、连续失败）下的确定性收束属 TASK-042，
- * 启动恢复属 TASK-043；此前准入拒绝后本 Worker 只退出。
+ * 只推进给定 run：run 已切换、Incident 已不在调查时直接退出。准入因本轮退出条件（Stop、到期、额度、连续 AI 失败）被拒时，
+ * 交 {@link InvestigationTerminator} 确定性收束（TASK-042）；同轮 Stop 后的在途结果只审计，随后同样经准入拒绝进入收束，
+ * 不再问 AI。启动恢复与补派发也只派发原 run，由这里的准入决定继续还是收束（TASK-043）。
  */
 @Service
 public class InvestigationOrchestrator implements InvestigationWorker {
@@ -44,6 +45,7 @@ public class InvestigationOrchestrator implements InvestigationWorker {
     private final AgentStepRecorder recorder;
     private final IntentDispatcher intents;
     private final CapabilityExecutionPort capabilities;
+    private final InvestigationTerminator terminator;
 
     public InvestigationOrchestrator(
             InvestigationContextBuilder contexts,
@@ -51,13 +53,15 @@ public class InvestigationOrchestrator implements InvestigationWorker {
             AiDecisionPort ai,
             AgentStepRecorder recorder,
             IntentDispatcher intents,
-            CapabilityExecutionPort capabilities) {
+            CapabilityExecutionPort capabilities,
+            InvestigationTerminator terminator) {
         this.contexts = contexts;
         this.admissions = admissions;
         this.ai = ai;
         this.recorder = recorder;
         this.intents = intents;
         this.capabilities = capabilities;
+        this.terminator = terminator;
     }
 
     @Override
@@ -80,6 +84,9 @@ public class InvestigationOrchestrator implements InvestigationWorker {
                     incidentId,
                     runNo,
                     rejected.reason());
+            if (rejected.reason().terminationReason().isPresent()) {
+                terminator.terminate(incidentId, runNo);
+            }
             return false;
         }
         StepAdmission.Admitted admitted = (StepAdmission.Admitted) admission;
@@ -100,7 +107,9 @@ public class InvestigationOrchestrator implements InvestigationWorker {
         }
         StepDecisionOutcome result = recorder.recordDecision(stepId, decision, elapsedMillis(started), intents);
         return switch (result.disposition().outcome()) {
-            case NOT_CURRENT, STOPPED -> false;
+            case NOT_CURRENT -> false;
+            // 下一次准入以 STOP_REQUESTED 拒绝并收束，不再问 AI
+            case STOPPED -> true;
             case APPLIED -> !(decision.response() instanceof InvestigationStepResponse.CompleteInvestigationStep);
             case REJECTED -> true;
             case ACCEPTED -> {

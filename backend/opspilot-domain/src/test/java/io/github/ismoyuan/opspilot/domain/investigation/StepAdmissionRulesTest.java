@@ -8,7 +8,7 @@ import java.time.Instant;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
-/** 07 §42、01 §11、05 §89：单步准入的拒绝条件与顺序、截止边界、等待上限与连续 AI 失败计数。 */
+/** 07 §42、01 §11、05 §89：单步准入的拒绝条件与顺序、截止边界、等待上限、连续 AI 失败计数与收束原因。 */
 class StepAdmissionRulesTest {
 
     private static final Instant RUN_START = Instant.parse("2026-09-28T08:00:00Z");
@@ -78,6 +78,18 @@ class StepAdmissionRulesTest {
                 .contains(TerminationReason.CAPABILITY_BUDGET_EXHAUSTED);
         assertThat(StepAdmissionRejection.AI_FAILURE_THRESHOLD_REACHED.terminationReason())
                 .contains(TerminationReason.AI_RUNTIME_UNAVAILABLE);
+    }
+
+    /** 收束原因取第一个成立的退出条件；旧 run 或尚无退出条件时不收束（08 TASK-042）。 */
+    @Test
+    void terminationReasonIsTheFirstExitConditionOfTheCurrentRun() {
+        Instant late = RUN_START.plusSeconds(480);
+
+        assertThat(investigation(12, 3, true).terminationReason(2, late)).contains(TerminationReason.USER_STOPPED);
+        assertThat(investigation(12, 3, false).terminationReason(2, RUN_START))
+                .contains(TerminationReason.CAPABILITY_BUDGET_EXHAUSTED);
+        assertThat(investigation(12, 3, true).terminationReason(1, late)).isEmpty();
+        assertThat(investigation(11, 2, false).terminationReason(2, RUN_START)).isEmpty();
     }
 
     @Test

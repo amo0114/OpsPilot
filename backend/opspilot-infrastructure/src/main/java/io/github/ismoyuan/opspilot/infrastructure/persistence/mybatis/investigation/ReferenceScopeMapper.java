@@ -19,4 +19,7 @@ interface ReferenceScopeMapper {
             @Param("investigationId") long investigationId,
             @Param("runStartedAt") LocalDateTime runStartedAt,
             @Param("evidenceIds") Collection<Long> evidenceIds);
+
+    List<Long> selectCurrentRunEvidence(
+            @Param("investigationId") long investigationId, @Param("runStartedAt") LocalDateTime runStartedAt);
 }

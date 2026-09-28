@@ -3,6 +3,7 @@ package io.github.ismoyuan.opspilot.infrastructure.dispatch;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 
+import io.github.ismoyuan.opspilot.application.ClockConfiguration;
 import io.github.ismoyuan.opspilot.application.dispatch.InvestigationWorker;
 import io.github.ismoyuan.opspilot.application.dispatch.StartupRecoveryCoordinator;
 import org.junit.jupiter.api.Test;
@@ -27,7 +28,7 @@ import org.testcontainers.mysql.MySQLContainer;
             "opspilot.dispatcher.recovery-scan-interval-seconds=1"
         })
 @Testcontainers
-@Import(StartupRecoveryCoordinator.class)
+@Import({StartupRecoveryCoordinator.class, ClockConfiguration.class})
 class DispatchRecoverySchedulerIntegrationTest {
 
     @Container

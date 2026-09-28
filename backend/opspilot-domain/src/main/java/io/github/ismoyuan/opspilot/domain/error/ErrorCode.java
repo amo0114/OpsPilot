@@ -30,6 +30,11 @@ public enum ErrorCode {
     AI_RUNTIME_TIMEOUT(ErrorCategory.DEPENDENCY_TIMEOUT, "AI 服务响应超时，请稍后重试。"),
     /** AI Runtime 输出不符合 v1 协议（05 §93）：未知字段、联合类型不合法、缺字段或越界；不回显原始输出。 */
     AI_OUTPUT_INVALID(ErrorCategory.DEPENDENCY_INVALID_RESPONSE, "AI 服务返回的内容不符合协议。"),
+    /**
+     * 运行记录 error_code（05 §93、07 §54～§55）：旧 Java 进程退出时仍为 RUNNING 的 AgentStep 或只读调用，由启动恢复写入；
+     * 不计入模型连续失败，不由公开 API 返回。
+     */
+    PROCESS_INTERRUPTED(ErrorCategory.INTERNAL, "处理进程在该步骤完成前重启，该步骤未完成。"),
     /** credentialRef 无法解析为可用凭据（08 TASK-009）；属部署配置错误，不在 05 §93 公开目录。 */
     SECRET_NOT_FOUND(ErrorCategory.INTERNAL, "所需凭据未配置，请检查部署环境。"),
     /** 未预期的程序错误；不属于 05 §93 业务目录，仅作兜底。 */

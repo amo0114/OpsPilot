@@ -35,4 +35,12 @@ public interface AgentStepRepository {
      * @throws IllegalStateException 该 Step 已不是 RUNNING
      */
     void markFailed(AgentStep running, ErrorCode errorCode, String safeMessage, long latencyMs, Instant finishedAt);
+
+    /**
+     * 启动恢复（07 §54）：startedBefore 之前开始、仍为 RUNNING 的 Step → FAILED/PROCESS_INTERRUPTED，耗时未知记空。
+     * 不改连续 AI 失败计数。
+     *
+     * @return 标记条数
+     */
+    int markInterrupted(Instant startedBefore, String safeMessage, Instant finishedAt);
 }

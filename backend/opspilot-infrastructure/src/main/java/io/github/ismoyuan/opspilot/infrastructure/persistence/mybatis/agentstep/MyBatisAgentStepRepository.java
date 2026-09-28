@@ -11,6 +11,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Repository;
 
@@ -64,6 +65,15 @@ class MyBatisAgentStepRepository implements AgentStepRepository {
             AgentStep running, ErrorCode errorCode, String safeMessage, long latencyMs, Instant finishedAt) {
         requireRunning(
                 running, mapper.markFailed(running.id(), errorCode.name(), safeMessage, latencyMs, utc(finishedAt)));
+    }
+
+    @Override
+    public int markInterrupted(Instant startedBefore, String safeMessage, Instant finishedAt) {
+        List<Long> running = mapper.selectRunningStartedBefore(utc(startedBefore));
+        if (running.isEmpty()) {
+            return 0;
+        }
+        return mapper.markInterrupted(running, ErrorCode.PROCESS_INTERRUPTED.name(), safeMessage, utc(finishedAt));
     }
 
     private static void requireRunning(AgentStep step, int updated) {

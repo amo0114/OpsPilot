@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.ismoyuan.opspilot.application.diagnosis.CreateDiagnosisCommand;
 import io.github.ismoyuan.opspilot.application.diagnosis.DiagnosisApplicationService;
+import io.github.ismoyuan.opspilot.application.dispatch.WorkDispatcher;
 import io.github.ismoyuan.opspilot.application.evidence.EvidenceApplicationService;
 import io.github.ismoyuan.opspilot.application.evidence.LinkEvidenceCommand;
 import io.github.ismoyuan.opspilot.application.hypothesis.HypothesisApplicationService;
@@ -32,6 +33,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mysql.MySQLContainer;
@@ -43,6 +45,7 @@ import tools.jackson.databind.json.JsonMapper;
  * （恢复观测不出现）、过滤与分页、Observation 详情原样输出结构化载荷、Diagnosis 详情返回创建时冻结的 Evidence
  * （后来新增 Evidence 不改变旧版本）、未开始调查与不存在时的错误码，且没有写入口。
  * 领域事实经真实用例服务写入（Start/Continue 经 HTTP），Invocation/Observation 由 SQL 预置（其写入口属 TASK-048/051）。
+ * 派发器为替身，后台调查不会与这里预置的事实竞争（未配置 AI 时它会收束为 DIAGNOSED）。
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("demo")
@@ -75,6 +78,9 @@ class InvestigationApiContractTest {
 
     @Autowired
     DiagnosisApplicationService diagnoses;
+
+    @MockitoBean
+    WorkDispatcher dispatcher;
 
     private final HttpClient http = HttpClient.newHttpClient();
     private final JsonMapper json = JsonMapper.builder().build();
