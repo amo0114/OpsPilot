@@ -2,20 +2,20 @@
 
 更新时间：2026-09-28（本地）
 仓库/分支：/root/projects/OpsPilot-V0.1-IMPLEMENTATION，main；无 remote
-当前批次/状态：B11 REVIEW（B11-R1 PASS，提交中）
-成员 Task 及顺序：B11 = TASK-040 → TASK-041
-固定 Base SHA：57371cd5e3d217c5a60b3a4f112307b361bc9617
-批外前置核实：TASK-039 DONE（c3ec168，B10-R2 PASS）；开工时工作树干净
-允许目录 / 明确不做 / 关键不变量：见 PROGRESS「B11」（编排循环、Intent 分派与引用范围、run/Stop 处置、Fake Capability Gate；不做收束、启动恢复、Registry/Invocation/Provider）
+当前批次/状态：B11 DONE（代码 9f60002，B11-R1 PASS）；B12 未开始
+成员 Task 及顺序：B11 = TASK-040 → TASK-041（均 DONE）；下一批 B12 = TASK-042 → 043
+固定 Base SHA：B11 为 57371cd5e3d217c5a60b3a4f112307b361bc9617；B12 开工时读取当时 HEAD
+批外前置核实：B12 开工时按 08 核对其成员的批外前置
+允许目录 / 明确不做 / 关键不变量：B12 开工时按 BATCH-PLAN 与 08 固定
 本批规格章节及 PROGRESS 记录：PROGRESS「B11」
-当前成员及位置：TASK-040、TASK-041 均 REVIEW（B11-R1 PASS），提交中
-已实现并针对性验证的成员：TASK-040、TASK-041（B11-V1 verify exit 0；真实进程端到端到 DIAGNOSED）
-未完成 / 未执行验证：NOT RUN 项见 PROGRESS「B11」（收束 TASK-042、启动恢复 TASK-043、真实 Capability/LLM 等）
-未提交文件（含既有无关修改）：见 PROGRESS「B11」本批修改文件（含 PlaceholderInvestigationWorker → UnwiredInvestigationWorker 已暂存的更名）、docs/dev/CURRENT.md、docs/dev/PROGRESS.md；无既有无关修改
-共同验证及独立 Review 证据编号：B11-V1、B11-R1 PASS
+当前成员及位置：无进行中批次
+已实现并针对性验证的成员：B01～B11 全部
+未完成 / 未执行验证：准入拒绝后的确定性收束与重复补派发唤醒（TASK-042）；启动中断标记（TASK-043）；AgentStep 输出信封的读取方（TASK-100 等）；Fake Capability 无步数上限（TASK-047/048）；真实 LLM 接入归属（TASK-058 前）；surefire 退出等待观察项；其余见 PROGRESS 待处理问题；MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
+未提交文件（含既有无关修改）：无（本交接卡与 PROGRESS 回填随 docs(progress) 提交）
+共同验证及独立 Review 证据编号：B11-V1、B11-R1
 下一步具体动作：
-1. 提交代码（`feat(investigation): orchestration loop, intent dispatch and stop race handling (TASK-040–041)`），回填 SHA 后批次与成员标 DONE
-2. 不推送；未获指示不开始 B12
+1. 等待用户指示开始 B12（TASK-042 → 043，调查终止与启动恢复）
+2. 不推送
 本地启动 Demo 配置：在 OPSPILOT_DB_* 环境变量基础上加 --spring.profiles.active=demo
 
 后续 UI 约定（TASK-096/099 实施）：

@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-28（B11 REVIEW，B11-R1 PASS，提交中）
+> 最近更新：2026-09-28（B11 DONE，9f60002；B12 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -47,8 +47,8 @@
 | TASK-037 | B10 | Investigation Context Builder | DONE | commit c3ec168（B10，Base d87037f） | B10-V1 verify exit 0＋InvestigationContextIntegrationTest 3（真实 MySQL，含序列化泄漏检查）；B10-V2 verify exit 0；B10-R1 → B10-R2 PASS；见 PROGRESS「B10」 |
 | TASK-038 | B10 | AgentStep 生命周期 | DONE | commit c3ec168（B10，Base d87037f） | B10-V1 verify exit 0、ai-runtime 检查 exit 0＋InvestigationStepIntegrationTest（记录部分）、HttpAiRuntimeClientTest 18、pytest 145；跨语言元数据冒烟；B10-V2 verify exit 0；B10-R1 → B10-R2 PASS；见 PROGRESS「B10」 |
 | TASK-039 | B10 | Investigation Guard | DONE | commit c3ec168（B10，Base d87037f） | B10-V1 verify exit 0＋StepAdmissionRulesTest 5、InvestigationStepIntegrationTest（准入与 Stop 锁序部分）；B10-V2 verify exit 0；B10-R1 → B10-R2 PASS；见 PROGRESS「B10」 |
-| TASK-040 | B11 | Intent Dispatcher | REVIEW | 未提交（B11，Base 57371cd；文件见 PROGRESS「B11」） | B11-V1 verify exit 0＋InvestigationOrchestrationIntegrationTest（分派、拒绝审计与回滚隔离、引用范围、Capability Gate、失败阈值部分）、InvestigationStepIntegrationTest 9、boot 装配断言；真实进程端到端到 DIAGNOSED；B11-R1 PASS；见 PROGRESS「B11」 |
-| TASK-041 | B11 | Stop Race Handling | REVIEW | 未提交（B11，Base 57371cd；文件见 PROGRESS「B11」） | B11-V1 verify exit 0＋InvestigationOrchestrationIntegrationTest（Stop 先提交、AI 运行中 Stop 返回非 COMPLETE/REQUEST_CAPABILITY/COMPLETE、Capability 准入前 Stop、旧 run COMPLETE、取消部分）；B11-R1 PASS；见 PROGRESS「B11」 |
+| TASK-040 | B11 | Intent Dispatcher | DONE | commit 9f60002（B11，Base 57371cd） | B11-V1 verify exit 0＋InvestigationOrchestrationIntegrationTest（分派、拒绝审计与回滚隔离、引用范围、Capability Gate、失败阈值部分）、InvestigationStepIntegrationTest 9、boot 装配断言；真实进程端到端到 DIAGNOSED；B11-R1 PASS；见 PROGRESS「B11」 |
+| TASK-041 | B11 | Stop Race Handling | DONE | commit 9f60002（B11，Base 57371cd） | B11-V1 verify exit 0＋InvestigationOrchestrationIntegrationTest（Stop 先提交、AI 运行中 Stop 返回非 COMPLETE/REQUEST_CAPABILITY/COMPLETE、Capability 准入前 Stop、旧 run COMPLETE、取消部分）；B11-R1 PASS；见 PROGRESS「B11」 |
 | TASK-042 | B12 | Deterministic Termination | TODO | — | NOT RUN |
 | TASK-043 | B12 | Investigation Startup Recovery | TODO | — | NOT RUN |
 | TASK-044 | B13 | CapabilityRegistry | TODO | — | NOT RUN |
@@ -389,7 +389,7 @@
 
 ### B11 — Intent 分派与 Stop 竞态处理
 
-- 状态：REVIEW（B11-R1 PASS，提交中）
+- 状态：DONE（B11-R1 PASS，已提交 9f60002）
 - 成员及顺序：TASK-040 → TASK-041；批外前置：TASK-039 DONE（c3ec168，B10-R2 PASS）
 - Base SHA：57371cd5e3d217c5a60b3a4f112307b361bc9617
 - 范围：application/investigation（调查编排循环 InvestigationOrchestrator 作为真实 InvestigationWorker、Intent 分派与引用范围、结果事务内的 run/Stop 处置、Fake Capability 端口及其准入 Gate）、application/investigation/step（结果记录与处置、审计输出信封）、domain/investigation（Capability 准入规则）；infrastructure（引用范围查询、Step 输出信封编码、派发器取得 Worker 的方式）；测试；docs/dev。明确不做：确定性收束与 UNDETERMINED 生成（TASK-042）、启动中断标记（TASK-043）、Capability Registry/Descriptor/Provider/去重/Invocation 准入与预算扣减（TASK-044～048）、真实 Provider 与 Observation 生成（TASK-049～058）、真实 LLM
@@ -407,7 +407,7 @@
   - 真实进程端到端（2026-09-28 07:39～07:40 UTC）：临时容器 mysql:8.4.11（127.0.0.1:13399）＋`uv run uvicorn --factory opspilot_ai.main:app_from_env`（fake，随机 Token 只经环境变量）＋boot jar `--spring.profiles.active=demo`（OPSPILOT_AI_RUNTIME_URL/TOKEN 指向 uvicorn）；health UP；POST 创建 → CREATED v0；start-investigation → 202 INVESTIGATING v1；约 4 s 后详情 DIAGNOSED v2；库内 agent_step_record 1 行 SUCCEEDED/COMPLETE_INVESTIGATION、disposition APPLIED、model_provider fake/fake-fixed/investigation-v1、output_schema_version 1；diagnosis v1 run 1 UNDETERMINED/AGENT_COMPLETED；时间线 INCIDENT_CREATED、INVESTIGATION_STARTED、DIAGNOSIS_CREATED；uvicorn 1 次 POST /internal/v1/investigation/step；两端日志均不含 Token；boot、uvicorn 已按 PID 停止，端口释放，临时容器已删除
   - NOT RUN：确定性收束与 UNDETERMINED 生成（TASK-042）、启动中断标记与恢复（TASK-043）、真实 Capability 准入/Invocation/预算扣减/Provider（TASK-044～058）、真实 LLM、ai-runtime 检查（本批未修改 ai-runtime）、ccg 质量关卡（本机未安装）、MySQL 8.0.16、Windows mvnw.cmd
 - B11-R1：独立 Reviewer；范围 57371cd 到当前工作树（含已暂存更名与 15 个未跟踪文件）；结论 PASS，可提交，无提交前阻塞项；确认 AI 调用在事务外、Intent 写入与 Step 审计在同一结果事务提交，业务拒绝回滚到保存点后拒绝审计仍提交且循环可继续，Stop、取消与旧 run 处置符合合同、旧 run COMPLETE 不建 Diagnosis，B10 遗留的引用漏洞已在 AI 入口关闭，Fake Capability 如实返回未执行，TASK-042/043 与真实执行器的延后范围合理；独立实测真实 MySQL 编排测试 12/12、Step 测试 9/9，专项 verify exit 0，Enforcer 与 Spotless 正常执行，`git diff --check` 与未跟踪文件空白检查通过；本轮未重跑完整 backend、真实进程端到端与 Python，完整交付证据沿用 B11-V1；保留已记录衔接事项：后续 AgentStep 读取方按 {response, disposition} 解析，TASK-042 衔接退出后的确定性收束；Commit Recommendation YES
-- 提交：未提交（B11-R1 PASS，提交中）；范围外问题：见「待处理问题」中 B11 行
+- 提交：代码提交 9f60002fbd41f24f61cfa3c7c408826f41f3803e（feat(investigation): orchestration loop, intent dispatch and stop race handling (TASK-040–041)）；SHA 回填为后续 docs 提交；范围外问题：见「待处理问题」中 B11 行
 
 ### 工作流文档变更（不属于 TASK-012 或 B01）
 
