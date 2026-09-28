@@ -35,6 +35,11 @@ class MyBatisAgentStepRepository implements AgentStepRepository {
     }
 
     @Override
+    public List<Long> findRunningStepIds(long incidentId) {
+        return List.copyOf(mapper.selectRunningIdsByIncident(incidentId));
+    }
+
+    @Override
     public Optional<Long> findIncidentId(long stepId) {
         return Optional.ofNullable(mapper.selectIncidentId(stepId));
     }

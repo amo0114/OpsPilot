@@ -1,10 +1,12 @@
 package io.github.ismoyuan.opspilot.infrastructure.investigation;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -68,6 +70,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.RecoverableDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -136,7 +139,7 @@ class InvestigationOrchestrationIntegrationTest {
     @Autowired
     StepAdmissionService admissions;
 
-    @Autowired
+    @MockitoSpyBean
     AgentStepRecorder recorder;
 
     @Autowired
@@ -156,6 +159,9 @@ class InvestigationOrchestrationIntegrationTest {
 
     @MockitoSpyBean
     GatedFakeCapabilityExecutor capabilities;
+
+    @MockitoSpyBean
+    HypothesisApplicationService hypothesisService;
 
     InvestigationFixture fixture;
     long incident;
@@ -501,6 +507,155 @@ class InvestigationOrchestrationIntegrationTest {
         assertThat(incidentStatus()).isEqualTo("DIAGNOSED");
     }
 
+    /**
+     * 结果事务失败（TASK-040/043 修复）：非业务异常使结果事务整体回滚后，以独立短事务把该 Step 记为 FAILED/INTERNAL_ERROR，
+     * 没有领域写入，连续 AI 失败计数不变；本次唤醒到此结束——不再问 AI、不新建 Step；下一次唤醒重新经准入正常完成，不留 RUNNING。
+     */
+    @Test
+    void resultRecordingFailureClosesTheStepAndEndsThisWakeUp() {
+        update("consecutive_ai_failure_count = 2");
+        doThrow(new RecoverableDataAccessException("simulated database failure"))
+                .doCallRealMethod()
+                .when(hypothesisService)
+                .proposeHypothesis(any());
+        script.add(r -> hypothesis(r, "Statistics Consumer 已停止"));
+
+        assertThatThrownBy(() -> orchestrator.runInvestigation(incident, 1))
+                .isInstanceOf(RecoverableDataAccessException.class);
+
+        assertThat(jdbc.queryForMap("SELECT status, error_code, error_message, output_payload FROM agent_step_record"))
+                .containsEntry("status", "FAILED")
+                .containsEntry("error_code", "INTERNAL_ERROR")
+                .containsEntry("error_message", "AI step outcome could not be recorded")
+                .containsEntry("output_payload", null);
+        assertThat(count("hypothesis WHERE investigation_id = " + fixture.investigationId()))
+                .isZero();
+        assertThat(failures()).isEqualTo(2);
+        verify(ai, times(1)).decideInvestigationStep(any(), any());
+        assertThat(incidentStatus()).isEqualTo("INVESTIGATING");
+
+        // 下一次唤醒（补派发）
+        script.add(r -> complete(r, DiagnosisConclusionType.UNDETERMINED, null, List.of()));
+        orchestrator.runInvestigation(incident, 1);
+
+        assertThat(jdbc.queryForList("SELECT status FROM agent_step_record ORDER BY step_no", String.class))
+                .containsExactly("FAILED", "SUCCEEDED");
+        assertThat(incidentStatus()).isEqualTo("DIAGNOSED");
+    }
+
+    /**
+     * 保存失败且当时的收尾也失败（TASK-040/043 修复复审 P2）：孤立的 RUNNING Step 保留到本 Incident 的下一个 Worker，在准入前补完；
+     * 补完失败的那次唤醒不准入新 Step、不问 AI；补完成功后才准入新 Step 并正常完成。只补完本 Incident 的 Step——其他 Incident 仍在
+     * 运行的 Step 不受影响。
+     */
+    @Test
+    void orphanLeftByADoubleFailureIsClosedBeforeAnyNewStep() {
+        jdbc.update(
+                "INSERT INTO agent_step_record (incident_id, investigation_id, run_no, step_no, status, started_at,"
+                        + " created_at, updated_at) VALUES (?, ?, 1, 1, 'RUNNING', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3),"
+                        + " UTC_TIMESTAMP(3))",
+                fixture.otherIncidentId(),
+                fixture.otherInvestigationId());
+        doThrow(new RecoverableDataAccessException("simulated database failure"))
+                .doCallRealMethod()
+                .when(hypothesisService)
+                .proposeHypothesis(any());
+        doThrow(new RecoverableDataAccessException("close failed too"))
+                .doCallRealMethod()
+                .when(recorder)
+                .closeUnrecorded(anyLong(), anyLong());
+        script.add(r -> hypothesis(r, "Statistics Consumer 已停止"));
+
+        assertThatThrownBy(() -> orchestrator.runInvestigation(incident, 1))
+                .isInstanceOf(RecoverableDataAccessException.class)
+                .satisfies(ex -> assertThat(ex.getSuppressed()).hasSize(1));
+        assertThat(stepStatuses(fixture.investigationId())).containsExactly("RUNNING");
+
+        // 下一次唤醒：补完再次失败 → 不准入新 Step、不问 AI
+        doThrow(new RecoverableDataAccessException("still failing"))
+                .doCallRealMethod()
+                .when(recorder)
+                .closeOrphanedSteps(anyLong());
+        assertThatThrownBy(() -> orchestrator.runInvestigation(incident, 1))
+                .isInstanceOf(RecoverableDataAccessException.class);
+        assertThat(stepStatuses(fixture.investigationId())).containsExactly("RUNNING");
+        verify(ai, times(1)).decideInvestigationStep(any(), any());
+
+        // 再下一次唤醒：先补完孤立 Step，再准入新 Step 并完成
+        script.add(r -> complete(r, DiagnosisConclusionType.UNDETERMINED, null, List.of()));
+        orchestrator.runInvestigation(incident, 1);
+
+        assertThat(jdbc.queryForList(
+                        "SELECT CONCAT(status, '/', COALESCE(error_code, '-')) FROM agent_step_record"
+                                + " WHERE investigation_id = ? ORDER BY step_no",
+                        String.class,
+                        fixture.investigationId()))
+                .containsExactly("FAILED/INTERNAL_ERROR", "SUCCEEDED/-");
+        verify(ai, times(2)).decideInvestigationStep(any(), any());
+        assertThat(failures()).isZero();
+        assertThat(incidentStatus()).isEqualTo("DIAGNOSED");
+        assertThat(stepStatuses(fixture.otherInvestigationId())).containsExactly("RUNNING");
+    }
+
+    /**
+     * 取消后的孤立 Step（TASK-040/043 修复 Review-2 P2）：保存与即时收尾都失败后用户取消了 Incident。存活期补派发仍会为该 Incident
+     * 派发（单飞保护下），Worker 只补完审计后退出：不重开调查、不问 AI、不改取消状态与版本；补完后不再被派发。
+     */
+    @Test
+    void orphanOfACancelledIncidentIsClosedByTheRescanWithoutReopeningIt() {
+        doThrow(new RecoverableDataAccessException("simulated database failure"))
+                .doCallRealMethod()
+                .when(hypothesisService)
+                .proposeHypothesis(any());
+        doThrow(new RecoverableDataAccessException("close failed too"))
+                .doCallRealMethod()
+                .when(recorder)
+                .closeUnrecorded(anyLong(), anyLong());
+        script.add(r -> hypothesis(r, "Statistics Consumer 已停止"));
+        assertThatThrownBy(() -> orchestrator.runInvestigation(incident, 1))
+                .isInstanceOf(RecoverableDataAccessException.class);
+        incidents.cancelIncident(new CancelIncidentCommand(key(), version(), "误报", "demo-user"));
+        long cancelledVersion = version();
+        List<DispatchableWork> dispatched = new ArrayList<>();
+
+        liveCoordinator(dispatched).redispatchPending();
+
+        assertThat(dispatched).contains(new DispatchableWork.Investigation(incident, 1));
+        assertThat(jdbc.queryForList(
+                        "SELECT CONCAT(status, '/', COALESCE(error_code, '-')) FROM agent_step_record"
+                                + " WHERE investigation_id = ?",
+                        String.class,
+                        fixture.investigationId()))
+                .containsExactly("FAILED/INTERNAL_ERROR");
+        assertThat(incidentStatus()).isEqualTo("CANCELLED");
+        assertThat(version()).isEqualTo(cancelledVersion);
+        assertThat(count("diagnosis")).isZero();
+        verify(ai, times(1)).decideInvestigationStep(any(), any());
+
+        dispatched.clear();
+        liveCoordinator(dispatched).redispatchPending();
+        assertThat(dispatched).doesNotContain(new DispatchableWork.Investigation(incident, 1));
+    }
+
+    /** 结果已提交后的失败（此处为 Capability 端口抛出）不改写已提交的 Step 终态，也不新建 Step。 */
+    @Test
+    void failureAfterTheOutcomeIsCommittedKeepsTheCommittedStep() {
+        doThrow(new IllegalStateException("capability port failed"))
+                .when(capabilities)
+                .execute(anyLong(), anyInt(), anyLong(), any());
+        script.add(r -> queueInspect(r));
+
+        assertThatThrownBy(() -> orchestrator.runInvestigation(incident, 1)).isInstanceOf(IllegalStateException.class);
+
+        assertThat(dispositions()).containsExactly("ACCEPTED");
+        assertThat(jdbc.queryForMap("SELECT status, error_code FROM agent_step_record"))
+                .containsEntry("status", "SUCCEEDED")
+                .containsEntry("error_code", null);
+        assertThat(recorder.closeUnrecorded(jdbc.queryForObject("SELECT id FROM agent_step_record", Long.class), 1))
+                .isFalse();
+        verify(ai, times(1)).decideInvestigationStep(any(), any());
+    }
+
     // ---------------------------------------------------------------- TASK-042
 
     /** 额度耗尽：不再问 AI，以真实原因形成 UNDETERMINED；只结束本轮，Continue 后新 run 可正常调查（01 §9、§12）。 */
@@ -743,6 +898,24 @@ class InvestigationOrchestrationIntegrationTest {
         assertThat(((Number) latest.get("run_no")).intValue()).isEqualTo(runNo);
     }
 
+    private void update(String assignments) {
+        jdbc.update("UPDATE investigation SET " + assignments + " WHERE id = ?", fixture.investigationId());
+    }
+
+    private List<String> stepStatuses(long investigationId) {
+        return jdbc.queryForList(
+                "SELECT status FROM agent_step_record WHERE investigation_id = ? ORDER BY step_no",
+                String.class,
+                investigationId);
+    }
+
+    private int failures() {
+        return jdbc.queryForObject(
+                "SELECT consecutive_ai_failure_count FROM investigation WHERE id = ?",
+                Integer.class,
+                fixture.investigationId());
+    }
+
     private List<Long> frozenEvidence(int versionNo) {
         return jdbc.queryForList(
                 "SELECT CAST(r.evidence_id AS SIGNED) FROM diagnosis_evidence_ref r JOIN diagnosis d"
@@ -806,6 +979,18 @@ class InvestigationOrchestrationIntegrationTest {
             }
         };
         return new StartupRecoveryCoordinator(workSources, List.of(interruptions), inline, Clock.systemUTC());
+    }
+
+    /** 存活期间的补派发：本进程的启动中断标记已完成（无 recorder），派发器同步为本用例的 Incident 运行 Worker。 */
+    private StartupRecoveryCoordinator liveCoordinator(List<DispatchableWork> dispatched) {
+        WorkDispatcher inline = work -> {
+            dispatched.add(work);
+            if (work instanceof DispatchableWork.Investigation investigation
+                    && investigation.incidentId() == incident) {
+                orchestrator.runInvestigation(investigation.incidentId(), investigation.runNo());
+            }
+        };
+        return new StartupRecoveryCoordinator(workSources, List.of(), inline, Clock.systemUTC());
     }
 
     private void stop() {

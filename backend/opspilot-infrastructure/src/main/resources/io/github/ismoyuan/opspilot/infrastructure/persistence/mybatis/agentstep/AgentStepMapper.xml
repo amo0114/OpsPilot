@@ -33,6 +33,14 @@
                 #{s.startedAt}, #{s.startedAt}, #{s.startedAt})
     </insert>
 
+    <select id="selectRunningIdsByIncident" resultType="long">
+        SELECT id
+        FROM agent_step_record
+        WHERE incident_id = #{incidentId}
+          AND status = 'RUNNING'
+        ORDER BY id
+    </select>
+
     <select id="selectIncidentId" resultType="java.lang.Long">
         SELECT incident_id
         FROM agent_step_record

@@ -11,8 +11,10 @@ import io.github.ismoyuan.opspilot.domain.incident.Incident;
 import io.github.ismoyuan.opspilot.domain.incident.IncidentStatus;
 import io.github.ismoyuan.opspilot.domain.investigation.Investigation;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -129,6 +131,58 @@ public class AgentStepRecorder {
         });
     }
 
+    /** closeUnrecorded 使用的固定文案，不含 AI 输出、请求内容或异常信息。 */
+    static final String UNRECORDED_MESSAGE = "AI step outcome could not be recorded";
+
+    /**
+     * 结果或失败未能记录时（原事务已整体回滚）以独立短事务终结该 Step（TASK-040/043 修复）。按同一锁序加锁，只处理仍为
+     * RUNNING 的这一 Step：记 FAILED/INTERNAL_ERROR（固定文案），不改连续 AI 失败计数，不保存、不重放 AI 输出与 Intent，
+     * 不发任何网络请求；已提交的终态保持不变。
+     *
+     * @return 是否由本次终结；Step 已是终态时为 false
+     */
+    public boolean closeUnrecorded(long stepId, long latencyMs) {
+        long incidentId = incidentOf(stepId);
+        return transaction.execute(status -> {
+            AgentStep step = lockRows(stepId, incidentId).step();
+            if (step.status() != AgentStepStatus.RUNNING) {
+                return false;
+            }
+            steps.markFailed(step, ErrorCode.INTERNAL_ERROR, UNRECORDED_MESSAGE, latencyMs, now());
+            return true;
+        });
+    }
+
+    /**
+     * 补完已退出 Worker 留下的 RUNNING Step（TASK-040/043 修复、07 §51）。只能由持有该 Incident Worker 拥有权的调用方在准入新 Step
+     * 之前调用：派发器按 Incident 单飞，拥有权在上一个 Worker 返回后才释放，因此此刻该 Incident 没有存活 Worker，这些 Step 的结果都
+     * 未能记录（记录失败且当时的收尾也失败，或 Worker 线程异常终止）。旧进程遗留的 RUNNING 由启动恢复先行标为 PROCESS_INTERRUPTED，
+     * 且在此之前不会派发，这里不会遇到。只做审计收尾：同一锁序加锁，仍为 RUNNING 的记 FAILED/INTERNAL_ERROR（与 closeUnrecorded
+     * 同一文案），不改连续 AI 失败计数，不重放 Intent 或网络调用；失败时抛出，由调用方放弃本次准入。
+     *
+     * @return 补完的条数
+     */
+    public int closeOrphanedSteps(long incidentId) {
+        List<Long> running = steps.findRunningStepIds(incidentId);
+        if (running.isEmpty()) {
+            return 0;
+        }
+        return transaction.execute(status -> {
+            int closed = 0;
+            for (long stepId : running) {
+                AgentStep step = lockRows(stepId, incidentId).step();
+                if (step.status() == AgentStepStatus.RUNNING) {
+                    Instant now = now();
+                    long latency =
+                            Math.max(0, Duration.between(step.startedAt(), now).toMillis());
+                    steps.markFailed(step, ErrorCode.INTERNAL_ERROR, UNRECORDED_MESSAGE, latency, now);
+                    closed++;
+                }
+            }
+            return closed;
+        });
+    }
+
     private record Locked(Incident incident, Investigation investigation, AgentStep step) {}
 
     /** 合法输出清零；模型自身失败加一；其他失败（如本端请求不合协议）不改变计数。 */
@@ -148,6 +202,14 @@ public class AgentStepRecorder {
     }
 
     private Locked lock(long stepId, long incidentId) {
+        Locked locked = lockRows(stepId, incidentId);
+        if (locked.step().status() != AgentStepStatus.RUNNING) {
+            throw new IllegalStateException("Agent step already finished: " + stepId);
+        }
+        return locked;
+    }
+
+    private Locked lockRows(long stepId, long incidentId) {
         // 按 Incident → Investigation → Step 加锁，与准入、Stop 同一锁序：若先锁 Step 再等 Incident，
         // 会与持有 Incident 后分配 step_no 的准入事务死锁；这些加锁读取是本事务最先执行的语句
         Incident incident = incidents
@@ -157,9 +219,6 @@ public class AgentStepRecorder {
                 .findByIncidentIdForUpdate(incident.id())
                 .orElseThrow(() -> new IllegalStateException("Agent step without investigation: " + stepId));
         AgentStep step = steps.findByIdForUpdate(stepId).orElseThrow();
-        if (step.status() != AgentStepStatus.RUNNING) {
-            throw new IllegalStateException("Agent step already finished: " + stepId);
-        }
         return new Locked(incident, investigation, step);
     }
 

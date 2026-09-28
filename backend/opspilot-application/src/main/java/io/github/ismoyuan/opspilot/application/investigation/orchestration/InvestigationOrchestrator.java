@@ -66,6 +66,12 @@ public class InvestigationOrchestrator implements InvestigationWorker {
 
     @Override
     public void runInvestigation(long incidentId, int runNo) {
+        // 先补完已退出 Worker 留下的 RUNNING Step 再准入新 Step（TASK-040/043 修复）；补完失败即抛出，本次不准入，留待下一次唤醒重试
+        int closed = recorder.closeOrphanedSteps(incidentId);
+        if (closed > 0) {
+            log.warn(
+                    "Orphaned investigation steps closed before admission: incidentId={} count={}", incidentId, closed);
+        }
         while (step(incidentId, runNo)) {
             // 继续本 run 的下一步
         }
@@ -92,10 +98,43 @@ public class InvestigationOrchestrator implements InvestigationWorker {
         StepAdmission.Admitted admitted = (StepAdmission.Admitted) admission;
         long stepId = admitted.step().id();
         long started = System.nanoTime();
+        try {
+            return runAdmitted(incidentId, runNo, context.get(), admitted, started);
+        } catch (RuntimeException ex) {
+            closeUnrecorded(stepId, started, ex);
+            throw ex;
+        }
+    }
+
+    /**
+     * 记录或处置阶段抛出（TASK-040/043 修复）：原事务已整体回滚，Step 可能仍为 RUNNING。以独立短事务只终结这一 Step（已提交的终态
+     * 不动），不计连续 AI 失败、不重放 Intent 或网络调用。随后本次唤醒结束，原异常交给派发器；同一 run 只在下一次唤醒时重新经准入
+     * 开始新 Step，Stop、截止、额度规则照常适用。终结本身也失败时，该 Step 保持 RUNNING，由本 Incident 的下一个 Worker 在准入前
+     * 补完（closeOrphanedSteps），补完成功之前不会准入新 Step。
+     */
+    private void closeUnrecorded(long stepId, long startedNanos, RuntimeException cause) {
+        try {
+            if (recorder.closeUnrecorded(stepId, elapsedMillis(startedNanos))) {
+                log.warn(
+                        "Investigation step closed after its outcome could not be recorded: stepId={} exception={}",
+                        stepId,
+                        cause.getClass().getName());
+            }
+        } catch (RuntimeException closeFailure) {
+            cause.addSuppressed(closeFailure);
+        }
+    }
+
+    private boolean runAdmitted(
+            long incidentId,
+            int runNo,
+            InvestigationStepContext context,
+            StepAdmission.Admitted admitted,
+            long started) {
+        long stepId = admitted.step().id();
         InvestigationStepDecision decision;
         try {
-            decision = ai.decideInvestigationStep(
-                    context.get().toRequest(stepId, correlationId(stepId)), admitted.maxWait());
+            decision = ai.decideInvestigationStep(context.toRequest(stepId, correlationId(stepId)), admitted.maxWait());
         } catch (OpsPilotException ex) {
             recorder.recordFailure(stepId, ex.errorCode(), ex.getMessage(), elapsedMillis(started));
             // 下一次准入按连续失败阈值、截止与 Stop 判断是否继续（02 §28）

@@ -15,6 +15,8 @@ interface AgentStepMapper {
 
     int insertRunning(@Param("s") AgentStepInsert step);
 
+    List<Long> selectRunningIdsByIncident(@Param("incidentId") long incidentId);
+
     Long selectIncidentId(@Param("id") long id);
 
     AgentStepRow selectByIdForUpdate(@Param("id") long id);

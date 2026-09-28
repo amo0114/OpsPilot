@@ -4,6 +4,7 @@ import io.github.ismoyuan.opspilot.application.ai.AiCallMetadata;
 import io.github.ismoyuan.opspilot.domain.agentstep.AgentStep;
 import io.github.ismoyuan.opspilot.domain.error.ErrorCode;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -17,6 +18,9 @@ public interface AgentStepRepository {
      * 且本事务在取得该锁之前没有做过一致性读（准入事务只做加锁读取），分配只锁新插入的行，不阻塞其他调查的准入。
      */
     AgentStep insertRunning(long incidentId, long investigationId, int runNo, Instant startedAt);
+
+    /** 不加锁读取该 Incident 下仍为 RUNNING 的 Step id（按 id 升序）。 */
+    List<Long> findRunningStepIds(long incidentId);
 
     /** 不加锁读取 Step 所属 Incident（创建后不变），用于按锁序先锁 Incident。 */
     Optional<Long> findIncidentId(long stepId);

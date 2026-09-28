@@ -9,12 +9,21 @@
         </constructor>
     </resultMap>
 
-    <!-- 已 Stop 的 run 也要唤醒，以便确定性收束（07 §51、§53）；轮号取数据库当前值，不刷新 -->
+    <!--
+      已 Stop 的 run 也要唤醒，以便确定性收束（07 §51、§53）；轮号取数据库当前值，不刷新。
+      不在调查中（如已取消）但仍有 RUNNING Step 的 Incident 也唤醒（TASK-040/043 修复 Review-2）：这些 Step 属于已退出、结果与收尾都未能
+      记录的 Worker，由同一 Incident 的 Worker 在单飞保护下补完审计；Worker 随后因 Incident 不在调查而退出，不问 AI、不改 Incident。
+      仍有存活 Worker 时唤醒按单飞合并。
+    -->
     <select id="selectInvestigatingRuns" resultMap="investigationWork">
         SELECT i.id AS incident_id, v.current_run_no
         FROM incident i
         JOIN investigation v ON v.incident_id = i.id
         WHERE i.status = 'INVESTIGATING'
+           OR EXISTS (SELECT 1
+                      FROM agent_step_record s
+                      WHERE s.incident_id = i.id
+                        AND s.status = 'RUNNING')
         ORDER BY i.id
     </select>
 </mapper>
