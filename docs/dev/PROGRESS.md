@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-28（B09 REVIEW，B09-R1 PASS，提交中）
+> 最近更新：2026-09-28（B09 DONE，8eaa169；B10 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -42,8 +42,8 @@
 | TASK-032 | B07 | Java / Python Contract Test | DONE | commit d796643（B07，Base 3df010c） | B07-V2；同一 108 份 fixture 双端＋Schema 一致；B07-R1 PASS AFTER PATCH → B07-R2 PASS；见 PROGRESS「B07」 |
 | TASK-033 | B08 | AI Runtime 最小推理服务 | DONE | commit 5e81bb8（B08，Base dfcbca6） | B08-V2（ai-runtime 检查 exit 0、pytest 143）；uvicorn＋Fake 与跨语言冒烟；B08-R1 PASS AFTER PATCH → B08-R2 PASS；见 PROGRESS「B08」 |
 | TASK-034 | B08 | Java AiRuntimeClient | DONE | commit 5e81bb8（B08，Base dfcbca6） | B08-V2（backend verify exit 0）＋HttpAiRuntimeClientTest 17/17（含响应体延迟回归）；跨语言冒烟；B08-R1 PASS AFTER PATCH → B08-R2 PASS；见 PROGRESS「B08」 |
-| TASK-035 | B09 | WorkDispatcher | REVIEW | 未提交（B09，Base d922a3f；文件见 PROGRESS「B09」） | B09-V1 verify exit 0＋InProcessWorkDispatcherTest 4、DispatchRecoveryIntegrationTest 3、DispatchRecoverySchedulerIntegrationTest 1（真实 MySQL）；B09-R1 PASS |
-| TASK-036 | B09 | SingleFlightRegistry | REVIEW | 未提交（B09，Base d922a3f；文件见 PROGRESS「B09」） | B09-V1 verify exit 0＋SingleFlightRegistryTest 5；B09-R1 PASS |
+| TASK-035 | B09 | WorkDispatcher | DONE | commit 8eaa169（B09，Base d922a3f） | B09-V1 verify exit 0＋InProcessWorkDispatcherTest 4、DispatchRecoveryIntegrationTest 3、DispatchRecoverySchedulerIntegrationTest 1（真实 MySQL）；B09-R1 PASS；见 PROGRESS「B09」 |
+| TASK-036 | B09 | SingleFlightRegistry | DONE | commit 8eaa169（B09，Base d922a3f） | B09-V1 verify exit 0＋SingleFlightRegistryTest 5；B09-R1 PASS；见 PROGRESS「B09」 |
 | TASK-037 | B10 | Investigation Context Builder | TODO | — | NOT RUN |
 | TASK-038 | B10 | AgentStep 生命周期 | TODO | — | NOT RUN |
 | TASK-039 | B10 | Investigation Guard | TODO | — | NOT RUN |
@@ -333,7 +333,7 @@
 
 ### B09 — 工作派发与单实例并发控制
 
-- 状态：REVIEW（B09-R1 PASS，提交中）
+- 状态：DONE（B09-R1 PASS，已提交 8eaa169）
 - 成员及顺序：TASK-035 → TASK-036；批外前置：TASK-034 DONE（5e81bb8，B08-R2 PASS）
 - Base SHA：d922a3ffff08bdd0ce1a7ea083fd7de0c273510a
 - 范围：application/dispatch（WorkDispatcher 三类派发、可派发工作与 Worker 端口、StartupRecoveryCoordinator）；infrastructure/dispatch（InProcessWorkDispatcher 有界线程池、SingleFlightRegistry、启动恢复与周期补派发调度、Worker/Execution/Verification 占位、Worker/Dispatcher 强类型配置）、investigation 可派发工作查询；删除 DeferredWorkDispatcher；测试与 infrastructure 测试配置；docs/dev。明确不做：MQ、Outbox、DB Lease、Leader Election、第二套任务状态表（08 TASK-035）；调查循环/Guard/AgentStep（TASK-037～041）；残留 RUNNING Step/Invocation 中断标记、到期/Stop 收束与启动恢复细节（TASK-042/043）；Execution/Verification 的真实 Worker 与恢复（TASK-071/073、TASK-079/083）
@@ -354,7 +354,7 @@
   - 变异（均已还原并逐字节核对）：去掉释放时的拥有者 token 核对 → 1 例失败；去掉新 run 延后记录 → 3 例失败（一次性构建曾用 -Dspotless.check.skip，不作门禁证据）
   - NOT RUN：调查循环与残留 RUNNING Step/Invocation 中断标记、Stop/到期收束（TASK-037～043）；Execution/Verification 的数据来源、Worker 与恢复（TASK-071/073、TASK-079/083）；独立 jar 冒烟；ccg 质量关卡（本机未安装）；MySQL 8.0.16、Windows mvnw.cmd NOT RUN
 - B09-R1：独立 Reviewer；范围 d922a3f 到当前工作树（含未跟踪文件）；结论 PASS，可提交，无 P0/P1；确认拥有权按 token 释放、拒绝后可再唤醒、三类工作走统一入口、恢复查询含已 Stop 调查且不改 run/预算/deadline/Stop，测试配置、队列容量与占位 Worker 取舍可接受；独立实测 `./mvnw -B clean verify` exit 0（domain 30、infrastructure 401、web 21、boot 4，无跳过），Enforcer、Spotless、`git diff --check` 通过；非阻塞：① SingleFlightRegistry 延后唤醒保留的是最后到达者而非最大 runNo（实测 run 1 持有期间依次收到 run 3、run 2，释放后交回 run 2；run 3 仍可由数据库扫描恢复），记录不得写成“总保留最新 run”，真实 Worker 必须做期望 run 校验；② DispatchRecoveryIntegrationTest 中 release.countDown() 不代表 Registry 已释放，随后补派发可能被合并，存在偶发失败窗口，本轮通过，下次触及时改为等待释放或有界重复唤醒，无需加压；调查循环、中断标记、Execution/Verification 真实恢复、独立 jar 冒烟、MySQL 8.0.16、Windows、ccg NOT VERIFIED；Commit Recommendation YES
-- 提交：未提交（等待独立 Review 与用户提交授权）；范围外问题：见「待处理问题」中 B09 行
+- 提交：代码提交 8eaa169984dbc3b81a6909071534135df9202658（feat(dispatch): in-process work dispatcher, single-flight registry and recovery rescan (TASK-035–036)）；SHA 回填为后续 docs 提交；范围外问题：见「待处理问题」中 B09 行
 
 ### 工作流文档变更（不属于 TASK-012 或 B01）
 
