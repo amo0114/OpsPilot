@@ -2,20 +2,21 @@
 
 更新时间：2026-09-28（本地）
 仓库/分支：/root/projects/OpsPilot-V0.1-IMPLEMENTATION，main；无 remote
-当前批次/状态：B12 DONE（代码 c4c26c3，B12-R2 PASS）；B13 未开始
+当前批次/状态：TASK-039 准入死锁独立修复 Review PASS，提交中；B13 未开始
 成员 Task 及顺序：B12 = TASK-042 → TASK-043（均 DONE）；下一步为 TASK-039 死锁独立修复，之后 B13 = TASK-044 → 046
-固定 Base SHA：B12 为 c204b1df60399f5e699bd094a1ff7f2f27fb4b78；TASK-039 修复开工时读取当时 HEAD
+固定 Base SHA：c8dc6bdc379c269183faa0c3ac722503a84b4fdb（TASK-039 修复开工时 HEAD）
 批外前置核实：B13 开工时按 08 核对其成员的批外前置
 允许目录 / 明确不做 / 关键不变量：TASK-039 修复按 B12-R2 约定（只改 Step 编号查询/插入＋跨调查并发回归）；B13 开工时按 BATCH-PLAN 与 08 固定
-本批规格章节及 PROGRESS 记录：PROGRESS「B12」
-当前成员及位置：无进行中批次
+本批规格章节及 PROGRESS 记录：PROGRESS「TASK-039 修复」
+当前成员及位置：TASK-039 修复实现与验证完成，待独立 Review
 已实现并针对性验证的成员：B01～B12 全部
-未完成 / 未执行验证：准入 step_no 并发死锁（TASK-039 独立修复，下一步）；调查调用中断在真实链路复核（TASK-048）；AgentStep 输出信封读取方（TASK-100 等）；Fake Capability 无步数上限（TASK-047/048）；真实 LLM 接入归属（TASK-058 前）；surefire 退出等待观察项；其余见 PROGRESS 待处理问题；MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
-未提交文件（含既有无关修改）：无（本交接卡与 PROGRESS 回填随 docs(progress) 提交）
-共同验证及独立 Review 证据编号：B12-V1、B12-V2、B12-R1、B12-R2
+未完成 / 未执行验证：TASK-039 修复 Review；新发现首次 Start 并发死锁（TASK-016，待用户确认修复时机）；其余见 PROGRESS 待处理问题；MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
+未提交文件（含既有无关修改）：AgentStepMapper.java、AgentStepInsert.java、MyBatisAgentStepRepository.java、AgentStepMapper.xml、AgentStepRepository.java、InvestigationStepIntegrationTest.java、docs/dev/CURRENT.md、docs/dev/PROGRESS.md；无既有无关修改
+共同验证及独立 Review 证据编号：见 PROGRESS「TASK-039 修复」（verify exit 0＋回归先失败后通过＋真实进程并发准入）；Review NOT RUN
 下一步具体动作：
-1. TASK-039 死锁独立修复：只改 Step 编号查询/插入，保留事务与 Investigation 行锁，加跨调查并发准入回归，不引入通用重试；完成后送审
-2. 不推送；未获指示不开始 B13
+1. 独立 Reviewer 审查 Base c8dc6bd 到当前工作树（Step 编号查询/插入与并发回归）
+2. PASS 后按用户授权提交（建议 `fix(investigation): allocate agent step numbers without gap locks (TASK-039)`）并回填记录
+3. 首次 Start 并发死锁（TASK-016）等待用户决定修复时机；不推送；不开始 B13
 本地启动 Demo 配置：在 OPSPILOT_DB_* 环境变量基础上加 --spring.profiles.active=demo
 
 后续 UI 约定（TASK-096/099 实施）：

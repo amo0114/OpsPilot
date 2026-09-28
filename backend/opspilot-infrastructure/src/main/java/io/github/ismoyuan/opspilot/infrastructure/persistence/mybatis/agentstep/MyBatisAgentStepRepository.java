@@ -28,7 +28,8 @@ class MyBatisAgentStepRepository implements AgentStepRepository {
 
     @Override
     public AgentStep insertRunning(long incidentId, long investigationId, int runNo, Instant startedAt) {
-        AgentStepInsert insert = new AgentStepInsert(incidentId, investigationId, runNo, utc(startedAt));
+        int stepNo = mapper.selectMaxStepNo(investigationId) + 1;
+        AgentStepInsert insert = new AgentStepInsert(incidentId, investigationId, runNo, stepNo, utc(startedAt));
         mapper.insertRunning(insert);
         return toDomain(mapper.selectByIdForUpdate(insert.getId()));
     }

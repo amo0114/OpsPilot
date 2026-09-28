@@ -10,7 +10,9 @@ import org.apache.ibatis.annotations.Param;
 @Mapper
 interface AgentStepMapper {
 
-    /** step_no = 该 Investigation 现有最大值＋1。 */
+    /** 不加锁读取该 Investigation 现有最大 step_no（无 Step 时为 0）；调用方须已持有 Investigation 行锁。 */
+    int selectMaxStepNo(@Param("investigationId") long investigationId);
+
     int insertRunning(@Param("s") AgentStepInsert step);
 
     Long selectIncidentId(@Param("id") long id);

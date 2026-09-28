@@ -12,7 +12,10 @@ import java.util.Optional;
  */
 public interface AgentStepRepository {
 
-    /** step_no 取该 Investigation 现有最大值＋1（跨 run 不重置），run_no 为准入时的快照。 */
+    /**
+     * step_no 取该 Investigation 现有最大值＋1（跨 run 不重置），run_no 为准入时的快照。调用方须已持有该 Investigation 的行锁，
+     * 且本事务在取得该锁之前没有做过一致性读（准入事务只做加锁读取），分配只锁新插入的行，不阻塞其他调查的准入。
+     */
     AgentStep insertRunning(long incidentId, long investigationId, int runNo, Instant startedAt);
 
     /** 不加锁读取 Step 所属 Incident（创建后不变），用于按锁序先锁 Incident。 */

@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-28（B12 DONE，c4c26c3；TASK-039 死锁修复待开始，B13 未开始）
+> 最近更新：2026-09-28（TASK-039 准入死锁修复 Review PASS，提交中）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -438,6 +438,24 @@
 - B12-R2：独立 Reviewer 复审；Base 仍为 c204b1d；结论 PASS，可提交，原 P2 已修复，无新增阻塞项；确认中断标记失败时启动与周期扫描都不扫描、不派发，重试保持原界限、全部成功后才派发且之后不重复标记，测试直接验证完整调用顺序；独立实测 MySQL 编排与恢复相关测试 26/26（无跳过）、专项 verify exit 0，Enforcer 与 Spotless 正常执行，`git diff --check` 与未跟踪文件空白检查通过；本轮未重跑完整构建与真实进程冒烟，分别沿用 B12-V2 与 B12-V1；B12 完成后开始约定的 TASK-039 死锁独立修复（只改 Step 编号查询/插入，保留事务与 Investigation 行锁，加跨调查并发回归，不引入通用重试），修复后送审，暂不开始 B13；Commit Recommendation YES
 - 提交：代码提交 c4c26c3883e03287f055b88a0378c059198bdbad（feat(investigation): deterministic termination and startup recovery (TASK-042–043)）；SHA 回填为后续 docs 提交；范围外问题：见「待处理问题」中 B12 行
 
+### TASK-039 修复 — 准入 step_no 分配并发死锁（B12-R1/R2 约定）
+
+- 状态：REVIEW（Review PASS，提交中）
+- 归属：TASK-039（B10 已 DONE，不重开 B10）；在 B12 DONE 之后、B13 开始之前单独修复提交
+- Base SHA：c8dc6bdc379c269183faa0c3ac722503a84b4fdb（B12 docs 提交后的 HEAD；开工时工作树干净）
+- 范围：只改 Step 编号查询/插入（infrastructure persistence/mybatis/agentstep 的 insertRunning 及其端口说明）＋一个跨调查并发准入回归（infrastructure 测试）；docs/dev。明确不做：改变准入事务、锁序或 Investigation 行锁，新增表/列/Migration，通用重试框架，其他 Task 的代码
+- 关键不变量：准入仍在一个短事务内按 Incident → Investigation 加锁后登记 RUNNING Step；step_no 在同一 Investigation 内单调（跨 run 不重置），由持有 Investigation 行锁的准入事务串行分配，(investigation_id, step_no) 唯一约束仍为最终防线；不同调查的准入不得因 step_no 分配互相阻塞或死锁
+- 验证要求：真实 MySQL 回归——一个调查的准入事务登记 Step 后未提交时，另一调查的准入须不等待其提交即完成（原 INSERT … SELECT MAX 在此会被间隙锁阻塞；先在原代码上确认失败）；既有 Step/准入集成测试；backend `./mvnw -B clean verify`
+- 实现：AgentStepMapper 新增 selectMaxStepNo（普通一致性读 `SELECT COALESCE(MAX(step_no),0) … WHERE investigation_id = ?`，不加锁），insertRunning 改为 `INSERT … VALUES` 显式写入 step_no；MyBatisAgentStepRepository.insertRunning 先取最大值＋1 再插入；AgentStepInsert 增加 stepNo；mapper XML 与 AgentStepRepository 端口说明写明前提（调用方已持有 Investigation 行锁、本事务取得该锁前未做一致性读——准入事务只有 Incident/Investigation 的 FOR UPDATE 读取）及不得改回 INSERT … SELECT 的原因。准入事务、锁序、Investigation 行锁与唯一约束均不变；无重试、无 Migration、无新依赖
+- 修改文件：infrastructure persistence/mybatis/agentstep/{AgentStepMapper,AgentStepInsert,MyBatisAgentStepRepository}＋AgentStepMapper.xml、application/investigation/step/AgentStepRepository（仅说明）；测试 infrastructure investigation/InvestigationStepIntegrationTest（新增 admissionsOfDifferentInvestigationsDoNotBlockEachOther）；docs/dev
+- 验证（本机实测）：
+  - 回归先在原代码确认失败：`-Dtest='InvestigationStepIntegrationTest#admissionsOfDifferentInvestigationsDoNotBlockEachOther'` → TimeoutException（调查 A 的准入事务登记 Step 未提交时，调查 B 的准入 5 秒内未完成）；修复后 InvestigationStepIntegrationTest 10/10（含同一调查跨 run 连续编号的既有用例）
+  - backend `./mvnw -B clean verify` 2026-09-28 10:01～10:08 UTC exit 0，Enforcer 与 6 模块 spotless:check 通过；domain 36/36、infrastructure 437/437（InvestigationStepIntegrationTest 10、InvestigationOrchestrationIntegrationTest 21）、web 21/21、boot 5/5，无跳过；日志无 "Connection is closed"；infrastructure 测试 JVM 退出时再次出现 surefire 退出等待告警（既有观察项，不影响 exit 0）；`git diff --check` exit 0
+  - 真实进程（2026-09-28 10:08～10:14 UTC，临时 mysql:8.4.11＋uvicorn Fake＋boot jar）：5 个 Incident 依次 Start（HTTP 不重叠），4 个 Worker 的 Step 准入在约 35 ms 内交错，全部 SUCCEEDED 并 DIAGNOSED，无 "Worker failed"；日志不含 Token；进程按 PID 停止、端口释放、容器已删除。同一冒烟中 6 个首次 Start 并发时 5 个返回 500——死锁发生在 Start 事务的 Investigation 插入（见「待处理问题」新增行，属 TASK-016，未修改）
+  - NOT RUN：真实 LLM、ai-runtime 检查（未修改）、MySQL 8.0.16、Windows mvnw.cmd
+- Review：独立 Reviewer；范围 c8dc6bd 到当前工作树；结论 PASS，可提交；确认当前生产调用链满足普通 SELECT MAX 的事务前提，同一调查仍由 Investigation 行锁串行，跨调查不再因该查询取得间隙锁，回归直接验证 A 未提交时 B 仍可完成准入；独立实测真实 MySQL Step 测试 10/10、专项 verify exit 0，Enforcer、Spotless、`git diff --check` 通过；未重跑完整构建与真实进程冒烟，沿用交付证据。首次 Start 死锁安排：本修复提交后、B13 开始前以 TASK-016 独立修复（首次 Start 在 Incident 行锁保护下不对不存在的 Investigation 加锁读取并核对普通读的快照前提；保留 Continue、Stop、Step 等既有行的锁序与排他锁，不全局修改 findByIncidentIdForUpdate；加跨 Incident 并发首次 Start 回归并保留同一 Incident 只能成功 Start 一次；不加通用重试），修复后送审
+- 提交：未提交（Review PASS，提交中）
+
 ### 工作流文档变更（不属于 TASK-012 或 B01）
 
 - 2026-09-27：用户确认批次流程，新增 BATCH-PLAN，同步 Agent 入口、07/08 工作流条款、Manifest、启动指南及进度/交接。
@@ -545,7 +563,8 @@
 | Fake Capability Gate 通过后返回 NotExecuted 且循环继续：若模型持续请求 Capability 或持续产生被拒绝的 Intent，循环只受本轮 deadline（及 Stop）约束，没有步数上限（规格未定义步数上限） | application/investigation/orchestration/InvestigationOrchestrator、GatedFakeCapabilityExecutor | TASK-047/048 接入真实准入与预算扣减后由 Capability 额度约束；Fake 默认回答为 COMPLETE，Demo 不触发 | TASK-047/048 |
 | （已关闭，B12）准入因本轮退出条件被拒时由 InvestigationTerminator 确定性收束为 UNDETERMINED＋真实原因，重复唤醒随之消失 | InvestigationOrchestrator、InvestigationTerminator | — | — |
 | UnwiredInvestigationWorker 仅在没有 InvestigationWorker Bean 的上下文（infrastructure 模块测试）中使用，被调用只记 warn；应用装配由 boot 测试断言为 InvestigationOrchestrator | infrastructure/dispatch/DispatchConfiguration、UnwiredInvestigationWorker | 保持；不得在生产装配中出现 | — |
-| AgentStep 准入的 step_no 分配使用 `INSERT … SELECT COALESCE(MAX(step_no),0)+1 FROM agent_step_record WHERE investigation_id = ?`，在 (investigation_id, step_no) 唯一索引上取 next-key/间隙锁；两个不同调查同时准入会互相等待插入意向锁而死锁（B12 真实进程冒烟复现：两个 Start 相隔约 50 ms，一方 DeadlockLoserDataAccessException，Worker 异常退出） | persistence/mybatis/agentstep/AgentStepMapper.xml insertRunning（TASK-038/039，B10） | 影响：失败方准入事务回滚、不留记录，Worker 退出后由 5 秒补派发重新唤醒，不会永久卡住，但并发调查会出现延迟与 WARN。建议：准入已持有 Investigation 行锁，改为普通 SELECT MAX 后 INSERT VALUES（或在 Investigation 上维护计数），并补并发准入回归；本批按范围规则未修改 | TASK-039（B12-R1 建议：B12 通过后、B13 开始前单独修复提交，不重开 B10；只改 Step 编号查询/插入＋一个跨调查并发准入回归，保留事务与 Investigation 行锁，不加通用重试） |
+| （修复待 Review）AgentStep 准入的 step_no 分配原为 `INSERT … SELECT MAX+1`，在 (investigation_id, step_no) 上取间隙锁，不同调查并发准入互相等待成死锁；已改为持 Investigation 锁后普通读取最大值再 `INSERT … VALUES`，并加跨调查不阻塞回归（见 PROGRESS「TASK-039 修复」） | persistence/mybatis/agentstep/AgentStepMapper.xml insertRunning | 修复提交后关闭 | TASK-039 |
+| 首次 Start 并发死锁：resumeInvestigation 对尚不存在的 Investigation 执行 `SELECT … WHERE incident_id = ? FOR UPDATE`，在 uk_investigation_incident 上取 X 间隙锁；两个不同 Incident 同时首次 Start 都持有同一间隙锁再插入 Investigation，互等插入意向锁成死锁（TASK-039 修复冒烟复现：6 个首次 Start 并发，5 个 HTTP 500 INTERNAL_ERROR，InnoDB 报告两事务均在 INSERT INTO investigation 等待 uk_investigation_incident 插入意向锁）。Continue（Investigation 已存在）不受影响 | application/investigation/InvestigationApplicationService.resumeInvestigation、persistence/mybatis/investigation（findByIncidentIdForUpdate、insertFirstRun）（TASK-016，B02） | 影响：失败方事务整体回滚，Incident 保持 CREATED/v0，用户重试 Start 即可成功，不产生半写数据；但并发首次 Start 会随机得到 500。建议：Incident 行已由 FOR UPDATE 锁定并串行同一 Incident 的 Start，首次 Start 时先以不加锁的普通读判断 Investigation 是否存在（或按主键/Incident 锁已足够的读取），不存在再插入，避免对空范围加间隙锁；补跨 Incident 并发首次 Start 回归；不加通用重试。本次按范围规则未修改 | TASK-016（待用户确认修复时机） |
 | B11-V1、B12-V1 完整 verify 中 infrastructure 测试 JVM 退出时 Hikari 池逐个关闭超过 surefire 30 s 等待（"kill self fork JVM ... after System.exit(0)"，结果不受影响；B11 单独重跑未复现，B12 再次出现，且整次 verify 增至约 12 分钟）；推断与缓存上下文数量及容器已停止有关 | infrastructure 测试（Spring 测试上下文缓存＋每类独立 Testcontainers） | 若反复出现，可考虑限制上下文缓存、合并相同配置的测试上下文或调整 surefire forkedProcessExitTimeoutInSeconds；不以跳过测试处理 | 后续触及测试基础设施的 Task |
 | 调查调用的中断标记已实现，但 Java 尚无调查调用写入口（TASK-048），真实进程中不会出现在途调查调用；恢复采样调用（recovery_verification_id 非空）不在此处理 | application/investigation/recovery、persistence/mybatis/invocation | TASK-048 接入后在真实链路复核中断标记；恢复采样调用的中断由 TASK-083 处理 | TASK-048、TASK-083 |
 | 中断界限为 StartupRecoveryCoordinator 构造时刻（应用时钟，毫秒）；依赖单实例部署与旧进程写入的 started_at 不晚于新进程时钟（时钟回拨会使旧记录漏标，漏标记录只保持 RUNNING，不影响准入与收束） | application/dispatch/StartupRecoveryCoordinator | 保持；部署保证单实例与时钟同步（07 §51） | — |

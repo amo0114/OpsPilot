@@ -15,16 +15,22 @@
     </resultMap>
 
     <!--
-      step_no 在同一语句内分配（INSERT … SELECT 对读取的行加共享锁）；调用方已锁定 Investigation，
-      uk_agent_step_record_investigation_step 做最后保护（04 §61）。
+      step_no 分配（04 §61、TASK-039）：调用方已持有该 Investigation 的行锁，同一调查的准入由此串行，因此这里用普通一致性读取最大值，
+      不加锁；这是事务在取得该锁之后的第一次一致性读，能看到此前已提交的全部 Step。不得改回 INSERT … SELECT：那会在
+      (investigation_id, step_no) 上留下间隙锁，使不同调查的并发准入互相等待成死锁（B12 冒烟发现）。
+      uk_agent_step_record_investigation_step 仍做最后保护。
     -->
+    <select id="selectMaxStepNo" resultType="_int">
+        SELECT COALESCE(MAX(step_no), 0)
+        FROM agent_step_record
+        WHERE investigation_id = #{investigationId}
+    </select>
+
     <insert id="insertRunning" useGeneratedKeys="true" keyProperty="s.id" keyColumn="id">
         INSERT INTO agent_step_record (incident_id, investigation_id, run_no, step_no, status, started_at, created_at,
                                        updated_at)
-        SELECT #{s.incidentId}, #{s.investigationId}, #{s.runNo}, COALESCE(MAX(step_no), 0) + 1, 'RUNNING',
-               #{s.startedAt}, #{s.startedAt}, #{s.startedAt}
-        FROM agent_step_record
-        WHERE investigation_id = #{s.investigationId}
+        VALUES (#{s.incidentId}, #{s.investigationId}, #{s.runNo}, #{s.stepNo}, 'RUNNING',
+                #{s.startedAt}, #{s.startedAt}, #{s.startedAt})
     </insert>
 
     <select id="selectIncidentId" resultType="java.lang.Long">

@@ -9,12 +9,14 @@ final class AgentStepInsert {
     private final long incidentId;
     private final long investigationId;
     private final int runNo;
+    private final int stepNo;
     private final LocalDateTime startedAt;
 
-    AgentStepInsert(long incidentId, long investigationId, int runNo, LocalDateTime startedAt) {
+    AgentStepInsert(long incidentId, long investigationId, int runNo, int stepNo, LocalDateTime startedAt) {
         this.incidentId = incidentId;
         this.investigationId = investigationId;
         this.runNo = runNo;
+        this.stepNo = stepNo;
         this.startedAt = startedAt;
     }
 
@@ -36,6 +38,10 @@ final class AgentStepInsert {
 
     public int getRunNo() {
         return runNo;
+    }
+
+    public int getStepNo() {
+        return stepNo;
     }
 
     public LocalDateTime getStartedAt() {

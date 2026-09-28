@@ -238,6 +238,46 @@ class InvestigationStepIntegrationTest {
                 .isZero();
     }
 
+    /**
+     * 不同调查的准入互不阻塞（TASK-039 修复，B12 真实进程冒烟发现的死锁）：一个调查的准入事务登记 Step 后尚未提交时，另一个调查的
+     * 准入不必等它提交即可完成。原 INSERT … SELECT MAX 在 (investigation_id, step_no) 上留下间隙锁，另一调查的插入须等待其提交，
+     * 两者并发时互相等待成死锁。
+     */
+    @Test
+    void admissionsOfDifferentInvestigationsDoNotBlockEachOther() throws Exception {
+        jdbc.update(
+                "UPDATE investigation SET current_run_started_at = ? WHERE id = ?",
+                LocalDateTime.ofInstant(NOW.minusSeconds(100), ZoneOffset.UTC),
+                fixture.otherInvestigationId());
+        CountDownLatch registered = new CountDownLatch(1);
+        CountDownLatch commit = new CountDownLatch(1);
+        // 外层事务未提交：准入加入该事务，Step 已登记但仍持有锁
+        CompletableFuture<StepAdmission> first =
+                CompletableFuture.supplyAsync(() -> new TransactionTemplate(transactionManager).execute(status -> {
+                    StepAdmission result = admission.admit(incident, 1);
+                    registered.countDown();
+                    await(commit);
+                    return result;
+                }));
+        assertThat(registered.await(5, TimeUnit.SECONDS)).isTrue();
+
+        CompletableFuture<StepAdmission> other =
+                CompletableFuture.supplyAsync(() -> admission.admit(fixture.otherIncidentId(), 1));
+        try {
+            assertThat(other.get(5, TimeUnit.SECONDS)).isInstanceOf(StepAdmission.Admitted.class);
+        } finally {
+            commit.countDown();
+        }
+
+        assertThat(first.get(5, TimeUnit.SECONDS)).isInstanceOf(StepAdmission.Admitted.class);
+        assertThat(jdbc.queryForList(
+                        "SELECT CAST(step_no AS SIGNED) FROM agent_step_record WHERE investigation_id IN (?, ?)",
+                        Long.class,
+                        fixture.investigationId(),
+                        fixture.otherInvestigationId()))
+                .containsExactly(1L, 1L);
+    }
+
     /** 准入先提交：已准入的这一步保持 RUNNING 可完成；Stop 之后的下一次准入被拒绝。 */
     @Test
     void stopAfterAdmissionLetsTheAdmittedStepFinishButBlocksTheNext() {
