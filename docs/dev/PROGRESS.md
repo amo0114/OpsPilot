@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-28（TASK-026 Diagnosis 版本号死锁修复 Review PASS，提交中）
+> 最近更新：2026-09-28（TASK-026 Diagnosis 版本号死锁修复 DONE，cb2344b；下一步 TASK-040/043 结果保存失败修复，B13 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -476,7 +476,7 @@
 
 ### TASK-026 修复 — Diagnosis 版本号并发死锁（TASK-016 修复 Review 约定）
 
-- 状态：REVIEW（Review PASS，提交中）
+- 状态：DONE（Review PASS，已提交 cb2344b）
 - 归属：TASK-026（B06 已 DONE，不重开 B06）；TASK-016 修复提交后、B13 开始前单独修复提交；之后再做 TASK-040/043 结果保存失败修复
 - Base SHA：2e202b920480d84836fd6ee48e83b88eb2111da5（开工时 HEAD）；开工时工作树干净
 - 范围：Diagnosis 版本号分配（infrastructure persistence/mybatis/diagnosis 的 insertNextVersion 与仓储、DiagnosisRepository 端口说明）；为使普通读取在所有调用链上看到最新已提交版本，AgentStepRecorder 把按 Step 查 incidentId 的无锁读取移到结果事务之外（该列创建后不变）；回归测试；docs/dev。明确不做：改变 Incident/Investigation 锁序与排他锁、版本唯一约束、Diagnosis 创建事务的原子状态迁移与时间线；通用重试；新增表/列/Migration
@@ -493,7 +493,7 @@
   - 真实进程（2026-09-28 11:54～11:56 UTC，临时 mysql:8.4.11＋uvicorn Fake＋boot jar）：7 个 Incident 并发首次 Start 全部 202，7 个 Worker 在同一毫秒各自形成 Diagnosis v1，全部 DIAGNOSED；随后 3 个并发 Continue 全部 202，各自 run 2 形成 v2（每个 Incident v1/run 1、v2/run 2）；Step 10 条全部 SUCCEEDED、无 RUNNING 残留；日志无 Deadlock、Duplicate、Worker failed、Unhandled；不含 Token；进程已停止、端口释放、容器已删除（修复前同类冒烟 12 次死锁、12 条 RUNNING 残留）
   - NOT RUN：真实 LLM、ai-runtime 检查（未修改）、MySQL 8.0.16、Windows mvnw.cmd
 - Review：独立 Reviewer；Base 2e202b9；结论 PASS，可提交，无阻塞项；确认 Recorder 调整属本修复合理范围（只把不可变 incident_id 查询移到结果事务外以避免过早建立快照，Incident → Investigation → Step 锁序、持锁校验与原子提交不变），当前生产调用链满足版本分配的快照前提；独立实测 Diagnosis 6/6、编排 22/22、Step 10/10（共 38/38），专项 verify exit 0，Enforcer、Spotless、diff 检查通过；未重跑完整构建与真实进程冒烟，沿用交付证据；提交并回填后开始 TASK-040/043 结果保存失败修复——消除死锁触发源不等于已解决孤立 RUNNING Step 的通用异常路径
-- 提交：未提交（Review PASS，提交中）
+- 提交：代码提交 cb2344bb867ab65a09bde587125813b09a08c5d9（fix(diagnosis): allocate diagnosis versions without gap locks (TASK-026)）；SHA 回填为后续 docs 提交
 
 ### 工作流文档变更（不属于 TASK-012 或 B01）
 
@@ -604,7 +604,7 @@
 | UnwiredInvestigationWorker 仅在没有 InvestigationWorker Bean 的上下文（infrastructure 模块测试）中使用，被调用只记 warn；应用装配由 boot 测试断言为 InvestigationOrchestrator | infrastructure/dispatch/DispatchConfiguration、UnwiredInvestigationWorker | 保持；不得在生产装配中出现 | — |
 | （已关闭，TASK-039 修复 30aea1f）AgentStep 准入的 step_no 分配改为持 Investigation 锁后普通读取最大值再 `INSERT … VALUES`，不同调查并发准入不再因间隙锁互等 | persistence/mybatis/agentstep/AgentStepMapper.xml | — | — |
 | （已关闭，TASK-016 修复 837d5d7）首次 Start 在 Incident 行锁下以普通读判断 Investigation 是否存在后插入，不同 Incident 并发首次 Start 不再因间隙锁死锁 | InvestigationApplicationService.resumeInvestigation | — | — |
-| （修复待 Review）Diagnosis 版本号分配原为 `INSERT … SELECT MAX+1`，在 uk_diagnosis_investigation_version 上取间隙锁，不同调查并发形成 Diagnosis 时死锁；已改为持锁后普通读取最大值再 `INSERT … VALUES`，并把结果事务按 Step 查 Incident 的普通读移到事务外以满足快照前提（见 PROGRESS「TASK-026 修复」） | persistence/mybatis/diagnosis、AgentStepRecorder | 修复提交后关闭 | TASK-026 |
+| （已关闭，TASK-026 修复 cb2344b）Diagnosis 版本号改为持锁后普通读取最大值再 `INSERT … VALUES`，结果事务按 Step 查 Incident 的读取移到事务外；不同调查并发形成 Diagnosis 不再死锁 | persistence/mybatis/diagnosis、AgentStepRecorder | — | — |
 | 结果事务内的数据库级失败（如上述死锁）使 Worker 异常退出并留下 RUNNING Step：Intent 在 NESTED 保存点中执行，死锁已由 MySQL 回滚整个事务，保存点回滚随之失败（TransactionSystemException "Application exception overridden"），recordDecision 整体回滚，Step 保持 RUNNING；编排器只捕获 AI 调用阶段的异常，不处理记录阶段失败；存活进程的周期扫描按约定不标记中断，这些 Step 要到下次启动才标 PROCESS_INTERRUPTED，而补派发会新建 Step 并再问 AI（冒烟中留下 12 条 RUNNING） | application/investigation/orchestration/{InvestigationOrchestrator,IntentDispatcher}、step/AgentStepRecorder（TASK-040/043） | 影响：审计残留与重复 AI 调用，不影响最终收敛与控制（准入不看残留 RUNNING）。上一行修复后该触发源消失，但其他瞬时数据库错误仍会同样表现。建议在对应 Task 内决定：记录阶段失败时以独立短事务把该 Step 记为 FAILED（非 AI 错误码、不计连续失败），或在 Worker 退出路径登记，均不加通用重试 | TASK-040/043（已安排：TASK-026 修复之后、B13 前独立修复） |
 | 观察：7 个 Worker 并发调用 uvicorn Fake 时出现 2 次 AI_RUNTIME_UNAVAILABLE（原因未调查） | infrastructure/ai HttpAiRuntimeClient、ai-runtime | 按 02 §28 记录并计数，未影响收敛；保持观察，不据推测扩大修复范围（TASK-016 修复 Review） | 观察 |
 | B11-V1、B12-V1 完整 verify 中 infrastructure 测试 JVM 退出时 Hikari 池逐个关闭超过 surefire 30 s 等待（"kill self fork JVM ... after System.exit(0)"，结果不受影响；B11 单独重跑未复现，B12 再次出现，且整次 verify 增至约 12 分钟）；推断与缓存上下文数量及容器已停止有关 | infrastructure 测试（Spring 测试上下文缓存＋每类独立 Testcontainers） | 若反复出现，可考虑限制上下文缓存、合并相同配置的测试上下文或调整 surefire forkedProcessExitTimeoutInSeconds；不以跳过测试处理 | 后续触及测试基础设施的 Task |
