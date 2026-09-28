@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-28（B08 DONE，5e81bb8；B09 未开始）
+> 最近更新：2026-09-28（B09 REVIEW，B09-R1 PASS，提交中）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -42,8 +42,8 @@
 | TASK-032 | B07 | Java / Python Contract Test | DONE | commit d796643（B07，Base 3df010c） | B07-V2；同一 108 份 fixture 双端＋Schema 一致；B07-R1 PASS AFTER PATCH → B07-R2 PASS；见 PROGRESS「B07」 |
 | TASK-033 | B08 | AI Runtime 最小推理服务 | DONE | commit 5e81bb8（B08，Base dfcbca6） | B08-V2（ai-runtime 检查 exit 0、pytest 143）；uvicorn＋Fake 与跨语言冒烟；B08-R1 PASS AFTER PATCH → B08-R2 PASS；见 PROGRESS「B08」 |
 | TASK-034 | B08 | Java AiRuntimeClient | DONE | commit 5e81bb8（B08，Base dfcbca6） | B08-V2（backend verify exit 0）＋HttpAiRuntimeClientTest 17/17（含响应体延迟回归）；跨语言冒烟；B08-R1 PASS AFTER PATCH → B08-R2 PASS；见 PROGRESS「B08」 |
-| TASK-035 | B09 | WorkDispatcher | TODO | — | NOT RUN |
-| TASK-036 | B09 | SingleFlightRegistry | TODO | — | NOT RUN |
+| TASK-035 | B09 | WorkDispatcher | REVIEW | 未提交（B09，Base d922a3f；文件见 PROGRESS「B09」） | B09-V1 verify exit 0＋InProcessWorkDispatcherTest 4、DispatchRecoveryIntegrationTest 3、DispatchRecoverySchedulerIntegrationTest 1（真实 MySQL）；B09-R1 PASS |
+| TASK-036 | B09 | SingleFlightRegistry | REVIEW | 未提交（B09，Base d922a3f；文件见 PROGRESS「B09」） | B09-V1 verify exit 0＋SingleFlightRegistryTest 5；B09-R1 PASS |
 | TASK-037 | B10 | Investigation Context Builder | TODO | — | NOT RUN |
 | TASK-038 | B10 | AgentStep 生命周期 | TODO | — | NOT RUN |
 | TASK-039 | B10 | Investigation Guard | TODO | — | NOT RUN |
@@ -331,6 +331,31 @@
 - B08-R2：独立 Reviewer 复核；Base 仍为 dfcbca6，范围至修复后工作树（含未跟踪文件）；结论 PASS，可提交，无新增阻塞项；确认完整响应体读取受等待上限约束、到期取消请求并返回 AI_RUNTIME_TIMEOUT，调查与 Remediation 共用修复路径且未增加重试，Fake 的 prompt 历史已移到测试替身；独立实测 Maven clean verify exit 0（domain 30、infrastructure 388、web 21、boot 4，无跳过），Enforcer、Spotless 通过；Python 依赖同步与 Ruff 通过、143 passed；真实 uvicorn＋Java 客户端两类调用与回显通过，认证失败与非法请求被正确拒绝，日志不含 Token，临时服务已停止；`git diff --check` 通过；保留真实 LLM 接入归属与 TASK-038 元数据传递事项；真实 LLM、MySQL 8.0.16、Windows、ccg NOT VERIFIED；Commit Recommendation YES
 - 提交：代码提交 5e81bb8a713a6551dc9fa6805f3766bcc2cc12e7（feat(ai-runtime): fake-backed decision service and Java AI runtime client (TASK-033–034)）；SHA 回填为后续 docs 提交；范围外问题：见「待处理问题」中 B08 行
 
+### B09 — 工作派发与单实例并发控制
+
+- 状态：REVIEW（B09-R1 PASS，提交中）
+- 成员及顺序：TASK-035 → TASK-036；批外前置：TASK-034 DONE（5e81bb8，B08-R2 PASS）
+- Base SHA：d922a3ffff08bdd0ce1a7ea083fd7de0c273510a
+- 范围：application/dispatch（WorkDispatcher 三类派发、可派发工作与 Worker 端口、StartupRecoveryCoordinator）；infrastructure/dispatch（InProcessWorkDispatcher 有界线程池、SingleFlightRegistry、启动恢复与周期补派发调度、Worker/Execution/Verification 占位、Worker/Dispatcher 强类型配置）、investigation 可派发工作查询；删除 DeferredWorkDispatcher；测试与 infrastructure 测试配置；docs/dev。明确不做：MQ、Outbox、DB Lease、Leader Election、第二套任务状态表（08 TASK-035）；调查循环/Guard/AgentStep（TASK-037～041）；残留 RUNNING Step/Invocation 中断标记、到期/Stop 收束与启动恢复细节（TASK-042/043）；Execution/Verification 的真实 Worker 与恢复（TASK-071/073、TASK-079/083）
+- 规格：08 TASK-035～036；07 §40～§56、§88；01 §9～§11；04 §16、§59；05 §27～§28
+- 关键不变量：派发只是进程内唤醒，数据库是事实来源（07 §45～§51）；提交后立即唤醒，线程池有界、拒绝只记录不丢数据库工作，由启动扫描与周期补派发（默认 5 秒）重新唤醒；所有触发（afterCommit、启动、补派发）进入同一受控入口；补派发不刷新 run、不调用 resumeInvestigation、不把当前 JVM Worker 拥有的 RUNNING 工作当中断；SingleFlight 按工作类型＋业务 ID 登记拥有者 token，只有拥有者能释放，派发合并不得丢失新 run 唤醒（07 §48～§49、§51）
+- 验证要求：Registry 与 Dispatcher 规则单元测试（并发只一个拥有者、旧 token 不能释放新拥有者、同工作合并、新 run 延后不丢、拒绝后可再唤醒、异常释放）；真实 MySQL 验证已提交未派发的 INVESTIGATING 由启动扫描按原 run 恢复、非调查状态不派发；Spring 装配下提交后经真实线程池唤醒与周期补派发；批尾 `cd backend && ./mvnw -B clean verify`（不跳过 Enforcer/Spotless）
+- 开工已有修改：无（工作树干净）
+- 成员进度：
+  - TASK-035：实现与针对性验证完成。application/dispatch：WorkType、WorkKey（类型＋业务 ID）、DispatchableWork（Investigation 带期望 runNo、ActionExecution、RecoveryVerification）、WorkDispatcher（统一入口 dispatch，另有 07 §45 三个类型化默认方法，原 dispatchInvestigation 调用方不变）、DispatchableWorkSource（只读读取需要 Worker 的工作）、三个 Worker 端口、StartupRecoveryCoordinator（recoverAfterStartup 与 redispatchPending 两个入口都只读取并派发，不改 run/预算/deadline/Stop、不调用 resumeInvestigation；单个来源失败只记录）。infrastructure/dispatch：InProcessWorkDispatcher（固定大小线程池、有界队列、AbortPolicy；先经 SingleFlightRegistry 取得拥有权；拒绝时释放拥有权并告警，不抛给调用方、不删数据库工作；Worker 在受控线程上以新 correlationId 运行，异常只记录，finally 释放并立即派发延后唤醒；关闭时等待在途 Worker）、DispatchConfiguration（worker 线程池与 Bean 装配）、WorkerProperties（opspilot.worker.max-concurrency=8、queue-capacity=16）、DispatcherProperties（opspilot.dispatcher.recovery-scan-interval-seconds=5、recovery-enabled=true）、DispatchRecoveryScheduler（ApplicationReady 后运行一次启动恢复，再按间隔周期补派发，扫描异常只记录）、三个占位 Worker（调查占位只记录 debug，不改状态；Execution/Verification 占位抛出——当前无来源派发它们）；persistence/mybatis/investigation：InvestigationWorkMapper＋XML、MyBatisInvestigationWorkSource（INVESTIGATING 的 Incident 与 current_run_no，含已 Stop）。删除 DeferredWorkDispatcher。Execution/Verification 只建端口，数据来源与恢复在 TASK-073/083 接入；残留 RUNNING 中断标记（只允许在启动路径）在 TASK-043/073/083 加入
+  - TASK-036：实现与针对性验证完成。SingleFlightRegistry：在同一把锁内完成登记、合并与释放；拥有者 token＝(WorkKey, 序号)；同工作（同 run/同身份）合并不排队；不同工作（新 run）记为延后唤醒、只保留最后到达的一个（不按 runNo 取最大，见 B09-R1），拥有者释放时交回派发；被覆盖的更高 run 仍由数据库扫描恢复；只有出示当前拥有者 token 才能释放，旧 Worker 不能移除新 Worker 登记；只是 JVM 保护，数据库状态与 lock_version 仍是最终保护
+- 本批修改文件：修改 application/dispatch/WorkDispatcher；删除 infrastructure/dispatch/DeferredWorkDispatcher；新增 application/dispatch/{WorkType,WorkKey,DispatchableWork,DispatchableWorkSource,InvestigationWorker,ActionExecutionWorker,RecoveryVerificationWorker,StartupRecoveryCoordinator}、infrastructure/dispatch/{SingleFlightRegistry,InProcessWorkDispatcher,DispatchConfiguration,DispatchRecoveryScheduler,WorkerProperties,DispatcherProperties,PlaceholderInvestigationWorker,PlaceholderActionExecutionWorker,PlaceholderRecoveryVerificationWorker}、persistence/mybatis/investigation/{InvestigationWorkMapper,MyBatisInvestigationWorkSource}＋InvestigationWorkMapper.xml；测试 dispatch/{SingleFlightRegistryTest,InProcessWorkDispatcherTest,DispatchRecoveryIntegrationTest,DispatchRecoverySchedulerIntegrationTest,DispatchSeed}、opspilot-infrastructure/src/test/resources/application.yml（集成测试默认关闭自动恢复，避免扫描产生测试外唤醒）；docs/dev。无新依赖、无 Migration
+- B09-V1：backend/；`./mvnw -B clean verify`；2026-09-28 05:24～05:29 UTC，JDK 21＋Docker（Testcontainers mysql:8.4.11）；exit 0；Enforcer 与 6 模块 spotless:check 通过；domain 30/30、infrastructure 401/401（新增 SingleFlightRegistryTest 5、InProcessWorkDispatcherTest 4、DispatchRecoveryIntegrationTest 3、DispatchRecoverySchedulerIntegrationTest 1）、web 21/21、boot 4/4（完整应用上下文默认开启启动恢复与周期扫描，占位 Worker 装配），无跳过；日志无 "Connection is closed"；`git diff --check` exit 0；覆盖 TASK-035～036；受测代码为 Base d922a3f＋当前未提交工作树
+- 专项证据/NOT RUN：
+  - TASK-036（SingleFlightRegistryTest 5）：同 run 重复合并且不产生延后；运行中依次收到 run 2、run 3，释放时交回最后到达的 run 3；旧 token 释放无效、新拥有者仍在且其延后唤醒不被拿走；类型隔离（同 ID 不同类型互不影响）；16 线程并发取得同一工作只有一个拥有者
+  - TASK-035（InProcessWorkDispatcherTest 4，生产同款有界线程池）：三类工作在 opspilot-worker 线程上运行并带 corr_ correlationId；运行中重复唤醒同 run 合并、新 run 在当前 Worker 结束后运行；maxConcurrency=1、queue=0 时第二个唤醒被拒绝且不抛出，之后再次唤醒可运行；Worker 异常后拥有权释放、再次唤醒可运行。测试以“反复唤醒直到运行”代替固定等待，连续 3 次运行稳定
+  - TASK-035（真实 MySQL＋真实 InProcessWorkDispatcher，InvestigationWorker 为测试替身）：直接写入已提交但未唤醒的 INVESTIGATING（run 3，本轮已用 5 次）与已 Stop 的 INVESTIGATING（run 1）及 DIAGNOSED、CREATED；recoverAfterStartup 返回 2，只按原 run 唤醒前两者，前后 Incident/Investigation 的状态、版本、run、起点、计数、Stop 逐列不变；Start 提交后经真实线程池唤醒 Worker(run 1)；Worker 运行中两次 redispatchPending 不产生第二个 Worker，释放后补派发再次唤醒同 run
+  - 自动恢复装配（DispatchRecoverySchedulerIntegrationTest，recovery-enabled=true、间隔 1s）：应用就绪后写入的已提交工作由周期扫描在 5s 内唤醒
+  - 变异（均已还原并逐字节核对）：去掉释放时的拥有者 token 核对 → 1 例失败；去掉新 run 延后记录 → 3 例失败（一次性构建曾用 -Dspotless.check.skip，不作门禁证据）
+  - NOT RUN：调查循环与残留 RUNNING Step/Invocation 中断标记、Stop/到期收束（TASK-037～043）；Execution/Verification 的数据来源、Worker 与恢复（TASK-071/073、TASK-079/083）；独立 jar 冒烟；ccg 质量关卡（本机未安装）；MySQL 8.0.16、Windows mvnw.cmd NOT RUN
+- B09-R1：独立 Reviewer；范围 d922a3f 到当前工作树（含未跟踪文件）；结论 PASS，可提交，无 P0/P1；确认拥有权按 token 释放、拒绝后可再唤醒、三类工作走统一入口、恢复查询含已 Stop 调查且不改 run/预算/deadline/Stop，测试配置、队列容量与占位 Worker 取舍可接受；独立实测 `./mvnw -B clean verify` exit 0（domain 30、infrastructure 401、web 21、boot 4，无跳过），Enforcer、Spotless、`git diff --check` 通过；非阻塞：① SingleFlightRegistry 延后唤醒保留的是最后到达者而非最大 runNo（实测 run 1 持有期间依次收到 run 3、run 2，释放后交回 run 2；run 3 仍可由数据库扫描恢复），记录不得写成“总保留最新 run”，真实 Worker 必须做期望 run 校验；② DispatchRecoveryIntegrationTest 中 release.countDown() 不代表 Registry 已释放，随后补派发可能被合并，存在偶发失败窗口，本轮通过，下次触及时改为等待释放或有界重复唤醒，无需加压；调查循环、中断标记、Execution/Verification 真实恢复、独立 jar 冒烟、MySQL 8.0.16、Windows、ccg NOT VERIFIED；Commit Recommendation YES
+- 提交：未提交（等待独立 Review 与用户提交授权）；范围外问题：见「待处理问题」中 B09 行
+
 ### 工作流文档变更（不属于 TASK-012 或 B01）
 
 - 2026-09-27：用户确认批次流程，新增 BATCH-PLAN，同步 Agent 入口、07/08 工作流条款、Manifest、启动指南及进度/交接。
@@ -387,7 +412,7 @@
 | Fault Lab 创建的 Incident 时间线发起方记为 SYSTEM、actorId 为请求用户；MANUAL 记 USER | IncidentApplicationService | TASK-092 如需区分请求用户与系统注入，再调整 | TASK-092 |
 | createIncident 用 TransactionTemplate 默认 REQUIRED 传播：无外层事务时每次编号冲突重试都是新事务；若将来从已有事务内调用，会加入外层事务，冲突后外层被标记 rollback-only，重试不成立（B01-R1 非阻塞） | application/incident/IncidentApplicationService.createIncident | 第一个在事务内调用它的用例（如 TASK-092 Fault Lab 创建 Incident）须先明确事务契约：在外层事务之外调用，或改为 REQUIRES_NEW 并说明提交语义 | TASK-092 或首个事务内调用方 |
 | 并发阻塞测试以 700ms 未完成推断第二个迁移在等待行锁，只证明未完成，不直接证明进入数据库锁等待（B01-R1 非阻塞） | MyBatisIncidentTransitionTest.concurrentTransitionWaitsForFirstCommitThenConflicts | 调整该测试时可改为查询 performance_schema.data_lock_waits / information_schema 确认锁等待再放行，不增加加压轮次 | 后续触及该测试的 Task |
-| 调查派发目前为 DeferredWorkDispatcher（只记日志）：Start/Continue 落账后 Incident 停在 INVESTIGATING、无 Worker 推进；不能视为后台调查完成 | infrastructure/dispatch/DeferredWorkDispatcher | TASK-035 以 InProcessWorkDispatcher 替换并删除本类；TASK-036 SingleFlight；TASK-037～043 调查循环、Guard、AgentStep、终止与启动恢复；启动恢复/补派发不得调用 resumeInvestigation | TASK-035～043 |
+| 调查 Worker 目前为 PlaceholderInvestigationWorker（只记 debug）：Start/Continue 落账后经真实 InProcessWorkDispatcher 唤醒，但 Incident 仍停在 INVESTIGATING 且被周期补派发每 5 秒唤醒；不能视为后台调查完成（DeferredWorkDispatcher 已由 B09 删除） | infrastructure/dispatch/PlaceholderInvestigationWorker | TASK-037～043 以真实调查 Worker 替换并删除占位；启动恢复/补派发不得调用 resumeInvestigation | TASK-037～043 |
 | PENDING Approval 判定目前以 Incident=AWAITING_APPROVAL 表达（01 §3.4），approval_request 表尚未建立 | application/investigation/InvestigationApplicationService | Approval 表建立后在同一锁内以真实 PENDING 记录复核，保持 PENDING_APPROVAL_EXISTS 语义 | TASK-062/066/067 |
 | resumeInvestigation 为私有，只服务 Start/Continue；VerificationFailed → INVESTIGATING（新 run）尚未接入 | InvestigationApplicationService | 在同一方法增加 VERIFICATION_FAILED 来源，由验证结果事务调用；不开放给启动恢复 | TASK-082 |
 | Start/Continue 的派发用 afterCommit 同步注册：外层事务存在时派发推迟到外层提交；派发异常只记录（事实已提交，由补派发恢复） | InvestigationApplicationService.dispatchAfterCommit | TASK-035 补派发与启动扫描覆盖“已提交但未唤醒”的 run | TASK-035/043 |
@@ -424,3 +449,9 @@
 | Python 内部错误体 {code, message} 未纳入 Canonical Schema；Java 只按 HTTP 状态映射（502/504/401/403/5xx/其他 4xx），不解析错误体 | ai-runtime api/internal.py、HttpAiRuntimeClient | 如需细分原因再在 contracts 增加错误 Schema 与 fixture | — |
 | HttpAiRuntimeClient 采用 JDK java.net.http，而非 07 §5 基线的 RestClient | infrastructure/ai | 原因：infrastructure 无 spring-web，JDK 客户端原生支持单请求超时（05 §89 调用方上限）且不重放 POST；如统一改 RestClient 需每次按上限构造请求工厂 | — |
 | AI Runtime 默认地址 http://localhost:8000、Token 默认空（空时调用即 AI_RUNTIME_UNAVAILABLE，不发请求） | opspilot-boot application.yml、AiRuntimeProperties | TASK-105 Compose 注入 OPSPILOT_AI_RUNTIME_URL/OPSPILOT_AI_RUNTIME_TOKEN（.env，不入库），AI Runtime 只监听内部网络 | TASK-105 |
+| 残留 RUNNING 的中断标记只允许在启动路径（StartupRecoveryCoordinator.recoverAfterStartup）进行，目前两条入口都只派发 | application/dispatch/StartupRecoveryCoordinator | TASK-043（AgentStep/只读 Invocation）、TASK-073（Execution）、TASK-083（Verification）在启动入口加入中断处理；周期补派发永远不做中断标记 | TASK-043/073/083 |
+| Execution/Verification 只有 Worker 与 DispatchableWorkSource 端口：占位 Worker 被调用即抛出（当前无来源会派发），尚无数据来源 | infrastructure/dispatch/Placeholder*Worker | TASK-071/073 与 TASK-079/083 提供真实 Worker 和 PENDING/RUNNING 数据来源，并删除占位 | TASK-071/073/079/083 |
+| 线程池拒绝时连同延后唤醒一起放弃，依赖周期补派发（默认 5 秒）从数据库重新唤醒；queue-capacity=16 为本批取值 | infrastructure/dispatch/InProcessWorkDispatcher、WorkerProperties | 如需更快恢复可缩短扫描间隔；数值调整须记录依据（07 §88） | — |
+| opspilot-infrastructure 集成测试默认 opspilot.dispatcher.recovery-enabled=false（测试替身替换派发器/Worker 时避免扫描产生测试外唤醒）；生产与 boot 测试默认开启 | opspilot-infrastructure/src/test/resources/application.yml | 需要验证扫描的测试显式开启或直接调用 StartupRecoveryCoordinator | — |
+| SingleFlightRegistry 延后唤醒保留最后到达者而非最大 runNo（B09-R1 实测 run 3 后到 run 2 时交回 run 2）；类说明中“只保留最新一个”应理解为“最后到达” | infrastructure/dispatch/SingleFlightRegistry | 真实调查 Worker 必须以期望 run 做准入校验（旧 run 直接退出），被覆盖的更高 run 由数据库扫描恢复；下次触及该类时修正说明或改为按 runNo 取大 | TASK-039～041 |
+| DispatchRecoveryIntegrationTest.rescanDoesNotStartASecondWorkerForRunningWork 在 release.countDown() 后立即补派发，Registry 可能尚未释放而被合并，存在偶发失败窗口（B09-R1） | infrastructure 测试 dispatch/DispatchRecoveryIntegrationTest | 下次触及时改为等待释放或有界重复唤醒（同 InProcessWorkDispatcherTest 的做法），不增加加压轮次 | 后续触及该测试的 Task |

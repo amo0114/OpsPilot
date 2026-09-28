@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.investigation.InvestigationWorkMapper">
+
+    <resultMap id="investigationWork" type="io.github.ismoyuan.opspilot.application.dispatch.DispatchableWork$Investigation">
+        <constructor>
+            <arg column="incident_id" javaType="_long"/>
+            <arg column="current_run_no" javaType="_int"/>
+        </constructor>
+    </resultMap>
+
+    <!-- 已 Stop 的 run 也要唤醒，以便确定性收束（07 §51、§53）；轮号取数据库当前值，不刷新 -->
+    <select id="selectInvestigatingRuns" resultMap="investigationWork">
+        SELECT i.id AS incident_id, v.current_run_no
+        FROM incident i
+        JOIN investigation v ON v.incident_id = i.id
+        WHERE i.status = 'INVESTIGATING'
+        ORDER BY i.id
+    </select>
+</mapper>

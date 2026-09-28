@@ -1,0 +1,5 @@
+opspilot:
+  dispatcher:
+    # 集成测试以测试替身替换派发器或 Worker；自动的启动恢复与周期扫描会产生测试外的唤醒。
+    # 需要验证扫描的测试直接调用 StartupRecoveryCoordinator 或显式开启本项。
+    recovery-enabled: false
