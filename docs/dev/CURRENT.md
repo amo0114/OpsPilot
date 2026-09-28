@@ -2,21 +2,20 @@
 
 更新时间：2026-09-28（本地）
 仓库/分支：/root/projects/OpsPilot-V0.1-IMPLEMENTATION，main；无 remote
-当前批次/状态：B13 REVIEW（B13-R2 PASS，提交中）
-成员 Task 及顺序：B13 = TASK-044 → TASK-045 → TASK-046
-固定 Base SHA：6c5d10d2df8f12a293190f64fca5917e0d6322f6
-批外前置核实：TASK-043 DONE（c4c26c3，B12-R2 PASS）；开工时工作树干净
-允许目录 / 明确不做 / 关键不变量：见 PROGRESS「B13」（Registry、Descriptor、Provider 解析；不做准入/去重/预算/Invocation/真实 Provider/Remediation）
+当前批次/状态：B13 DONE（代码 36fd25a，B13-R2 PASS）；B14 未开始
+成员 Task 及顺序：B13 = TASK-044 → 045 → 046（均 DONE）；下一批 B14 = TASK-047 → 048
+固定 Base SHA：B13 为 6c5d10d2df8f12a293190f64fca5917e0d6322f6；B14 开工时读取当时 HEAD
+批外前置核实：B14 开工时按 08 核对其成员的批外前置
+允许目录 / 明确不做 / 关键不变量：B14 开工时按 BATCH-PLAN 与 08 固定
 本批规格章节及 PROGRESS 记录：PROGRESS「B13」
-当前成员及位置：TASK-044～046 均 REVIEW；B13-R1 P2（超长 MetricKey 中断上下文）已修复
-已实现并针对性验证的成员：TASK-044～046（B13-V1、B13-V2 verify exit 0；真实进程请求捕获为 B13-V1）
-未完成 / 未执行验证：B13-R2；NOT RUN 项见 PROGRESS「B13」；其余见 PROGRESS 待处理问题
-未提交文件（含既有无关修改）：见 PROGRESS「B13」本批修改文件（含已暂存的 UnregisteredCapabilityDescriptorSource 删除）、docs/dev/CURRENT.md、docs/dev/PROGRESS.md；无既有无关修改
-共同验证及独立 Review 证据编号：B13-V1、B13-V2（完成）；B13-R1（1 个 P2，已修复）；B13-R2（NOT RUN）
+当前成员及位置：无进行中批次
+已实现并针对性验证的成员：B01～B13 全部，及 B13 前的独立修复
+未完成 / 未执行验证：Capability 准入/参数按 Descriptor 校验/去重/预算/Invocation（TASK-047/048，下一批）；调查调用中断真实链路复核（TASK-048）；AgentStep 输出信封读取方（TASK-100 等）；真实 LLM 接入归属（TASK-058 前）；观察项：surefire 退出等待、Hikari 连接已关闭告警、Fake runtime 偶发 AI_RUNTIME_UNAVAILABLE；其余见 PROGRESS 待处理问题；MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
+未提交文件（含既有无关修改）：无（本交接卡与 PROGRESS 回填随 docs(progress) 提交）
+共同验证及独立 Review 证据编号：B13-V1、B13-V2、B13-R1、B13-R2
 下一步具体动作：
-1. 独立 Reviewer 复审 Base 6c5d10d 到当前工作树（重点 PrometheusResourceBindingV1 长度校验与超长 MetricKey 回归）
-2. PASS 后按用户授权提交（建议 `feat(capability): capability registry, observe descriptors and provider resolution (TASK-044–046)`），回填 SHA 后批次与成员标 DONE
-3. 不推送；未获指示不开始 B14
+1. 等待用户指示开始 B14（TASK-047 → 048，调用去重、预算与 OBSERVE 执行准入）
+2. 不推送
 本地启动 Demo 配置：在 OPSPILOT_DB_* 环境变量基础上加 --spring.profiles.active=demo
 
 后续 UI 约定（TASK-096/099 实施）：

@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-28（B13 REVIEW，B13-R2 PASS，提交中）
+> 最近更新：2026-09-28（B13 DONE，36fd25a；B14 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -51,9 +51,9 @@
 | TASK-041 | B11 | Stop Race Handling | DONE | commit 9f60002（B11，Base 57371cd） | B11-V1 verify exit 0＋InvestigationOrchestrationIntegrationTest（Stop 先提交、AI 运行中 Stop 返回非 COMPLETE/REQUEST_CAPABILITY/COMPLETE、Capability 准入前 Stop、旧 run COMPLETE、取消部分）；B11-R1 PASS；见 PROGRESS「B11」 |
 | TASK-042 | B12 | Deterministic Termination | DONE | commit c4c26c3（B12，Base c204b1d） | B12-V1/V2 verify exit 0＋StepAdmissionRulesTest 6、InvestigationOrchestrationIntegrationTest（四类收束、只冻结本轮 Evidence、持锁重判部分）；真实进程冒烟（USER_STOPPED、AI_RUNTIME_UNAVAILABLE）；B12-R1 P2（属 TASK-043）已修复，B12-R2 PASS；见 PROGRESS「B12」 |
 | TASK-043 | B12 | Investigation Startup Recovery | DONE | commit c4c26c3（B12，Base c204b1d） | B12-V1 verify exit 0＋InvestigationOrchestrationIntegrationTest（重启中断标记与原 run 继续、Stop 后崩溃、停机过期、界限与补派发不误标、丢失唤醒部分）、StartupRecoveryCoordinatorTest 1（B12-R1 修复后改写）、DispatchRecovery* 4；B12-V2 verify exit 0；真实进程 kill -9 重启冒烟；B12-R1 P2 已修复，B12-R2 PASS；见 PROGRESS「B12」 |
-| TASK-044 | B13 | CapabilityRegistry | REVIEW | 未提交（B13，Base 6c5d10d；文件见 PROGRESS「B13」） | B13-V1/V2 verify exit 0＋CapabilityRegistryTest 5；B13-R2 PASS；见 PROGRESS「B13」 |
-| TASK-045 | B13 | Capability Descriptor Builder | REVIEW | 未提交（B13，Base 6c5d10d；文件见 PROGRESS「B13」） | B13-V1/V2 verify exit 0＋CapabilityDescriptorIntegrationTest（受控空间、序列化不泄漏、超长 MetricKey 只隐藏该能力）、boot demo Seed 断言；真实进程请求捕获；B13-R1 P2 已修复，B13-R2 PASS；见 PROGRESS「B13」 |
-| TASK-046 | B13 | Provider Resolver | REVIEW | 未提交（B13，Base 6c5d10d；文件见 PROGRESS「B13」） | B13-V1/V2 verify exit 0＋CapabilityDescriptorIntegrationTest（唯一、0 个、歧义、选择器不可用）；B13-R2 PASS；见 PROGRESS「B13」 |
+| TASK-044 | B13 | CapabilityRegistry | DONE | commit 36fd25a（B13，Base 6c5d10d） | B13-V1/V2 verify exit 0＋CapabilityRegistryTest 5；B13-R2 PASS；见 PROGRESS「B13」 |
+| TASK-045 | B13 | Capability Descriptor Builder | DONE | commit 36fd25a（B13，Base 6c5d10d） | B13-V1/V2 verify exit 0＋CapabilityDescriptorIntegrationTest（受控空间、序列化不泄漏、超长 MetricKey 只隐藏该能力）、boot demo Seed 断言；真实进程请求捕获；B13-R1 P2 已修复，B13-R2 PASS；见 PROGRESS「B13」 |
+| TASK-046 | B13 | Provider Resolver | DONE | commit 36fd25a（B13，Base 6c5d10d） | B13-V1/V2 verify exit 0＋CapabilityDescriptorIntegrationTest（唯一、0 个、歧义、选择器不可用）；B13-R2 PASS；见 PROGRESS「B13」 |
 | TASK-047 | B14 | Canonical JSON + Duplicate Guard | TODO | — | NOT RUN |
 | TASK-048 | B14 | CapabilityInvocation 执行骨架 | TODO | — | NOT RUN |
 | TASK-049 | B15 | Sanitizer Framework | TODO | — | NOT RUN |
@@ -440,7 +440,7 @@
 
 ### B13 — Capability 注册、允许能力描述与 Provider 解析
 
-- 状态：REVIEW（B13-R2 PASS，提交中）
+- 状态：DONE（B13-R2 PASS，已提交 36fd25a）
 - 成员及顺序：TASK-044 → TASK-045 → TASK-046；批外前置：TASK-043 DONE（c4c26c3，B12-R2 PASS），B13 前约定的独立修复（TASK-039/016/026/040-043）均已 DONE（最后 5589fed）
 - Base SHA：6c5d10d2df8f12a293190f64fca5917e0d6322f6
 - 范围：domain/capability（Registry 定义：冻结 7 个 Capability 的 mode、支持的 ResourceType、请求/结果 Schema、支持的 ProviderType、超时、审批、风险）、domain/system/binding（资源选择器的封闭类型）、domain/error（Provider 解析错误码）；application/capability（Provider 解析、按受信配置构造 AI 可见的 Capability Descriptor，替换 B10 的空占位）；infrastructure（Capability 超时配置、Registry 装配，删除占位 Descriptor 来源）；测试；docs/dev。明确不做：Capability 准入/参数校验/去重/预算扣减/Invocation（TASK-047～048）、真实 Provider 与执行（TASK-049～058）、Remediation allowedActions 与 service.restart 执行（TASK-062+）、新增数据库表（06 §14 Registry 只在 Java）
@@ -466,7 +466,7 @@
 - B13-R1 修复修改文件：domain/system/binding/PrometheusResourceBindingV1；测试 CapabilityDescriptorIntegrationTest（新增 anOverlongMetricKeyHidesOnlyThatCapability 与 metricsSelector 辅助）
 - B13-V2（修复后最终代码树，本机实测）：anOverlongMetricKeyHidesOnlyThatCapability——129 字符键的绑定解析为 NOT_CONFIGURED/INVALID_SELECTOR，真实 InvestigationContextBuilder 构造成功，availableCapabilities 为 [redirect-service logs.search, statistics-consumer metrics.query]，恰为 128 字符的键被暴露且请求经 AiProtocolCodec 往返一致；变异检查（已还原）：去掉长度校验 → 该例失败（Resolver 不再拒绝）；CapabilityDescriptorIntegrationTest 7/7、JacksonSchemaCodecRegistryTest 45/45；backend `./mvnw -B clean verify` 2026-09-28 14:41～14:49 UTC exit 0，Enforcer 与 6 模块 spotless:check 通过；domain 41/41、infrastructure 451/451、web 21/21、boot 6/6，无跳过；日志无 "Connection is closed"；infrastructure 测试 JVM 退出时再次出现 surefire 退出等待告警（既有观察项）；`git diff --check` exit 0，未跟踪文件无行尾空白；真实进程冒烟未重跑（修复只影响超长键的配置，Seed 指标均远短于 128，B13-V1 冒烟结论不受影响）
 - B13-R2：独立 Reviewer 复审；Base 仍为 6c5d10d；结论 PASS，无阻塞项；确认 129 字符 MetricKey 映射为 INVALID_SELECTOR、只隐藏对应能力，其他能力与调查上下文正常构造，128 字符边界可用，协议未放宽；独立实测 Descriptor 集成 7/7、Schema Codec 45/45（共 52/52，无跳过），专项 Maven verify、Enforcer、Spotless、`git diff --check` 通过；完整构建与真实进程冒烟 NOT RUN，沿用交付证据（B13-V2、B13-V1）；Commit Recommendation YES
-- 提交：未提交（B13-R2 PASS，提交中）
+- 提交：代码提交 36fd25a188e34f0b32f848b2633af1f188c0626c（feat(capability): capability registry, observe descriptors and provider resolution (TASK-044–046)）；SHA 回填为后续 docs 提交；范围外问题：见「待处理问题」中 B13 行
 
 ### TASK-039 修复 — 准入 step_no 分配并发死锁（B12-R1/R2 约定）
 
