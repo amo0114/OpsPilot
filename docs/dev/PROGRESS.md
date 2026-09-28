@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-28（TASK-040/043 结果保存失败修复 Review-3 PASS，提交中）
+> 最近更新：2026-09-28（TASK-040/043 结果保存失败修复 DONE，5589fed；B13 前的独立修复全部完成，B13 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -497,7 +497,7 @@
 
 ### TASK-040/043 修复 — 结果保存失败留下 RUNNING Step（TASK-016 修复 Review 约定）
 
-- 状态：REVIEW（Review-3 PASS，提交中）
+- 状态：DONE（Review-3 PASS，已提交 5589fed）
 - 归属：TASK-040（编排与结果处置）/TASK-043（中断与恢复）；B11、B12 已 DONE，不重开；TASK-026 修复之后、B13 开始前单独修复提交
 - Base SHA：a4db1b5c22ec51d62ea38c45e9693b4a5eb0d6a7（开工时 HEAD）；开工时工作树干净
 - 问题：编排器只处理 AI 调用阶段的异常；结果事务（recordDecision）或失败记录事务（recordFailure）本身抛出时（数据库错误、保存点回滚失败、非业务异常等）整个事务回滚，Step 保持 RUNNING，Worker 异常退出；存活进程不标记中断，补派发新建 Step 并再问 AI，孤立 RUNNING 要到下次启动才被标记
@@ -533,7 +533,7 @@
   - backend `./mvnw -B clean verify` 2026-09-28 13:14～13:20 UTC exit 0，Enforcer 与 6 模块 spotless:check 通过；domain 36/36、infrastructure 444/444、web 21/21、boot 5/5，无跳过；日志无 "Connection is closed"；infrastructure 测试 JVM 退出时再次出现 surefire 退出等待告警（既有观察项，不影响 exit 0）；`git diff --check` exit 0
   - NOT RUN：真实进程冒烟（原因同上）；真实 LLM、MySQL 8.0.16、Windows mvnw.cmd
 - Review-3：独立 Reviewer；范围 a4db1b5 到当前工作树；结论 PASS，无阻塞；确认取消后的 RUNNING Step 可由扫描清理，单飞保护仍有效，清理不准入新 Step、不调用 AI、不改 Incident 状态与版本；独立实测编排、Step、恢复扫描与 Coordinator 测试 41/41（无跳过），专项 Maven verify、Enforcer、Spotless、`git diff --check` 通过；完整构建与真实进程冒烟 NOT RUN，完整构建沿用交付证据；扫描测试后出现 Hikari 连接已关闭告警但未致失败，保持观察；非阻塞文档更正：同 run 唤醒被合并、不排队，原 Worker 退出后剩余 Step 由下一次周期扫描重新派发（已更正上方 Review-2 修复描述）
-- 提交：未提交（Review-3 PASS，提交中）
+- 提交：代码提交 5589fed628b045785035aecc9d3847bd31c618e6（fix(investigation): close steps whose outcome could not be recorded (TASK-040/043)）；SHA 回填为后续 docs 提交
 
 ### 工作流文档变更（不属于 TASK-012 或 B01）
 
@@ -645,7 +645,7 @@
 | （已关闭，TASK-039 修复 30aea1f）AgentStep 准入的 step_no 分配改为持 Investigation 锁后普通读取最大值再 `INSERT … VALUES`，不同调查并发准入不再因间隙锁互等 | persistence/mybatis/agentstep/AgentStepMapper.xml | — | — |
 | （已关闭，TASK-016 修复 837d5d7）首次 Start 在 Incident 行锁下以普通读判断 Investigation 是否存在后插入，不同 Incident 并发首次 Start 不再因间隙锁死锁 | InvestigationApplicationService.resumeInvestigation | — | — |
 | （已关闭，TASK-026 修复 cb2344b）Diagnosis 版本号改为持锁后普通读取最大值再 `INSERT … VALUES`，结果事务按 Step 查 Incident 的读取移到事务外；不同调查并发形成 Diagnosis 不再死锁 | persistence/mybatis/diagnosis、AgentStepRecorder | — | — |
-| （修复待复审）结果或失败记录事务本身抛出时，编排器以独立短事务把仍为 RUNNING 的该 Step 记为 FAILED/INTERNAL_ERROR；该收尾也失败时 Step 保留为 RUNNING，由本 Incident 下一个 Worker 在准入前补完，补完失败不准入新 Step；Incident 已取消等不在调查的情况下，补派发仍因其 RUNNING Step 派发 Worker 只补完审计（不计 AI 失败、不重放、已提交终态与取消状态不变；见 PROGRESS「TASK-040/043 修复」） | InvestigationOrchestrator、AgentStepRecorder、InvestigationWorkMapper.xml | 修复提交后关闭 | TASK-040/043 |
+| （已关闭，TASK-040/043 修复 5589fed）结果或失败记录失败时以独立短事务终结仍为 RUNNING 的 Step；收尾也失败时由本 Incident 下一个 Worker 在准入前补完，补完失败不准入；不在调查（如已取消）但有 RUNNING Step 的 Incident 由补派发唤醒只补完审计 | InvestigationOrchestrator、AgentStepRecorder、InvestigationWorkMapper.xml | — | — |
 | 观察：7 个 Worker 并发调用 uvicorn Fake 时出现 2 次 AI_RUNTIME_UNAVAILABLE（原因未调查） | infrastructure/ai HttpAiRuntimeClient、ai-runtime | 按 02 §28 记录并计数，未影响收敛；保持观察，不据推测扩大修复范围（TASK-016 修复 Review） | 观察 |
 | B11-V1、B12-V1 完整 verify 中 infrastructure 测试 JVM 退出时 Hikari 池逐个关闭超过 surefire 30 s 等待（"kill self fork JVM ... after System.exit(0)"，结果不受影响；B11 单独重跑未复现，B12 再次出现，且整次 verify 增至约 12 分钟）；推断与缓存上下文数量及容器已停止有关 | infrastructure 测试（Spring 测试上下文缓存＋每类独立 Testcontainers） | 若反复出现，可考虑限制上下文缓存、合并相同配置的测试上下文或调整 surefire forkedProcessExitTimeoutInSeconds；不以跳过测试处理 | 后续触及测试基础设施的 Task |
 | 调查调用的中断标记已实现，但 Java 尚无调查调用写入口（TASK-048），真实进程中不会出现在途调查调用；恢复采样调用（recovery_verification_id 非空）不在此处理 | application/investigation/recovery、persistence/mybatis/invocation | TASK-048 接入后在真实链路复核中断标记；恢复采样调用的中断由 TASK-083 处理 | TASK-048、TASK-083 |

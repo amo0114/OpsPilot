@@ -2,21 +2,20 @@
 
 更新时间：2026-09-28（本地）
 仓库/分支：/root/projects/OpsPilot-V0.1-IMPLEMENTATION，main；无 remote
-当前批次/状态：TASK-040/043 结果保存失败修复 Review-3 PASS，提交中；B13 未开始
-成员 Task 及顺序：B12 = TASK-042 → TASK-043（均 DONE）；B13 前独立修复 TASK-039、TASK-016、TASK-026 已 DONE，剩 TASK-040/043 结果保存失败修复，之后 B13 = TASK-044 → 046
-固定 Base SHA：a4db1b5c22ec51d62ea38c45e9693b4a5eb0d6a7（TASK-040/043 修复开工时 HEAD）
+当前批次/状态：TASK-040/043 修复 DONE（代码 5589fed）；B13 前约定的独立修复（TASK-039、016、026、040/043）全部完成；B13 未开始
+成员 Task 及顺序：B12 = TASK-042 → TASK-043（均 DONE）；下一批 B13 = TASK-044 → 046（待用户指示）
+固定 Base SHA：B13 开工时读取当时 HEAD
 批外前置核实：B13 开工时按 08 核对其成员的批外前置
-允许目录 / 明确不做 / 关键不变量：TASK-040/043 修复按 TASK-016 修复 Review 约定（原结果事务退出后以独立短事务处理指定 Step：只终结仍为 RUNNING 的记录、保护已提交终态、不计 AI 失败、不重放 Intent 或网络调用，写清失败后的恢复路径）；B13 开工时按 BATCH-PLAN 与 08 固定
+允许目录 / 明确不做 / 关键不变量：B13 开工时按 BATCH-PLAN 与 08 固定
 本批规格章节及 PROGRESS 记录：PROGRESS「TASK-040/043 修复」
-当前成员及位置：TASK-040/043 修复 Review-2 P2（取消后孤立 Step 不可达）已修复，待复审
-已实现并针对性验证的成员：B01～B12 全部
-未完成 / 未执行验证：TASK-040/043 修复复审；该修复真实进程冒烟 NOT RUN（原因见 PROGRESS）；Fake runtime 偶发 AI_RUNTIME_UNAVAILABLE 保持观察；其余见 PROGRESS 待处理问题；MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
-未提交文件（含既有无关修改）：InvestigationOrchestrator.java、AgentStepRecorder.java、AgentStepRepository.java、AgentStepMapper.java、MyBatisAgentStepRepository.java、AgentStepMapper.xml、InvestigationWorkMapper.xml、InvestigationOrchestrationIntegrationTest.java、docs/dev/CURRENT.md、docs/dev/PROGRESS.md；无既有无关修改
-共同验证及独立 Review 证据编号：见 PROGRESS「TASK-040/043 修复」（Review-1、Review-2 各 1 个 P2 已修复；修复后 verify exit 0＋回归＋变异确认）；Review-3 NOT RUN
+当前成员及位置：无进行中批次或修复
+已实现并针对性验证的成员：B01～B12 全部，及 TASK-039、TASK-016、TASK-026、TASK-040/043 独立修复
+未完成 / 未执行验证：调查调用中断在真实链路复核（TASK-048）；AgentStep 输出信封读取方（TASK-100 等）；Fake Capability 无步数上限（TASK-047/048）；真实 LLM 接入归属（TASK-058 前）；观察项：surefire 退出等待、Hikari 连接已关闭告警、Fake runtime 偶发 AI_RUNTIME_UNAVAILABLE；其余见 PROGRESS 待处理问题；MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
+未提交文件（含既有无关修改）：无（本交接卡与 PROGRESS 回填随 docs(progress) 提交）
+共同验证及独立 Review 证据编号：见 PROGRESS「TASK-040/043 修复」（Review-3 PASS）
 下一步具体动作：
-1. 独立 Reviewer 复审 Base a4db1b5 到当前工作树（重点 InvestigationWorkMapper 查询扩展与取消后孤立 Step 回归）
-2. PASS 后按用户授权提交（建议 `fix(investigation): close steps whose outcome could not be recorded (TASK-040/043)`）并回填记录
-3. 不推送；未获指示不开始 B13
+1. 等待用户指示开始 B13（TASK-044 → 046，Capability 注册、允许能力描述与 Provider 解析）
+2. 不推送
 本地启动 Demo 配置：在 OPSPILOT_DB_* 环境变量基础上加 --spring.profiles.active=demo
 
 后续 UI 约定（TASK-096/099 实施）：
