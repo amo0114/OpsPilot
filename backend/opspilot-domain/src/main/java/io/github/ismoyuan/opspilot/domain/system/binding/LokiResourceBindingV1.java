@@ -7,7 +7,7 @@ import java.util.Map;
  *
  * @param labels 定位日志流的标签，至少一个
  */
-public record LokiResourceBindingV1(Map<String, String> labels) {
+public record LokiResourceBindingV1(Map<String, String> labels) implements ResourceSelector {
 
     public static final String SCHEMA_NAME = "loki.resource.binding";
     public static final int SCHEMA_VERSION = 1;

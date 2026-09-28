@@ -9,7 +9,7 @@ import java.util.regex.Pattern;
  * @param streamKey 可为空；非空时为精确键名
  * @param consumerGroup 可为空；与 streamKey 同时出现
  */
-public record RedisResourceBindingV1(String streamKey, String consumerGroup) {
+public record RedisResourceBindingV1(String streamKey, String consumerGroup) implements ResourceSelector {
 
     public static final String SCHEMA_NAME = "redis.resource.binding";
     public static final int SCHEMA_VERSION = 1;

@@ -2,13 +2,16 @@ package io.github.ismoyuan.opspilot;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.ismoyuan.opspilot.application.ai.protocol.v1.CapabilityDescriptor;
 import io.github.ismoyuan.opspilot.application.dispatch.InvestigationWorker;
 import io.github.ismoyuan.opspilot.application.dispatch.WorkDispatcher;
+import io.github.ismoyuan.opspilot.application.investigation.context.CapabilityDescriptorSource;
 import io.github.ismoyuan.opspilot.application.investigation.orchestration.InvestigationOrchestrator;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -58,6 +61,9 @@ class IncidentApiContractTest {
 
     @MockitoBean
     WorkDispatcher dispatcher;
+
+    @Autowired
+    CapabilityDescriptorSource capabilityDescriptors;
 
     private final HttpClient http = HttpClient.newHttpClient();
     private final JsonMapper json = JsonMapper.builder().build();
@@ -179,6 +185,46 @@ class IncidentApiContractTest {
     @Test
     void investigationWorkerIsTheOrchestrator() {
         assertThat(investigationWorker).isInstanceOf(InvestigationOrchestrator.class);
+    }
+
+    /**
+     * demo Seed 的受控能力空间（08 TASK-045、09 §7）：按 resourceKey、能力键排序的 7 个只读能力；service.restart 虽已绑定但不出现；
+     * redirect-service 的 metricKeys 为其 Prometheus 绑定实际声明的 8 个指标。
+     */
+    @Test
+    void demoSeedExposesItsConfiguredObserveCapabilities() throws Exception {
+        String key = post("/api/v1/incidents", createBody("shortlink-platform", "\"标题\"", "[]"), null)
+                .body()
+                .path("data")
+                .path("incidentKey")
+                .asString();
+        long incidentId = jdbc.queryForObject("SELECT id FROM incident WHERE incident_key = ?", Long.class, key);
+
+        List<CapabilityDescriptor> described = capabilityDescriptors.describe(incidentId);
+
+        assertThat(described)
+                .extracting(d -> d.resourceKey() + " " + d.key())
+                .containsExactly(
+                        "redirect-service logs.search",
+                        "redirect-service metrics.query",
+                        "shortlink-mysql database.inspect",
+                        "shortlink-redis cache.inspect",
+                        "statistics-consumer logs.search",
+                        "statistics-consumer service.inspect",
+                        "statistics-stream queue.inspect");
+        assertThat(described)
+                .filteredOn(CapabilityDescriptor.MetricsQuery.class::isInstance)
+                .singleElement()
+                .satisfies(d -> assertThat(((CapabilityDescriptor.MetricsQuery) d).metricKeys())
+                        .containsExactly(
+                                "db.pool.active",
+                                "db.pool.max",
+                                "db.pool.pending",
+                                "http.request.error_rate",
+                                "http.request.latency.p99",
+                                "http.request.rate",
+                                "jvm.cpu.usage",
+                                "jvm.memory.heap.usage"));
     }
 
     /** 400/404/409/422 与统一错误包络（05 §9、§93～§94）。 */

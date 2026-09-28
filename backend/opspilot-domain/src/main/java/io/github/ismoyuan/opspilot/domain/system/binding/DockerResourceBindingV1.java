@@ -8,7 +8,7 @@ import java.util.regex.Pattern;
  *
  * @param containerName Docker 容器名
  */
-public record DockerResourceBindingV1(String containerName) {
+public record DockerResourceBindingV1(String containerName) implements ResourceSelector {
 
     public static final String SCHEMA_NAME = "docker.resource.binding";
     public static final int SCHEMA_VERSION = 1;

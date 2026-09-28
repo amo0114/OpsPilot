@@ -24,6 +24,12 @@ public enum ErrorCode {
     STALE_RUN_RESULT(ErrorCategory.CONFLICT, "该结果属于已结束的调查轮次，未被采用。"),
     /** 同一 Observation × Hypothesis 已有 Evidence：Intent 拒绝码，原关系保持不变（05 §83、§93）。 */
     EVIDENCE_LINK_ALREADY_EXISTS(ErrorCategory.CONFLICT, "该观测与假设之间已存在证据关系，不能重复或改写。"),
+    /**
+     * 资源上没有可执行该 Capability 的 ACTIVE Provider Binding，或唯一候选的选择器不可用（06 §16 ⑥、§18，08 TASK-046）。
+     */
+    CAPABILITY_PROVIDER_NOT_CONFIGURED(ErrorCategory.RULE_VIOLATION, "该组件没有配置可用于此能力的数据源。"),
+    /** 同一资源与 Capability 存在多于一个 ACTIVE Provider Binding；V0.1 不做路由，绝不随机选择（06 §18）。 */
+    CAPABILITY_PROVIDER_AMBIGUOUS(ErrorCategory.RULE_VIOLATION, "该组件为此能力配置了多个数据源，无法确定使用哪一个。"),
     /** AI Runtime 无法连接、拒绝内部认证或返回服务端错误（05 §31、§93）。 */
     AI_RUNTIME_UNAVAILABLE(ErrorCategory.DEPENDENCY_UNAVAILABLE, "AI 服务暂不可用，请稍后重试。"),
     /** 在调用方给定的等待上限内没有得到 AI Runtime 响应（05 §89）。 */

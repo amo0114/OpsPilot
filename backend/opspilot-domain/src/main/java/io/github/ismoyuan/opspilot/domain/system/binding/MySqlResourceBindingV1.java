@@ -8,7 +8,7 @@ import java.util.regex.Pattern;
  *
  * @param databaseName 未加引号的 MySQL 标识符
  */
-public record MySqlResourceBindingV1(String databaseName) {
+public record MySqlResourceBindingV1(String databaseName) implements ResourceSelector {
 
     public static final String SCHEMA_NAME = "mysql.resource.binding";
     public static final int SCHEMA_VERSION = 1;

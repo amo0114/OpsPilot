@@ -3,6 +3,8 @@ package io.github.ismoyuan.opspilot.infrastructure.investigation;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.ismoyuan.opspilot.application.ai.protocol.v1.InvestigationStepRequest;
+import io.github.ismoyuan.opspilot.application.capability.CapabilityDescriptorBuilder;
+import io.github.ismoyuan.opspilot.application.capability.CapabilityProviderResolver;
 import io.github.ismoyuan.opspilot.application.investigation.context.InvestigationContextBuilder;
 import io.github.ismoyuan.opspilot.application.investigation.context.InvestigationStepContext;
 import io.github.ismoyuan.opspilot.infrastructure.ai.AiProtocolCodec;
@@ -32,7 +34,12 @@ import org.testcontainers.mysql.MySQLContainer;
  */
 @SpringBootTest
 @Testcontainers
-@Import({InvestigationContextBuilder.class, InvestigationContextIntegrationTest.FixedClock.class})
+@Import({
+    InvestigationContextBuilder.class,
+    CapabilityDescriptorBuilder.class,
+    CapabilityProviderResolver.class,
+    InvestigationContextIntegrationTest.FixedClock.class
+})
 class InvestigationContextIntegrationTest {
 
     static final Instant NOW = Instant.parse("2026-09-28T08:00:00.000Z");
