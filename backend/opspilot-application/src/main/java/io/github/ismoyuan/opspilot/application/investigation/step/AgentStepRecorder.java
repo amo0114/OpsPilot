@@ -63,8 +63,9 @@ public class AgentStepRecorder {
      */
     public StepDecisionOutcome recordDecision(
             long stepId, InvestigationStepDecision decision, long latencyMs, IntentApplier applier) {
+        long incidentId = incidentOf(stepId);
         return transaction.execute(status -> {
-            Locked locked = lock(stepId);
+            Locked locked = lock(stepId, incidentId);
             InvestigationStepResponse response = decision.response();
             if (response.stepId() != stepId || response.runNo() != locked.step().runNo()) {
                 Instant now = now();
@@ -119,8 +120,9 @@ public class AgentStepRecorder {
             message = message.substring(0, message.offsetByCodePoints(0, MESSAGE_MAX));
         }
         String stored = message;
+        long incidentId = incidentOf(stepId);
         return transaction.execute(status -> {
-            Locked locked = lock(stepId);
+            Locked locked = lock(stepId, incidentId);
             Instant now = now();
             steps.markFailed(locked.step(), errorCode, stored, latencyMs, now);
             return count(locked, AI_FAILURES.contains(errorCode) ? FailureEffect.COUNT : FailureEffect.KEEP, now);
@@ -136,11 +138,18 @@ public class AgentStepRecorder {
         KEEP
     }
 
-    private Locked lock(long stepId) {
-        // 先无锁读取不可变的 incidentId，再按 Incident → Investigation → Step 加锁，与准入、Stop 同一锁序：
-        // 若先锁 Step 再等 Incident，会与持有 Incident 后分配 step_no 的准入事务死锁
-        long incidentId = steps.findIncidentId(stepId)
+    /**
+     * 在结果事务之外无锁读取 Step 所属 Incident（创建后不变）。必须在事务外：事务内的第一次一致性读会固定快照，若发生在取得
+     * Incident/Investigation 锁之前，持锁后的普通读（如 Diagnosis 版本号分配，TASK-026）就可能看不到等锁期间他人已提交的数据。
+     */
+    private long incidentOf(long stepId) {
+        return steps.findIncidentId(stepId)
                 .orElseThrow(() -> new IllegalArgumentException("Unknown agent step: " + stepId));
+    }
+
+    private Locked lock(long stepId, long incidentId) {
+        // 按 Incident → Investigation → Step 加锁，与准入、Stop 同一锁序：若先锁 Step 再等 Incident，
+        // 会与持有 Incident 后分配 step_no 的准入事务死锁；这些加锁读取是本事务最先执行的语句
         Incident incident = incidents
                 .findByIdForUpdate(incidentId)
                 .orElseThrow(() -> new IllegalStateException("Agent step without incident: " + stepId));

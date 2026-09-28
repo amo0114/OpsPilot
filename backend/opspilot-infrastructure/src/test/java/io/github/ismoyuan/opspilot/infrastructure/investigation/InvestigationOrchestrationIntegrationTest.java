@@ -44,7 +44,10 @@ import io.github.ismoyuan.opspilot.application.investigation.orchestration.Inves
 import io.github.ismoyuan.opspilot.application.investigation.orchestration.InvestigationTerminator;
 import io.github.ismoyuan.opspilot.application.investigation.recovery.InvestigationInterruptionRecorder;
 import io.github.ismoyuan.opspilot.application.investigation.step.AgentStepRecorder;
+import io.github.ismoyuan.opspilot.application.investigation.step.IntentDisposition;
+import io.github.ismoyuan.opspilot.application.investigation.step.StepAdmission;
 import io.github.ismoyuan.opspilot.application.investigation.step.StepAdmissionService;
+import io.github.ismoyuan.opspilot.application.investigation.step.StepDecisionOutcome;
 import io.github.ismoyuan.opspilot.domain.diagnosis.DiagnosisConclusionType;
 import io.github.ismoyuan.opspilot.domain.error.ErrorCode;
 import io.github.ismoyuan.opspilot.domain.evidence.EvidenceRelation;
@@ -56,6 +59,9 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -67,6 +73,8 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mysql.MySQLContainer;
@@ -124,6 +132,18 @@ class InvestigationOrchestrationIntegrationTest {
 
     @Autowired
     List<DispatchableWorkSource> workSources;
+
+    @Autowired
+    StepAdmissionService admissions;
+
+    @Autowired
+    AgentStepRecorder recorder;
+
+    @Autowired
+    IntentDispatcher intents;
+
+    @Autowired
+    PlatformTransactionManager transactionManager;
 
     @Autowired
     JdbcTemplate jdbc;
@@ -434,6 +454,53 @@ class InvestigationOrchestrationIntegrationTest {
         assertThat(incidentStatus()).isEqualTo("CANCELLED");
     }
 
+    /**
+     * Diagnosis 版本号在取得锁之后读取（TASK-026 修复）：结果事务等待 Incident 锁期间同一调查提交了新版本，取得锁后的合法 COMPLETE
+     * 仍得到下一个版本号。结果事务的第一次一致性读必须发生在取锁之后，否则持锁后的普通读会看到旧快照而重复分配版本号。
+     */
+    @Test
+    void completeAfterWaitingForTheIncidentLockTakesTheNextVersion() throws Exception {
+        long stepId =
+                ((StepAdmission.Admitted) admissions.admit(incident, 1)).step().id();
+        CountDownLatch locked = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        CompletableFuture<Void> holder = CompletableFuture.runAsync(() -> new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> {
+                    jdbc.queryForObject("SELECT id FROM incident WHERE id = ? FOR UPDATE", Long.class, incident);
+                    locked.countDown();
+                    await(release);
+                    // 结果事务等锁期间，同一调查的另一次创建先提交 v1
+                    jdbc.update(
+                            "INSERT INTO diagnosis (investigation_id, run_no, version_no, conclusion_type, summary,"
+                                    + " impact_summary, termination_reason, created_at) VALUES (?, 1, 1, 'UNDETERMINED',"
+                                    + " '先提交的诊断', 'I', 'USER_STOPPED', UTC_TIMESTAMP(3))",
+                            fixture.investigationId());
+                }));
+        assertThat(locked.await(5, TimeUnit.SECONDS)).isTrue();
+
+        CompletableFuture<StepDecisionOutcome> recorded = CompletableFuture.supplyAsync(() -> recorder.recordDecision(
+                stepId,
+                new InvestigationStepDecision(
+                        new InvestigationStepResponse.CompleteInvestigationStep(
+                                1,
+                                1,
+                                stepId,
+                                new CompleteInvestigation(new DiagnosisDraftV1(
+                                        DiagnosisConclusionType.UNDETERMINED, null, "诊断摘要", "统计数据延迟", List.of()))),
+                        AiCallMetadata.UNKNOWN),
+                1,
+                intents));
+        awaitIncidentLockWait();
+        release.countDown();
+        holder.get(5, TimeUnit.SECONDS);
+
+        assertThat(recorded.get(10, TimeUnit.SECONDS).disposition().outcome())
+                .isEqualTo(IntentDisposition.Outcome.APPLIED);
+        assertThat(jdbc.queryForList("SELECT termination_reason FROM diagnosis ORDER BY version_no", String.class))
+                .containsExactly("USER_STOPPED", "AGENT_COMPLETED");
+        assertThat(incidentStatus()).isEqualTo("DIAGNOSED");
+    }
+
     // ---------------------------------------------------------------- TASK-042
 
     /** 额度耗尽：不再问 AI，以真实原因形成 UNDETERMINED；只结束本轮，Continue 后新 run 可正常调查（01 §9、§12）。 */
@@ -639,6 +706,29 @@ class InvestigationOrchestrationIntegrationTest {
     }
 
     // ---------------------------------------------------------------- helpers
+
+    /** 直接确认另一连接正在等待 Incident 行锁（而不是以 sleep 推断）。 */
+    private void awaitIncidentLockWait() throws InterruptedException {
+        for (int i = 0; i < 100; i++) {
+            Integer waiting = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM information_schema.PROCESSLIST WHERE ID <> CONNECTION_ID()"
+                            + " AND INFO LIKE '%FROM incident%FOR UPDATE%'",
+                    Integer.class);
+            if (waiting != null && waiting > 0) {
+                return;
+            }
+            Thread.sleep(50);
+        }
+        throw new AssertionError("result transaction never waited for the incident lock");
+    }
+
+    private static void await(CountDownLatch latch) {
+        try {
+            latch.await(10, TimeUnit.SECONDS);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+        }
+    }
 
     private void assertTerminated(String reason, int runNo) {
         assertThat(incidentStatus()).isEqualTo("DIAGNOSED");

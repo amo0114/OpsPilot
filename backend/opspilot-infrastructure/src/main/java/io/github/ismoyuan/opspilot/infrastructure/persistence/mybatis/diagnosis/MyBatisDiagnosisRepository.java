@@ -27,13 +27,14 @@ class MyBatisDiagnosisRepository implements DiagnosisRepository {
         DiagnosisInsert insert = new DiagnosisInsert(
                 investigationId,
                 runNo,
+                mapper.selectMaxVersionNo(investigationId) + 1,
                 draft.conclusionType().name(),
                 draft.primaryHypothesisId(),
                 draft.summary(),
                 draft.impactSummary(),
                 terminationReason.name(),
                 createdAt);
-        mapper.insertNextVersion(insert);
+        mapper.insertVersion(insert);
         if (!draft.evidenceIds().isEmpty()) {
             mapper.insertEvidenceRefs(insert.getId(), draft.evidenceIds(), createdAt);
         }

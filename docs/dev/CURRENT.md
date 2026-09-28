@@ -2,20 +2,21 @@
 
 更新时间：2026-09-28（本地）
 仓库/分支：/root/projects/OpsPilot-V0.1-IMPLEMENTATION，main；无 remote
-当前批次/状态：TASK-016 修复 DONE（代码 837d5d7）；下一步 TASK-026 Diagnosis 版本号死锁独立修复；B13 未开始
+当前批次/状态：TASK-026 Diagnosis 版本号死锁修复 Review PASS，提交中；B13 未开始
 成员 Task 及顺序：B12 = TASK-042 → TASK-043（均 DONE）；B13 前依次独立修复 TASK-026 → TASK-040/043（TASK-039、TASK-016 修复已 DONE），之后 B13 = TASK-044 → 046
-固定 Base SHA：TASK-026 修复开工时读取当时 HEAD
+固定 Base SHA：2e202b920480d84836fd6ee48e83b88eb2111da5（TASK-026 修复开工时 HEAD）
 批外前置核实：B13 开工时按 08 核对其成员的批外前置
 允许目录 / 明确不做 / 关键不变量：TASK-026 修复按 TASK-016 修复 Review 约定（保留业务锁、版本唯一约束与原子状态迁移，消除 INSERT … SELECT MAX 的跨调查锁冲突，按实际调用链验证版本分配安全）；B13 开工时按 BATCH-PLAN 与 08 固定
-本批规格章节及 PROGRESS 记录：PROGRESS「TASK-016 修复」
-当前成员及位置：无进行中修复
+本批规格章节及 PROGRESS 记录：PROGRESS「TASK-026 修复」
+当前成员及位置：TASK-026 修复实现与验证完成，待独立 Review
 已实现并针对性验证的成员：B01～B12 全部
-未完成 / 未执行验证：Diagnosis 版本号并发死锁（TASK-026，下一步）；结果保存失败留下 RUNNING Step（TASK-040/043，TASK-026 之后）；Fake runtime 偶发 AI_RUNTIME_UNAVAILABLE 保持观察；其余见 PROGRESS 待处理问题；MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
-未提交文件（含既有无关修改）：无（本交接卡与 PROGRESS 回填随 docs(progress) 提交）
-共同验证及独立 Review 证据编号：见 PROGRESS「TASK-016 修复」（Review PASS）
+未完成 / 未执行验证：TASK-026 修复 Review；之后 TASK-040/043 结果保存失败修复；Fake runtime 偶发 AI_RUNTIME_UNAVAILABLE 保持观察；其余见 PROGRESS 待处理问题；MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
+未提交文件（含既有无关修改）：DiagnosisRepository.java、AgentStepRecorder.java、DiagnosisMapper.java、DiagnosisInsert.java、MyBatisDiagnosisRepository.java、DiagnosisMapper.xml、DiagnosisIntegrationTest.java、InvestigationOrchestrationIntegrationTest.java、docs/dev/CURRENT.md、docs/dev/PROGRESS.md；无既有无关修改
+共同验证及独立 Review 证据编号：见 PROGRESS「TASK-026 修复」（verify exit 0＋两项回归的失败/变异确认＋真实进程并发创建与跨 run）；Review NOT RUN
 下一步具体动作：
-1. TASK-026 Diagnosis 版本号死锁独立修复并送审
-2. 之后 TASK-040/043 结果保存失败修复并送审；不推送；不开始 B13
+1. 独立 Reviewer 审查 Base 2e202b9 到当前工作树（版本号分配、结果事务快照前提与两项回归）
+2. PASS 后按用户授权提交（建议 `fix(diagnosis): allocate diagnosis versions without gap locks (TASK-026)`）并回填记录
+3. 之后 TASK-040/043 结果保存失败修复并送审；不推送；不开始 B13
 本地启动 Demo 配置：在 OPSPILOT_DB_* 环境变量基础上加 --spring.profiles.active=demo
 
 后续 UI 约定（TASK-096/099 实施）：

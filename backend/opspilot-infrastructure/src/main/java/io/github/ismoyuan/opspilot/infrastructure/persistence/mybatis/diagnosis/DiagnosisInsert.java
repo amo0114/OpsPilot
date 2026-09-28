@@ -8,6 +8,7 @@ final class DiagnosisInsert {
     private Long id;
     private final long investigationId;
     private final int runNo;
+    private final int versionNo;
     private final String conclusionType;
     private final Long primaryHypothesisId;
     private final String summary;
@@ -18,6 +19,7 @@ final class DiagnosisInsert {
     DiagnosisInsert(
             long investigationId,
             int runNo,
+            int versionNo,
             String conclusionType,
             Long primaryHypothesisId,
             String summary,
@@ -26,6 +28,7 @@ final class DiagnosisInsert {
             LocalDateTime createdAt) {
         this.investigationId = investigationId;
         this.runNo = runNo;
+        this.versionNo = versionNo;
         this.conclusionType = conclusionType;
         this.primaryHypothesisId = primaryHypothesisId;
         this.summary = summary;
@@ -48,6 +51,10 @@ final class DiagnosisInsert {
 
     public int getRunNo() {
         return runNo;
+    }
+
+    public int getVersionNo() {
+        return versionNo;
     }
 
     public String getConclusionType() {

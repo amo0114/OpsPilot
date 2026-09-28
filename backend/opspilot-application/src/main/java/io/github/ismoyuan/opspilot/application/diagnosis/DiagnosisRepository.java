@@ -8,6 +8,10 @@ import java.time.Instant;
 /**
  * Diagnosis 只插入端口（04 §32～§36、DB-INV-006）：没有更新或删除方法。调用方须已锁定所属 Investigation，
  * 使版本号分配串行；UNIQUE(investigation_id, version_no) 做最后保护。
+ *
+ * <p>版本号以普通读取的最大值＋1 分配（TASK-026），因此所在事务的第一次一致性读必须发生在取得 Incident/Investigation 行锁之后：
+ * DiagnosisApplicationService 独立调用与 InvestigationTerminator 先加锁；结果事务（AgentStepRecorder）在事务外读取 Step 所属
+ * Incident。新增调用链须遵守同一前提。
  */
 public interface DiagnosisRepository {
 

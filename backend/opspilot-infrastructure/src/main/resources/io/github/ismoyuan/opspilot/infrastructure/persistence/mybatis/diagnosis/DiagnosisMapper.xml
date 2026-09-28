@@ -18,16 +18,22 @@
     </resultMap>
 
     <!--
-      版本号在同一语句内分配（INSERT … SELECT 对读取的行加共享锁）；调用方已锁定 Investigation，
-      uk_diagnosis_investigation_version 做最后保护（04 §33）。
+      版本号分配（04 §33、TASK-026）：调用方已按 Incident → Investigation 持有行锁，同一调查的创建由此串行，因此用普通一致性读取
+      最大值，不加锁。前提是本事务的第一次一致性读发生在取得这些行锁之后（全部创建链路均如此，见 DiagnosisRepository），
+      才能看到此前已提交的全部版本。不得改回 INSERT … SELECT：那会在 uk_diagnosis_investigation_version 上留下间隙锁，
+      使不同调查的并发创建互相等待成死锁（TASK-016 修复冒烟发现）。该唯一约束仍做最后保护。
     -->
-    <insert id="insertNextVersion" useGeneratedKeys="true" keyProperty="d.id" keyColumn="id">
+    <select id="selectMaxVersionNo" resultType="_int">
+        SELECT COALESCE(MAX(version_no), 0)
+        FROM diagnosis
+        WHERE investigation_id = #{investigationId}
+    </select>
+
+    <insert id="insertVersion" useGeneratedKeys="true" keyProperty="d.id" keyColumn="id">
         INSERT INTO diagnosis (investigation_id, run_no, version_no, conclusion_type, primary_hypothesis_id, summary,
                                impact_summary, termination_reason, created_at)
-        SELECT #{d.investigationId}, #{d.runNo}, COALESCE(MAX(version_no), 0) + 1, #{d.conclusionType},
-               #{d.primaryHypothesisId}, #{d.summary}, #{d.impactSummary}, #{d.terminationReason}, #{d.createdAt}
-        FROM diagnosis
-        WHERE investigation_id = #{d.investigationId}
+        VALUES (#{d.investigationId}, #{d.runNo}, #{d.versionNo}, #{d.conclusionType}, #{d.primaryHypothesisId},
+                #{d.summary}, #{d.impactSummary}, #{d.terminationReason}, #{d.createdAt})
     </insert>
 
     <insert id="insertEvidenceRefs">

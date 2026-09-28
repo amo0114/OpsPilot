@@ -10,8 +10,10 @@ import org.apache.ibatis.annotations.Param;
 @Mapper
 interface DiagnosisMapper {
 
-    /** 版本号 = 该 Investigation 现有最大 version_no + 1。 */
-    int insertNextVersion(@Param("d") DiagnosisInsert diagnosis);
+    /** 不加锁读取该 Investigation 现有最大 version_no（无 Diagnosis 时为 0）；调用方须已持有 Investigation 行锁。 */
+    int selectMaxVersionNo(@Param("investigationId") long investigationId);
+
+    int insertVersion(@Param("d") DiagnosisInsert diagnosis);
 
     int insertEvidenceRefs(
             @Param("diagnosisId") long diagnosisId,

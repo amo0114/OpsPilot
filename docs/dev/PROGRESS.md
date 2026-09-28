@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-28（TASK-016 首次 Start 死锁修复 DONE，837d5d7；下一步 TASK-026 修复，B13 未开始）
+> 最近更新：2026-09-28（TASK-026 Diagnosis 版本号死锁修复 Review PASS，提交中）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -474,6 +474,27 @@
 - Review：独立 Reviewer；范围 e5a560b 到当前工作树；结论 PASS，可提交；确认普通存在性读取的快照前提成立，Continue 仍排他锁定既有 Investigation，同一 Incident 并发 Start 的保证未削弱；独立实测真实 MySQL 15/15、专项 verify exit 0，Enforcer、Spotless、diff 检查通过；未重跑完整构建与真实进程冒烟，沿用交付证据；要求定稿时把 CURRENT 中遗留的 TASK-039 范围描述同步为 TASK-016。新问题安排（均在 B13 前）：先 TASK-026 独立修复并送审（保留既有业务锁、版本唯一约束与原子状态迁移，消除 INSERT … SELECT MAX 的跨调查锁冲突；Diagnosis 结果事务在取得业务锁之前已有普通读，不能照搬 TASK-039 的“取锁后首次一致性读”论证，须按实际调用链验证版本分配安全，覆盖跨调查并发与跨 run 版本递增）；再做 TASK-040/043 结果保存失败修复并送审（原结果事务退出后以独立短事务处理指定 Step：只终结仍为 RUNNING 的记录、保护已提交终态、不计 AI 失败、不重放 Intent 或网络调用，并写清失败后的恢复路径，避免孤立 Step 与持续新建 Step）；第 3 项 Fake runtime 偶发失败保持观察，不据“可能是负载”扩大修复范围
 - 提交：代码提交 837d5d767e7df8013c023c411100d29f550ec39f（fix(investigation): first start without gap-locking a missing investigation (TASK-016)）；SHA 回填为后续 docs 提交
 
+### TASK-026 修复 — Diagnosis 版本号并发死锁（TASK-016 修复 Review 约定）
+
+- 状态：REVIEW（Review PASS，提交中）
+- 归属：TASK-026（B06 已 DONE，不重开 B06）；TASK-016 修复提交后、B13 开始前单独修复提交；之后再做 TASK-040/043 结果保存失败修复
+- Base SHA：2e202b920480d84836fd6ee48e83b88eb2111da5（开工时 HEAD）；开工时工作树干净
+- 范围：Diagnosis 版本号分配（infrastructure persistence/mybatis/diagnosis 的 insertNextVersion 与仓储、DiagnosisRepository 端口说明）；为使普通读取在所有调用链上看到最新已提交版本，AgentStepRecorder 把按 Step 查 incidentId 的无锁读取移到结果事务之外（该列创建后不变）；回归测试；docs/dev。明确不做：改变 Incident/Investigation 锁序与排他锁、版本唯一约束、Diagnosis 创建事务的原子状态迁移与时间线；通用重试；新增表/列/Migration
+- 调用链核对（创建 Diagnosis 的全部生产路径）：① 结果事务 AgentStepRecorder.recordDecision → IntentDispatcher（COMPLETE，NESTED 保存点）→ DiagnosisApplicationService.createDiagnosis：修复前事务内第一条语句是 steps.findIncidentId 的普通读（取锁之前即建立快照），之后才 Incident → Investigation → Step FOR UPDATE；② InvestigationTerminator.terminate：Incident → Investigation FOR UPDATE 后才有普通读；③ createDiagnosis 独立调用：ActiveInvestigation.lock 先加锁。无 HTTP 创建入口。故仅 ① 需要调整，使三条链的第一次一致性读都发生在取得 Incident/Investigation 行锁之后
+- 关键不变量：同一调查的 Diagnosis 创建由 Incident → Investigation 行锁串行，版本号在持锁后读取已提交最大值＋1，跨 run 连续递增；uk_diagnosis_investigation_version 兜底；不同调查的创建不因版本号分配互相阻塞；INVESTIGATING → DIAGNOSED、冻结引用与 DIAGNOSIS_CREATED 仍同事务提交
+- 验证要求：真实 MySQL 回归——A 的 Diagnosis 创建未提交时 B 调查的创建须不等待即完成（先在原代码确认失败）；结果事务等待 Incident 锁期间同一调查提交了新版本，取得锁后的合法 COMPLETE 须得到下一个版本号（验证快照前提，并以移回事务内读取做变异确认失败）；既有跨 run 版本递增用例；backend `./mvnw -B clean verify`；真实进程并发冒烟
+- 实现：DiagnosisMapper 以 selectMaxVersionNo（普通一致性读 `SELECT COALESCE(MAX(version_no),0) … WHERE investigation_id = ?`）＋insertVersion（`INSERT … VALUES` 显式 version_no）取代 insertNextVersion 的 `INSERT … SELECT MAX+1`；DiagnosisInsert 增加 versionNo；MyBatisDiagnosisRepository 先取最大值＋1 再插入。AgentStepRecorder.recordDecision/recordFailure 把 steps.findIncidentId 移到结果事务之外（incidentOf），事务内最先执行的是 Incident → Investigation → Step 的加锁读取；锁序与加锁范围不变。mapper XML、DiagnosisRepository 端口与 AgentStepRecorder 写明快照前提与各调用链的满足方式、不得改回 INSERT … SELECT 的原因。创建事务的状态迁移、冻结引用、时间线、唯一约束均不变；无重试、无 Migration
+- 修改文件：application/diagnosis/DiagnosisRepository（仅说明）、application/investigation/step/AgentStepRecorder、infrastructure persistence/mybatis/diagnosis/{DiagnosisMapper,DiagnosisInsert,MyBatisDiagnosisRepository}＋DiagnosisMapper.xml；测试 infrastructure investigation/DiagnosisIntegrationTest（新增 diagnosesOfDifferentInvestigationsDoNotBlockEachOther）、InvestigationOrchestrationIntegrationTest（新增 completeAfterWaitingForTheIncidentLockTakesTheNextVersion，以 information_schema.PROCESSLIST 直接确认锁等待而非 sleep 推断）；docs/dev
+- 验证（本机实测）：
+  - 跨调查回归先在原代码确认失败：`-Dtest='DiagnosisIntegrationTest#diagnosesOfDifferentInvestigationsDoNotBlockEachOther'` → TimeoutException（A 的创建未提交时 B 调查的创建 5 秒内未完成）
+  - 快照回归：原代码通过（INSERT … SELECT 为加锁读取，读到最新）；只改版本号分配、不改 AgentStepRecorder 时失败——DuplicateKeyException "Duplicate entry '1-1' for key 'diagnosis.uk_diagnosis_investigation_version'"（结果事务在取锁前的普通读已固定快照，看不到等锁期间提交的 v1）；加上 AgentStepRecorder 调整后通过，得到 v2 且 APPLIED、DIAGNOSED
+  - 修复后 DiagnosisIntegrationTest 6/6（含 laterRunsAddVersionsWithoutChangingEarlierOnes 跨 run v1→v2）、InvestigationOrchestrationIntegrationTest 22/22（含 B12 跨 run 收束 v1/v2 用例）、InvestigationStepIntegrationTest 10/10
+  - backend `./mvnw -B clean verify` 2026-09-28 11:47～11:54 UTC exit 0，Enforcer 与 6 模块 spotless:check 通过；domain 36/36、infrastructure 440/440、web 21/21、boot 5/5，无跳过；日志无 "Connection is closed"，无 surefire 退出等待告警；`git diff --check` exit 0
+  - 真实进程（2026-09-28 11:54～11:56 UTC，临时 mysql:8.4.11＋uvicorn Fake＋boot jar）：7 个 Incident 并发首次 Start 全部 202，7 个 Worker 在同一毫秒各自形成 Diagnosis v1，全部 DIAGNOSED；随后 3 个并发 Continue 全部 202，各自 run 2 形成 v2（每个 Incident v1/run 1、v2/run 2）；Step 10 条全部 SUCCEEDED、无 RUNNING 残留；日志无 Deadlock、Duplicate、Worker failed、Unhandled；不含 Token；进程已停止、端口释放、容器已删除（修复前同类冒烟 12 次死锁、12 条 RUNNING 残留）
+  - NOT RUN：真实 LLM、ai-runtime 检查（未修改）、MySQL 8.0.16、Windows mvnw.cmd
+- Review：独立 Reviewer；Base 2e202b9；结论 PASS，可提交，无阻塞项；确认 Recorder 调整属本修复合理范围（只把不可变 incident_id 查询移到结果事务外以避免过早建立快照，Incident → Investigation → Step 锁序、持锁校验与原子提交不变），当前生产调用链满足版本分配的快照前提；独立实测 Diagnosis 6/6、编排 22/22、Step 10/10（共 38/38），专项 verify exit 0，Enforcer、Spotless、diff 检查通过；未重跑完整构建与真实进程冒烟，沿用交付证据；提交并回填后开始 TASK-040/043 结果保存失败修复——消除死锁触发源不等于已解决孤立 RUNNING Step 的通用异常路径
+- 提交：未提交（Review PASS，提交中）
+
 ### 工作流文档变更（不属于 TASK-012 或 B01）
 
 - 2026-09-27：用户确认批次流程，新增 BATCH-PLAN，同步 Agent 入口、07/08 工作流条款、Manifest、启动指南及进度/交接。
@@ -583,7 +604,7 @@
 | UnwiredInvestigationWorker 仅在没有 InvestigationWorker Bean 的上下文（infrastructure 模块测试）中使用，被调用只记 warn；应用装配由 boot 测试断言为 InvestigationOrchestrator | infrastructure/dispatch/DispatchConfiguration、UnwiredInvestigationWorker | 保持；不得在生产装配中出现 | — |
 | （已关闭，TASK-039 修复 30aea1f）AgentStep 准入的 step_no 分配改为持 Investigation 锁后普通读取最大值再 `INSERT … VALUES`，不同调查并发准入不再因间隙锁互等 | persistence/mybatis/agentstep/AgentStepMapper.xml | — | — |
 | （已关闭，TASK-016 修复 837d5d7）首次 Start 在 Incident 行锁下以普通读判断 Investigation 是否存在后插入，不同 Incident 并发首次 Start 不再因间隙锁死锁 | InvestigationApplicationService.resumeInvestigation | — | — |
-| Diagnosis 版本号分配并发死锁：DiagnosisRepository.insert 以 `INSERT INTO diagnosis … SELECT …, COALESCE(MAX(version_no),0)+1 …` 分配 version_no，在 uk_diagnosis_investigation_version 上取 S 间隙锁；不同调查同时形成 Diagnosis（合法 COMPLETE 或收束）时互等插入意向锁成死锁（TASK-016 修复冒烟复现：7 个调查并发，12 次 DeadlockLoserDataAccessException，InnoDB 报告两事务均在 INSERT INTO diagnosis 等待该索引插入意向锁） | persistence/mybatis/diagnosis（DiagnosisMapper insert）（TASK-026，B06） | 影响：失败方整个结果事务回滚，Worker 异常退出，由补派发重新准入并再问 AI，最终仍收敛（冒烟中约 25 秒全部 DIAGNOSED），但产生下行所述残留与重复 AI 调用。建议：与 TASK-039 修复同一做法——创建事务已持有 Incident/Investigation 行锁，改为普通读取最大值后 `INSERT … VALUES`，加跨调查并发创建回归，不加通用重试 | TASK-026（已安排：TASK-016 修复提交后、B13 前独立修复） |
+| （修复待 Review）Diagnosis 版本号分配原为 `INSERT … SELECT MAX+1`，在 uk_diagnosis_investigation_version 上取间隙锁，不同调查并发形成 Diagnosis 时死锁；已改为持锁后普通读取最大值再 `INSERT … VALUES`，并把结果事务按 Step 查 Incident 的普通读移到事务外以满足快照前提（见 PROGRESS「TASK-026 修复」） | persistence/mybatis/diagnosis、AgentStepRecorder | 修复提交后关闭 | TASK-026 |
 | 结果事务内的数据库级失败（如上述死锁）使 Worker 异常退出并留下 RUNNING Step：Intent 在 NESTED 保存点中执行，死锁已由 MySQL 回滚整个事务，保存点回滚随之失败（TransactionSystemException "Application exception overridden"），recordDecision 整体回滚，Step 保持 RUNNING；编排器只捕获 AI 调用阶段的异常，不处理记录阶段失败；存活进程的周期扫描按约定不标记中断，这些 Step 要到下次启动才标 PROCESS_INTERRUPTED，而补派发会新建 Step 并再问 AI（冒烟中留下 12 条 RUNNING） | application/investigation/orchestration/{InvestigationOrchestrator,IntentDispatcher}、step/AgentStepRecorder（TASK-040/043） | 影响：审计残留与重复 AI 调用，不影响最终收敛与控制（准入不看残留 RUNNING）。上一行修复后该触发源消失，但其他瞬时数据库错误仍会同样表现。建议在对应 Task 内决定：记录阶段失败时以独立短事务把该 Step 记为 FAILED（非 AI 错误码、不计连续失败），或在 Worker 退出路径登记，均不加通用重试 | TASK-040/043（已安排：TASK-026 修复之后、B13 前独立修复） |
 | 观察：7 个 Worker 并发调用 uvicorn Fake 时出现 2 次 AI_RUNTIME_UNAVAILABLE（原因未调查） | infrastructure/ai HttpAiRuntimeClient、ai-runtime | 按 02 §28 记录并计数，未影响收敛；保持观察，不据推测扩大修复范围（TASK-016 修复 Review） | 观察 |
 | B11-V1、B12-V1 完整 verify 中 infrastructure 测试 JVM 退出时 Hikari 池逐个关闭超过 surefire 30 s 等待（"kill self fork JVM ... after System.exit(0)"，结果不受影响；B11 单独重跑未复现，B12 再次出现，且整次 verify 增至约 12 分钟）；推断与缓存上下文数量及容器已停止有关 | infrastructure 测试（Spring 测试上下文缓存＋每类独立 Testcontainers） | 若反复出现，可考虑限制上下文缓存、合并相同配置的测试上下文或调整 surefire forkedProcessExitTimeoutInSeconds；不以跳过测试处理 | 后续触及测试基础设施的 Task |

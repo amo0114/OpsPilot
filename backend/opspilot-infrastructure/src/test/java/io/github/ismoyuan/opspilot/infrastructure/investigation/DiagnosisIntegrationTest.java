@@ -34,6 +34,9 @@ import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -48,6 +51,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mysql.MySQLContainer;
@@ -105,6 +110,9 @@ class DiagnosisIntegrationTest {
 
     @Autowired
     JdbcTemplate jdbc;
+
+    @Autowired
+    PlatformTransactionManager transactionManager;
 
     InvestigationFixture fixture;
     long primary;
@@ -185,6 +193,44 @@ class DiagnosisIntegrationTest {
         assertThat(fixture.events("DIAGNOSIS_CREATED"))
                 .extracting(e -> e.get("actor_type"))
                 .containsExactly("SYSTEM", "SYSTEM");
+    }
+
+    /**
+     * 不同调查的 Diagnosis 创建互不阻塞（TASK-026 修复，TASK-016 修复冒烟发现的死锁）：A 的创建已写入但未提交时，B 调查的创建不必
+     * 等它提交即可完成，两者各得 v1。原 INSERT … SELECT MAX 在 uk_diagnosis_investigation_version 上留下间隙锁，另一调查的插入须等待
+     * 其提交，两者并发时互相等待成死锁。
+     */
+    @Test
+    void diagnosesOfDifferentInvestigationsDoNotBlockEachOther() throws Exception {
+        CountDownLatch written = new CountDownLatch(1);
+        CountDownLatch commit = new CountDownLatch(1);
+        // 外层事务未提交：创建加入该事务，Diagnosis 已插入但仍持有锁
+        CompletableFuture<Diagnosis> first =
+                CompletableFuture.supplyAsync(() -> new TransactionTemplate(transactionManager).execute(status -> {
+                    Diagnosis created = service.createDiagnosis(command(
+                            1, DiagnosisConclusionType.UNDETERMINED, null, List.of(), TerminationReason.USER_STOPPED));
+                    written.countDown();
+                    await(commit);
+                    return created;
+                }));
+        assertThat(written.await(5, TimeUnit.SECONDS)).isTrue();
+
+        CompletableFuture<Diagnosis> other =
+                CompletableFuture.supplyAsync(() -> service.createDiagnosis(new CreateDiagnosisCommand(
+                        fixture.otherIncidentId(),
+                        1,
+                        new DiagnosisDraft(
+                                DiagnosisConclusionType.UNDETERMINED, null, "本轮调查已到时间上限。", "统计数据延迟更新", List.of()),
+                        TerminationReason.INVESTIGATION_TIMEOUT)));
+        try {
+            assertThat(other.get(5, TimeUnit.SECONDS).versionNo()).isOne();
+        } finally {
+            commit.countDown();
+        }
+
+        assertThat(first.get(5, TimeUnit.SECONDS).versionNo()).isOne();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM diagnosis WHERE version_no = 1", Integer.class))
+                .isEqualTo(2);
     }
 
     @Test
@@ -306,6 +352,14 @@ class DiagnosisIntegrationTest {
                 runNo,
                 new DiagnosisDraft(type, primaryId, "统计消费者已停止，消息持续积压。", "统计数据延迟更新", evidenceIds),
                 reason == null ? TerminationReason.AGENT_COMPLETED : reason);
+    }
+
+    private static void await(CountDownLatch latch) {
+        try {
+            latch.await(10, TimeUnit.SECONDS);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private void assertRejected(CreateDiagnosisCommand command, ErrorCode code, String reason) {
