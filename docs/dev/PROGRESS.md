@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-28（TASK-016 首次 Start 死锁修复 Review PASS，提交中）
+> 最近更新：2026-09-28（TASK-016 首次 Start 死锁修复 DONE，837d5d7；下一步 TASK-026 修复，B13 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -458,7 +458,7 @@
 
 ### TASK-016 修复 — 首次 Start 并发死锁（TASK-039 修复 Review 约定）
 
-- 状态：REVIEW（Review PASS，提交中）
+- 状态：DONE（Review PASS，已提交 837d5d7）
 - 归属：TASK-016（B02 已 DONE，不重开 B02）；TASK-039 修复提交后、B13 开始前单独修复提交
 - Base SHA：e5a560b82e270a6a1717d9652138edb20c0a3717（开工时 HEAD）；开工时工作树干净
 - 范围：首次 Start 在 Incident 行锁保护下不对尚不存在的 Investigation 加锁读取（application/investigation/InvestigationApplicationService.resumeInvestigation、InvestigationRepository 新增普通存在性读取及 MyBatis 实现）＋跨 Incident 并发首次 Start 回归（infrastructure 测试）；docs/dev。明确不做：全局修改 findByIncidentIdForUpdate；改变 Continue、Stop、Step 等既有行的锁序与排他锁；通用重试；新增表/列/Migration
@@ -472,7 +472,7 @@
   - 真实进程（2026-09-28 10:41～10:43 UTC，临时 mysql:8.4.11＋uvicorn Fake＋boot jar）：6 个不同 Incident 并发首次 Start 全部 202（修复前同场景 5 个 500）；同一 Incident 两个并发 Start 为 202＋409；每个 Incident 恰 1 条 Investigation，INVESTIGATION_STARTED 共 7 条；日志不含 Token；进程已停止、端口释放、容器已删除。同一冒烟中后台 Worker 并发形成 Diagnosis 时发生新的死锁（见「待处理问题」新增两行，属 TASK-026/TASK-040，未修改），全部 Incident 约 25 秒内经补派发 DIAGNOSED，但留下 12 条 RUNNING Step
   - NOT RUN：真实 LLM、ai-runtime 检查（未修改）、MySQL 8.0.16、Windows mvnw.cmd
 - Review：独立 Reviewer；范围 e5a560b 到当前工作树；结论 PASS，可提交；确认普通存在性读取的快照前提成立，Continue 仍排他锁定既有 Investigation，同一 Incident 并发 Start 的保证未削弱；独立实测真实 MySQL 15/15、专项 verify exit 0，Enforcer、Spotless、diff 检查通过；未重跑完整构建与真实进程冒烟，沿用交付证据；要求定稿时把 CURRENT 中遗留的 TASK-039 范围描述同步为 TASK-016。新问题安排（均在 B13 前）：先 TASK-026 独立修复并送审（保留既有业务锁、版本唯一约束与原子状态迁移，消除 INSERT … SELECT MAX 的跨调查锁冲突；Diagnosis 结果事务在取得业务锁之前已有普通读，不能照搬 TASK-039 的“取锁后首次一致性读”论证，须按实际调用链验证版本分配安全，覆盖跨调查并发与跨 run 版本递增）；再做 TASK-040/043 结果保存失败修复并送审（原结果事务退出后以独立短事务处理指定 Step：只终结仍为 RUNNING 的记录、保护已提交终态、不计 AI 失败、不重放 Intent 或网络调用，并写清失败后的恢复路径，避免孤立 Step 与持续新建 Step）；第 3 项 Fake runtime 偶发失败保持观察，不据“可能是负载”扩大修复范围
-- 提交：未提交（Review PASS，提交中）
+- 提交：代码提交 837d5d767e7df8013c023c411100d29f550ec39f（fix(investigation): first start without gap-locking a missing investigation (TASK-016)）；SHA 回填为后续 docs 提交
 
 ### 工作流文档变更（不属于 TASK-012 或 B01）
 
@@ -582,7 +582,7 @@
 | （已关闭，B12）准入因本轮退出条件被拒时由 InvestigationTerminator 确定性收束为 UNDETERMINED＋真实原因，重复唤醒随之消失 | InvestigationOrchestrator、InvestigationTerminator | — | — |
 | UnwiredInvestigationWorker 仅在没有 InvestigationWorker Bean 的上下文（infrastructure 模块测试）中使用，被调用只记 warn；应用装配由 boot 测试断言为 InvestigationOrchestrator | infrastructure/dispatch/DispatchConfiguration、UnwiredInvestigationWorker | 保持；不得在生产装配中出现 | — |
 | （已关闭，TASK-039 修复 30aea1f）AgentStep 准入的 step_no 分配改为持 Investigation 锁后普通读取最大值再 `INSERT … VALUES`，不同调查并发准入不再因间隙锁互等 | persistence/mybatis/agentstep/AgentStepMapper.xml | — | — |
-| （修复待 Review）首次 Start 并发死锁：resumeInvestigation 对尚不存在的 Investigation 加锁读取取得 uk_investigation_incident 间隙锁，不同 Incident 并发首次 Start 死锁返回 500；已改为 Incident 行锁下普通读判断后插入，并加跨 Incident 回归（见 PROGRESS「TASK-016 修复」） | InvestigationApplicationService.resumeInvestigation | 修复提交后关闭 | TASK-016 |
+| （已关闭，TASK-016 修复 837d5d7）首次 Start 在 Incident 行锁下以普通读判断 Investigation 是否存在后插入，不同 Incident 并发首次 Start 不再因间隙锁死锁 | InvestigationApplicationService.resumeInvestigation | — | — |
 | Diagnosis 版本号分配并发死锁：DiagnosisRepository.insert 以 `INSERT INTO diagnosis … SELECT …, COALESCE(MAX(version_no),0)+1 …` 分配 version_no，在 uk_diagnosis_investigation_version 上取 S 间隙锁；不同调查同时形成 Diagnosis（合法 COMPLETE 或收束）时互等插入意向锁成死锁（TASK-016 修复冒烟复现：7 个调查并发，12 次 DeadlockLoserDataAccessException，InnoDB 报告两事务均在 INSERT INTO diagnosis 等待该索引插入意向锁） | persistence/mybatis/diagnosis（DiagnosisMapper insert）（TASK-026，B06） | 影响：失败方整个结果事务回滚，Worker 异常退出，由补派发重新准入并再问 AI，最终仍收敛（冒烟中约 25 秒全部 DIAGNOSED），但产生下行所述残留与重复 AI 调用。建议：与 TASK-039 修复同一做法——创建事务已持有 Incident/Investigation 行锁，改为普通读取最大值后 `INSERT … VALUES`，加跨调查并发创建回归，不加通用重试 | TASK-026（已安排：TASK-016 修复提交后、B13 前独立修复） |
 | 结果事务内的数据库级失败（如上述死锁）使 Worker 异常退出并留下 RUNNING Step：Intent 在 NESTED 保存点中执行，死锁已由 MySQL 回滚整个事务，保存点回滚随之失败（TransactionSystemException "Application exception overridden"），recordDecision 整体回滚，Step 保持 RUNNING；编排器只捕获 AI 调用阶段的异常，不处理记录阶段失败；存活进程的周期扫描按约定不标记中断，这些 Step 要到下次启动才标 PROCESS_INTERRUPTED，而补派发会新建 Step 并再问 AI（冒烟中留下 12 条 RUNNING） | application/investigation/orchestration/{InvestigationOrchestrator,IntentDispatcher}、step/AgentStepRecorder（TASK-040/043） | 影响：审计残留与重复 AI 调用，不影响最终收敛与控制（准入不看残留 RUNNING）。上一行修复后该触发源消失，但其他瞬时数据库错误仍会同样表现。建议在对应 Task 内决定：记录阶段失败时以独立短事务把该 Step 记为 FAILED（非 AI 错误码、不计连续失败），或在 Worker 退出路径登记，均不加通用重试 | TASK-040/043（已安排：TASK-026 修复之后、B13 前独立修复） |
 | 观察：7 个 Worker 并发调用 uvicorn Fake 时出现 2 次 AI_RUNTIME_UNAVAILABLE（原因未调查） | infrastructure/ai HttpAiRuntimeClient、ai-runtime | 按 02 §28 记录并计数，未影响收敛；保持观察，不据推测扩大修复范围（TASK-016 修复 Review） | 观察 |
