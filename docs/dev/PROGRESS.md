@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-28（B10 REVIEW，B10-R2 PASS，提交中）
+> 最近更新：2026-09-28（B10 DONE，c3ec168；B11 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -44,9 +44,9 @@
 | TASK-034 | B08 | Java AiRuntimeClient | DONE | commit 5e81bb8（B08，Base dfcbca6） | B08-V2（backend verify exit 0）＋HttpAiRuntimeClientTest 17/17（含响应体延迟回归）；跨语言冒烟；B08-R1 PASS AFTER PATCH → B08-R2 PASS；见 PROGRESS「B08」 |
 | TASK-035 | B09 | WorkDispatcher | DONE | commit 8eaa169（B09，Base d922a3f） | B09-V1 verify exit 0＋InProcessWorkDispatcherTest 4、DispatchRecoveryIntegrationTest 3、DispatchRecoverySchedulerIntegrationTest 1（真实 MySQL）；B09-R1 PASS；见 PROGRESS「B09」 |
 | TASK-036 | B09 | SingleFlightRegistry | DONE | commit 8eaa169（B09，Base d922a3f） | B09-V1 verify exit 0＋SingleFlightRegistryTest 5；B09-R1 PASS；见 PROGRESS「B09」 |
-| TASK-037 | B10 | Investigation Context Builder | REVIEW | 未提交（B10，Base d87037f；文件见 PROGRESS「B10」） | B10-V1 verify exit 0＋InvestigationContextIntegrationTest 3（真实 MySQL，含序列化泄漏检查）；B10-V2 verify exit 0；B10-R1 → B10-R2 PASS |
-| TASK-038 | B10 | AgentStep 生命周期 | REVIEW | 未提交（B10，Base d87037f；文件见 PROGRESS「B10」） | B10-V1 verify exit 0、ai-runtime 检查 exit 0＋InvestigationStepIntegrationTest（记录部分）、HttpAiRuntimeClientTest 18、pytest 145；跨语言元数据冒烟；B10-V2 verify exit 0；B10-R1 → B10-R2 PASS |
-| TASK-039 | B10 | Investigation Guard | REVIEW | 未提交（B10，Base d87037f；文件见 PROGRESS「B10」） | B10-V1 verify exit 0＋StepAdmissionRulesTest 5、InvestigationStepIntegrationTest（准入与 Stop 锁序部分）；B10-V2 verify exit 0；B10-R1 → B10-R2 PASS |
+| TASK-037 | B10 | Investigation Context Builder | DONE | commit c3ec168（B10，Base d87037f） | B10-V1 verify exit 0＋InvestigationContextIntegrationTest 3（真实 MySQL，含序列化泄漏检查）；B10-V2 verify exit 0；B10-R1 → B10-R2 PASS；见 PROGRESS「B10」 |
+| TASK-038 | B10 | AgentStep 生命周期 | DONE | commit c3ec168（B10，Base d87037f） | B10-V1 verify exit 0、ai-runtime 检查 exit 0＋InvestigationStepIntegrationTest（记录部分）、HttpAiRuntimeClientTest 18、pytest 145；跨语言元数据冒烟；B10-V2 verify exit 0；B10-R1 → B10-R2 PASS；见 PROGRESS「B10」 |
+| TASK-039 | B10 | Investigation Guard | DONE | commit c3ec168（B10，Base d87037f） | B10-V1 verify exit 0＋StepAdmissionRulesTest 5、InvestigationStepIntegrationTest（准入与 Stop 锁序部分）；B10-V2 verify exit 0；B10-R1 → B10-R2 PASS；见 PROGRESS「B10」 |
 | TASK-040 | B11 | Intent Dispatcher | TODO | — | NOT RUN |
 | TASK-041 | B11 | Stop Race Handling | TODO | — | NOT RUN |
 | TASK-042 | B12 | Deterministic Termination | TODO | — | NOT RUN |
@@ -358,7 +358,7 @@
 
 ### B10 — 调查上下文、AgentStep 与原子准入
 
-- 状态：REVIEW（B10-R2 PASS，提交中）
+- 状态：DONE（B10-R2 PASS，已提交 c3ec168）
 - 成员及顺序：TASK-037 → TASK-038 → TASK-039；批外前置：TASK-036 DONE（8eaa169，B09-R1 PASS）
 - Base SHA：d87037f02713f47d65722a5117428f021d882b1e
 - 范围：application/investigation（上下文构造与查询端口、AgentStep 登记与结果记录、单步准入 Guard）、domain/investigation（准入规则、连续 AI 失败计数）、domain/agentstep；application/ai（AI 调用元数据随结果返回）；infrastructure persistence（上下文查询、agent_step_record、Investigation 计数更新）、infrastructure/ai（读取元数据响应头）、Capability Descriptor 占位来源；ai-runtime（以响应头回传 model/prompt 版本/token，v1 响应体不变——TASK-038 记录这些字段只能来自 Runtime）；contracts/ai-runtime/v1 README 说明响应头；测试；docs/dev。明确不做：Intent 分派与业务处理（TASK-040）、Stop 竞态的结果处置（TASK-041）、确定性收束（TASK-042）、启动中断标记（TASK-043）、Capability Registry/Descriptor 真实构造（TASK-044/045）、Capability 准入与预算扣减（TASK-047/048）、Remediation 的 AgentStep（TASK-065）
@@ -385,7 +385,7 @@
 - B10-R1 修复（同批次、同 Base）：StepAdmissionService 改为取得 Incident → Investigation 两把锁之后才读取时间，截止判断、Step 起点与等待上限都用持锁时刻；新增回归 deadlineIsJudgedAfterTheLocksAreAcquired（真实 MySQL＋可推进时钟：另一事务持有 Incident 锁，进入准入时离截止 1 秒，锁等待期间把时钟推进到截止后 2 秒，释放后准入返回 DEADLINE_REACHED 且 agent_step_record 为空）。修复前该用例实测失败（Admitted、startedAt 为锁前时刻、maxWait=PT1S），修复后通过；InvestigationStepIntegrationTest 的时钟改为可推进时钟，其余用例每次重置为原固定时刻
 - B10-V2（修复后最终代码树，本机实测）：ai-runtime `uv sync --locked`、`ruff format --check .`、`ruff check .` exit 0，`pytest` 145 passed（2026-09-28 06:31 UTC）；backend `./mvnw -B clean verify` 2026-09-28 06:31～06:37 UTC exit 0，Enforcer 与 6 模块 spotless:check 通过，domain 35/35、infrastructure 414/414（InvestigationStepIntegrationTest 9）、web 21/21、boot 4/4，无跳过，日志无 "Connection is closed"；`git diff --check` exit 0
 - B10-R2：独立 Reviewer 复核；Base 仍为 d87037f；结论 PASS，可提交，无新增阻塞项；确认 StepAdmissionService 在取得两把行锁后才读取时间，独立确定性探针证实锁等待越过截止后返回 DEADLINE_REACHED 且不写 Step；独立实测准入规则 5/5、真实 MySQL Step 集成 9/9 通过，专项 verify exit 0，Enforcer 与 Spotless 正常执行未跳过，`git diff --check` 通过；本轮未重跑整个 backend 与 Python，最终完整证据沿用 B10-V2；非阻塞：TASK-040 须实现 Observation/Evidence 引用边界（已记录），新用例 sleep(300) 不能严格证明数据库锁等待已发生，日后触及时可改为直接确认锁等待，无需加压；Commit Recommendation YES
-- 提交：未提交（等待独立 Review 与用户提交授权）；范围外问题：见「待处理问题」中 B10 行
+- 提交：代码提交 c3ec1688934e8e447292f81f156492a3a28c35a0（feat(investigation): step context, agent step lifecycle and atomic step admission (TASK-037–039)）；SHA 回填为后续 docs 提交；范围外问题：见「待处理问题」中 B10 行
 
 ### 工作流文档变更（不属于 TASK-012 或 B01）
 
