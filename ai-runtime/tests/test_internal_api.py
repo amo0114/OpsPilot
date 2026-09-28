@@ -9,7 +9,7 @@ from jsonschema import Draft202012Validator
 
 from opspilot_ai.config import Settings
 from opspilot_ai.errors import LlmTimeoutError, LlmUnavailableError
-from opspilot_ai.llm.client import LlmPrompt
+from opspilot_ai.llm.client import LlmCompletion, LlmPrompt
 from opspilot_ai.llm.fake import FakeLlmClient
 from opspilot_ai.main import create_app
 
@@ -40,7 +40,7 @@ class RecordingLlm:
         self._fake = FakeLlmClient(scripted or [])
         self.prompts: list[LlmPrompt] = []
 
-    def complete(self, prompt: LlmPrompt) -> str:
+    def complete(self, prompt: LlmPrompt) -> LlmCompletion:
         self.prompts.append(prompt)
         return self._fake.complete(prompt)
 
@@ -152,7 +152,7 @@ def test_model_backend_failures_map_to_status_codes(
     failure: Exception, status: int, code: str
 ) -> None:
     class FailingLlm:
-        def complete(self, prompt: LlmPrompt) -> str:
+        def complete(self, prompt: LlmPrompt) -> LlmCompletion:
             raise failure
 
     for path, body in (
@@ -241,3 +241,32 @@ def test_settings_fail_fast_without_token_or_with_unavailable_provider(
 
     with pytest.raises(RuntimeError, match=message):
         Settings.from_env()
+
+
+def test_call_metadata_travels_in_headers_not_in_the_body() -> None:
+    """Java records model, prompt template and token usage on the AgentStep (04 §59)."""
+    response = _client(RecordingLlm()).post(
+        "/internal/v1/investigation/step", json=STEP_REQUEST, headers=AUTH
+    )
+
+    assert response.headers["X-OpsPilot-Model-Provider"] == "fake"
+    assert response.headers["X-OpsPilot-Model-Name"] == "fake-model"
+    assert response.headers["X-OpsPilot-Prompt-Template-Version"] == "investigation-v1"
+    # the Fake calls no model, so no usage is reported
+    assert "X-OpsPilot-Prompt-Tokens" not in response.headers
+    _schema("investigation-step-response").validate(response.json())
+
+
+def test_reported_token_usage_is_forwarded() -> None:
+    class CountingLlm:
+        def complete(self, prompt: LlmPrompt) -> LlmCompletion:
+            return LlmCompletion(FakeLlmClient().complete(prompt).text, 1200, 85)
+
+    for path, body, template in (
+        ("/internal/v1/investigation/step", STEP_REQUEST, "investigation-v1"),
+        ("/internal/v1/remediation/draft", DRAFT_REQUEST, "remediation-v1"),
+    ):
+        response = _client(CountingLlm()).post(path, json=body, headers=AUTH)
+        assert response.headers["X-OpsPilot-Prompt-Template-Version"] == template
+        assert response.headers["X-OpsPilot-Prompt-Tokens"] == "1200"
+        assert response.headers["X-OpsPilot-Completion-Tokens"] == "85"

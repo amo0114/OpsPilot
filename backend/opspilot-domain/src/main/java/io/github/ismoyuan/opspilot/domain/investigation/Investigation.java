@@ -3,6 +3,7 @@ package io.github.ismoyuan.opspilot.domain.investigation;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * 一个 Incident 唯一的调查工作空间（03 §19～§20、04 §16）。运行周期是其中的逻辑序号，不是独立实体；
@@ -88,6 +89,62 @@ public record Investigation(
                 0,
                 null,
                 null,
+                limits,
+                version);
+    }
+    /**
+     * 单步准入规则（07 §42、08 TASK-039），按顺序给出第一个拒绝原因；Incident 是否 INVESTIGATING 由调用方在同一锁内先查。
+     * 本轮截止时刻本身已不可准入。
+     */
+    public Optional<StepAdmissionRejection> checkStepAdmission(int expectedRunNo, Instant now) {
+        if (expectedRunNo != currentRunNo) {
+            return Optional.of(StepAdmissionRejection.STALE_RUN);
+        }
+        if (stopRequested()) {
+            return Optional.of(StepAdmissionRejection.STOP_REQUESTED);
+        }
+        if (!now.isBefore(currentRunDeadline())) {
+            return Optional.of(StepAdmissionRejection.DEADLINE_REACHED);
+        }
+        if (currentRunCapabilityCount >= limits.maxCapabilityCalls()) {
+            return Optional.of(StepAdmissionRejection.CAPABILITY_BUDGET_EXHAUSTED);
+        }
+        if (consecutiveAiFailureCount >= limits.maxConsecutiveAiFailures()) {
+            return Optional.of(StepAdmissionRejection.AI_FAILURE_THRESHOLD_REACHED);
+        }
+        return Optional.empty();
+    }
+
+    /** 本次 AI 调用最多等待：单步超时与本轮剩余时间的较小值（05 §89）；只在准入通过后使用。 */
+    public Duration stepWaitLimit(Instant now) {
+        Duration remaining = Duration.between(now, currentRunDeadline());
+        Duration step = Duration.ofSeconds(limits.agentStepTimeoutSeconds());
+        return remaining.compareTo(step) < 0 ? remaining : step;
+    }
+
+    /** 本轮一次 AI 失败（连接、超时、输出非法，02 §28）；进程中断不经此计数。 */
+    public Investigation withAiStepFailure() {
+        return withConsecutiveAiFailures(consecutiveAiFailureCount + 1);
+    }
+
+    /** 本轮取得合法输出后清零（02 §28）。 */
+    public Investigation withAiStepSuccess() {
+        return withConsecutiveAiFailures(0);
+    }
+
+    private Investigation withConsecutiveAiFailures(int count) {
+        return new Investigation(
+                id,
+                incidentId,
+                startedAt,
+                lastActivityAt,
+                currentRunNo,
+                currentRunStartedAt,
+                currentRunCapabilityCount,
+                capabilityCallCount,
+                count,
+                stopRequestedAt,
+                stopRequestedBy,
                 limits,
                 version);
     }

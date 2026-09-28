@@ -32,4 +32,12 @@ interface InvestigationMapper {
             @Param("expectedVersion") long expectedVersion,
             @Param("nextRunNo") int nextRunNo,
             @Param("now") LocalDateTime now);
+
+    /** 只改本轮连续 AI 失败计数：条件为原轮号与原版本。 */
+    int updateAiFailureCount(
+            @Param("id") long id,
+            @Param("expectedRunNo") int expectedRunNo,
+            @Param("expectedVersion") long expectedVersion,
+            @Param("count") int count,
+            @Param("updatedAt") LocalDateTime updatedAt);
 }

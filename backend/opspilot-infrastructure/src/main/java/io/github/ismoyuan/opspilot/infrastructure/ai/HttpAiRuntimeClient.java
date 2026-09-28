@@ -1,6 +1,8 @@
 package io.github.ismoyuan.opspilot.infrastructure.ai;
 
+import io.github.ismoyuan.opspilot.application.ai.AiCallMetadata;
 import io.github.ismoyuan.opspilot.application.ai.AiDecisionPort;
+import io.github.ismoyuan.opspilot.application.ai.InvestigationStepDecision;
 import io.github.ismoyuan.opspilot.application.ai.protocol.v1.InvestigationStepRequest;
 import io.github.ismoyuan.opspilot.application.ai.protocol.v1.InvestigationStepResponse;
 import io.github.ismoyuan.opspilot.application.ai.protocol.v1.RemediationDraftRequest;
@@ -36,6 +38,11 @@ public class HttpAiRuntimeClient implements AiDecisionPort {
     static final String INVESTIGATION_STEP_PATH = "/internal/v1/investigation/step";
     static final String REMEDIATION_DRAFT_PATH = "/internal/v1/remediation/draft";
     static final String CORRELATION_HEADER = "X-Correlation-Id";
+    static final String MODEL_PROVIDER_HEADER = "X-OpsPilot-Model-Provider";
+    static final String MODEL_NAME_HEADER = "X-OpsPilot-Model-Name";
+    static final String PROMPT_TEMPLATE_HEADER = "X-OpsPilot-Prompt-Template-Version";
+    static final String PROMPT_TOKENS_HEADER = "X-OpsPilot-Prompt-Tokens";
+    static final String COMPLETION_TOKENS_HEADER = "X-OpsPilot-Completion-Tokens";
 
     private static final Logger log = LoggerFactory.getLogger(HttpAiRuntimeClient.class);
 
@@ -56,30 +63,28 @@ public class HttpAiRuntimeClient implements AiDecisionPort {
     }
 
     @Override
-    public InvestigationStepResponse decideInvestigationStep(InvestigationStepRequest request, Duration maxWait) {
-        InvestigationStepResponse response = post(
-                INVESTIGATION_STEP_PATH, request, request.correlationId(), maxWait, InvestigationStepResponse.class);
+    public InvestigationStepDecision decideInvestigationStep(InvestigationStepRequest request, Duration maxWait) {
+        HttpResponse<String> http = post(INVESTIGATION_STEP_PATH, request, request.correlationId(), maxWait);
+        InvestigationStepResponse response = decode(http, InvestigationStepResponse.class, request.correlationId());
         if (response.runNo() != request.runNo() || response.stepId() != request.stepId()) {
             throw invalidOutput("investigation step echo does not match the request", request.correlationId());
         }
-        return response;
+        return new InvestigationStepDecision(response, metadata(http));
     }
 
     @Override
     public RemediationDraftResponse draftRemediation(RemediationDraftRequest request) {
-        RemediationDraftResponse response = post(
-                REMEDIATION_DRAFT_PATH,
-                request,
-                request.correlationId(),
-                properties.remediationTimeout(),
-                RemediationDraftResponse.class);
+        HttpResponse<String> http =
+                post(REMEDIATION_DRAFT_PATH, request, request.correlationId(), properties.remediationTimeout());
+        RemediationDraftResponse response = decode(http, RemediationDraftResponse.class, request.correlationId());
         if (!response.correlationId().equals(request.correlationId())) {
             throw invalidOutput("remediation draft echo does not match the request", request.correlationId());
         }
         return response;
     }
 
-    private <T> T post(String path, Object body, String correlationId, Duration maxWait, Class<T> type) {
+    /** @return 200 响应；其他状态已映射为失败 */
+    private HttpResponse<String> post(String path, Object body, String correlationId, Duration maxWait) {
         if (maxWait == null || !maxWait.isPositive()) {
             throw new IllegalArgumentException("maxWait must be positive");
         }
@@ -97,15 +102,45 @@ public class HttpAiRuntimeClient implements AiDecisionPort {
         HttpResponse<String> response = exchange(request, maxWait, correlationId);
         int status = response.statusCode();
         if (status == 200) {
-            try {
-                return codec.decode(response.body(), type);
-            } catch (ApplicationException ex) {
-                log.warn(
-                        "AI runtime output rejected: correlationId={} message={}", correlationId, type.getSimpleName());
-                throw ex;
-            }
+            return response;
         }
         throw failure(statusCode(status), "AI runtime answered HTTP " + status, correlationId, null, status);
+    }
+
+    private <T> T decode(HttpResponse<String> response, Class<T> type, String correlationId) {
+        try {
+            return codec.decode(response.body(), type);
+        } catch (ApplicationException ex) {
+            log.warn("AI runtime output rejected: correlationId={} message={}", correlationId, type.getSimpleName());
+            throw ex;
+        }
+    }
+
+    /**
+     * 调用元数据只是记录用途（04 §59）：缺失或超出记录列长度/范围的值不记录，不因此否定已通过协议校验的结果。
+     */
+    static AiCallMetadata metadata(HttpResponse<?> response) {
+        return new AiCallMetadata(
+                text(response, MODEL_PROVIDER_HEADER, 64),
+                text(response, MODEL_NAME_HEADER, 128),
+                text(response, PROMPT_TEMPLATE_HEADER, 64),
+                count(response, PROMPT_TOKENS_HEADER),
+                count(response, COMPLETION_TOKENS_HEADER));
+    }
+
+    private static String text(HttpResponse<?> response, String header, int max) {
+        return response.headers()
+                .firstValue(header)
+                .filter(value -> !value.isBlank() && value.length() <= max)
+                .orElse(null);
+    }
+
+    private static Integer count(HttpResponse<?> response, String header) {
+        return response.headers()
+                .firstValue(header)
+                .filter(value -> value.matches("[0-9]{1,9}"))
+                .map(Integer::valueOf)
+                .orElse(null);
     }
 
     /**

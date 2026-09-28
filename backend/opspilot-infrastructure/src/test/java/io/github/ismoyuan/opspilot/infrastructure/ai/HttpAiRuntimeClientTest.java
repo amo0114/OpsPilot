@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import io.github.ismoyuan.opspilot.application.ai.AiCallMetadata;
+import io.github.ismoyuan.opspilot.application.ai.InvestigationStepDecision;
 import io.github.ismoyuan.opspilot.application.ai.protocol.v1.InvestigationStepRequest;
 import io.github.ismoyuan.opspilot.application.ai.protocol.v1.InvestigationStepResponse;
 import io.github.ismoyuan.opspilot.application.ai.protocol.v1.RemediationDraftRequest;
@@ -48,6 +50,7 @@ class HttpAiRuntimeClientTest {
     private final ExecutorService executor = Executors.newCachedThreadPool();
     private HttpServer server;
     private volatile Function<Received, Reply> responder;
+    private final Map<String, String> responseHeaders = new java.util.concurrent.ConcurrentHashMap<>();
 
     record Received(String method, String path, Map<String, List<String>> headers, String body) {
         String header(String name) {
@@ -95,6 +98,7 @@ class HttpAiRuntimeClientTest {
         pause(reply.delayMillis());
         byte[] bytes = reply.body().getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "application/json");
+        responseHeaders.forEach(exchange.getResponseHeaders()::add);
         exchange.sendResponseHeaders(reply.status(), bytes.length == 0 ? -1 : bytes.length);
         try {
             if (bytes.length > 0) {
@@ -123,9 +127,10 @@ class HttpAiRuntimeClientTest {
         String answer = fixture("investigation-step-response/valid/request-queue-inspect.json");
         responder = r -> Reply.of(200, answer);
 
-        InvestigationStepResponse response = client(TOKEN).decideInvestigationStep(request, Duration.ofSeconds(5));
+        InvestigationStepDecision decision = client(TOKEN).decideInvestigationStep(request, Duration.ofSeconds(5));
 
-        assertThat(response).isInstanceOf(InvestigationStepResponse.RequestCapabilityStep.class);
+        assertThat(decision.response()).isInstanceOf(InvestigationStepResponse.RequestCapabilityStep.class);
+        assertThat(decision.metadata()).isEqualTo(AiCallMetadata.UNKNOWN);
         assertThat(received).singleElement().satisfies(r -> {
             assertThat(r.method()).isEqualTo("POST");
             assertThat(r.path()).isEqualTo("/internal/v1/investigation/step");
@@ -134,6 +139,32 @@ class HttpAiRuntimeClientTest {
             assertThat(r.header("Content-Type")).isEqualTo("application/json");
             assertThat(plain.readTree(r.body())).isEqualTo(plain.readTree(codec.encode(request)));
         });
+    }
+
+    /** 调用元数据来自响应头（08 TASK-038）；缺失、超长或非数字的值不记录，但不否定已通过协议校验的结果。 */
+    @Test
+    void callMetadataIsReadFromHeadersAndBadValuesAreDropped() {
+        String answer = fixture("investigation-step-response/valid/propose-hypothesis.json");
+        responder = r -> Reply.of(200, answer);
+        responseHeaders.putAll(Map.of(
+                "X-OpsPilot-Model-Provider", "openai-compatible",
+                "X-OpsPilot-Model-Name", "demo-model",
+                "X-OpsPilot-Prompt-Template-Version", "investigation-v1",
+                "X-OpsPilot-Prompt-Tokens", "1200",
+                "X-OpsPilot-Completion-Tokens", "85"));
+
+        assertThat(client(TOKEN)
+                        .decideInvestigationStep(stepRequest(), Duration.ofSeconds(5))
+                        .metadata())
+                .isEqualTo(new AiCallMetadata("openai-compatible", "demo-model", "investigation-v1", 1200, 85));
+
+        responseHeaders.put("X-OpsPilot-Model-Provider", "p".repeat(65));
+        responseHeaders.put("X-OpsPilot-Prompt-Tokens", "-1");
+        responseHeaders.put("X-OpsPilot-Completion-Tokens", "12abc");
+        assertThat(client(TOKEN)
+                        .decideInvestigationStep(stepRequest(), Duration.ofSeconds(5))
+                        .metadata())
+                .isEqualTo(new AiCallMetadata(null, "demo-model", "investigation-v1", null, null));
     }
 
     /** 回显只用于核对：runNo/stepId 与所发请求不符即非法输出（BND-015）。 */

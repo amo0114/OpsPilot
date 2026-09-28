@@ -23,6 +23,20 @@ Java（`application/ai/protocol/v1`，record/sealed/enum）与 Python（`opspilo
 - Remediation 输出没有 `riskLevel`、`requiresApproval`、RecoveryPolicy 或容器/执行上下文，这些由 Java 确定。
 - 协议只校验结构：runNo 是否当前、ID 是否存在与归属、Descriptor 取值是否被允许，由 Java 业务事务判定。
 
+## 调用元数据响应头
+
+模型与 Prompt 信息不属于 v1 响应体（体的 Schema 不变），AI Runtime 在成功的 `/investigation/step` 与 `/remediation/draft` 响应上以头传回，
+Java 记入 AgentStepRecord（04 §59、08 TASK-038）：
+
+| 响应头 | 含义 | 记录列上限 |
+|---|---|---|
+| `X-OpsPilot-Model-Provider` | 模型提供方（当前只有 `fake`） | 64 字符 |
+| `X-OpsPilot-Model-Name` | 模型名 | 128 字符 |
+| `X-OpsPilot-Prompt-Template-Version` | 版本化 Prompt 模板，如 `investigation-v1` | 64 字符 |
+| `X-OpsPilot-Prompt-Tokens` / `X-OpsPilot-Completion-Tokens` | 模型后端报告的 token 用量；未报告时不发送 | 非负整数 |
+
+这些头只作记录：缺失、超长或非数字的值 Java 不记录，也不据此否定已通过协议校验的结果。
+
 ## Fixture
 
 `fixtures/<schema>/` 下：

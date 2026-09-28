@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
-from opspilot_ai.api.internal import error, require_internal_token
+from opspilot_ai.api.internal import decision_response, error, require_internal_token
 from opspilot_ai.errors import AiOutputInvalidError, LlmTimeoutError, LlmUnavailableError
 from opspilot_ai.investigation.service import InvestigationDecisionService
 from opspilot_ai.protocol.v1 import InvestigationStepRequest
@@ -25,4 +25,9 @@ async def investigation_step(request: Request) -> JSONResponse:
         return error(504, "AI_RUNTIME_TIMEOUT", "Model did not answer in time.")
     except LlmUnavailableError:
         return error(503, "AI_RUNTIME_UNAVAILABLE", "Model is unavailable.")
-    return JSONResponse(content=decision.to_wire())
+    return decision_response(
+        decision.response.to_wire(),
+        request.app.state.settings,
+        decision.template_version,
+        decision.completion,
+    )

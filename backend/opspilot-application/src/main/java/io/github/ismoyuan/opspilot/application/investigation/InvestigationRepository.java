@@ -27,4 +27,12 @@ public interface InvestigationRepository {
      * @return 写入后的 Investigation
      */
     Investigation saveStopRequest(Investigation previous, Investigation stopped);
+
+    /**
+     * 写入 {@link Investigation#withAiStepFailure}/{@link Investigation#withAiStepSuccess} 的连续失败计数：以原轮号与原版本为条件，
+     * lock_version 加一。
+     *
+     * @return 写入后的 Investigation
+     */
+    Investigation saveAiFailureCount(Investigation previous, Investigation updated, Instant at);
 }

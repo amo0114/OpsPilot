@@ -71,4 +71,14 @@
           AND current_run_no = #{expectedRunNo}
           AND lock_version = #{expectedVersion}
     </update>
+
+    <update id="updateAiFailureCount">
+        UPDATE investigation
+        SET consecutive_ai_failure_count = #{count},
+            updated_at = #{updatedAt},
+            lock_version = lock_version + 1
+        WHERE id = #{id}
+          AND current_run_no = #{expectedRunNo}
+          AND lock_version = #{expectedVersion}
+    </update>
 </mapper>

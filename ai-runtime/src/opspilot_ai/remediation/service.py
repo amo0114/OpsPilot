@@ -1,11 +1,19 @@
 import json
+from dataclasses import dataclass
 
 from pydantic import ValidationError
 
 from opspilot_ai.errors import AiOutputInvalidError
-from opspilot_ai.llm.client import LlmClient, LlmPrompt, answer_object
+from opspilot_ai.llm.client import LlmClient, LlmCompletion, LlmPrompt, answer_object
 from opspilot_ai.llm.fake import REMEDIATION_TEMPLATE
 from opspilot_ai.protocol.v1 import RemediationDraftRequest, RemediationDraftResponse
+
+
+@dataclass(frozen=True)
+class RemediationDecision:
+    response: RemediationDraftResponse
+    template_version: str
+    completion: LlmCompletion
 
 
 class RemediationDraftService:
@@ -18,10 +26,9 @@ class RemediationDraftService:
     def __init__(self, llm: LlmClient) -> None:
         self._llm = llm
 
-    def draft(self, request: RemediationDraftRequest) -> RemediationDraftResponse:
-        answer = answer_object(
-            self._llm.complete(LlmPrompt(REMEDIATION_TEMPLATE, request.to_wire()))
-        )
+    def draft(self, request: RemediationDraftRequest) -> RemediationDecision:
+        completion = self._llm.complete(LlmPrompt(REMEDIATION_TEMPLATE, request.to_wire()))
+        answer = answer_object(completion.text)
         answer.update(
             protocolVersion=1,
             correlationId=request.correlation_id,
@@ -35,4 +42,4 @@ class RemediationDraftService:
         allowed = {(a.capability_key, a.resource_id) for a in request.allowed_actions}
         if (action.capability_key, action.target_resource_id) not in allowed:
             raise AiOutputInvalidError("model chose an action outside allowedActions")
-        return response
+        return RemediationDecision(response, REMEDIATION_TEMPLATE, completion)

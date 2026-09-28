@@ -10,7 +10,7 @@ from collections import deque
 from collections.abc import Iterable
 from typing import Any
 
-from opspilot_ai.llm.client import LlmPrompt
+from opspilot_ai.llm.client import LlmCompletion, LlmPrompt
 
 INVESTIGATION_TEMPLATE = "investigation-v1"
 REMEDIATION_TEMPLATE = "remediation-v1"
@@ -20,13 +20,16 @@ class FakeLlmClient:
     def __init__(self, scripted: Iterable[str] = ()) -> None:
         self._scripted = deque(scripted)
 
-    def complete(self, prompt: LlmPrompt) -> str:
+    def complete(self, prompt: LlmPrompt) -> LlmCompletion:
+        """No token usage: the Fake calls no model."""
         if self._scripted:
-            return self._scripted.popleft()
+            return LlmCompletion(self._scripted.popleft())
         if prompt.template_version == INVESTIGATION_TEMPLATE:
-            return json.dumps(_undetermined(prompt.context), ensure_ascii=False)
+            return LlmCompletion(json.dumps(_undetermined(prompt.context), ensure_ascii=False))
         if prompt.template_version == REMEDIATION_TEMPLATE:
-            return json.dumps(_first_allowed_action(prompt.context), ensure_ascii=False)
+            return LlmCompletion(
+                json.dumps(_first_allowed_action(prompt.context), ensure_ascii=False)
+            )
         raise ValueError(f"unknown prompt template: {prompt.template_version}")
 
 

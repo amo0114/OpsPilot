@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.agentstep.AgentStepMapper">
+
+    <resultMap id="agentStepRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.agentstep.AgentStepRow">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="incident_id" javaType="_long"/>
+            <arg column="investigation_id" javaType="_long"/>
+            <arg column="run_no" javaType="_int"/>
+            <arg column="step_no" javaType="_int"/>
+            <arg column="status" javaType="String"/>
+            <arg column="started_at" javaType="java.time.LocalDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <!--
+      step_no 在同一语句内分配（INSERT … SELECT 对读取的行加共享锁）；调用方已锁定 Investigation，
+      uk_agent_step_record_investigation_step 做最后保护（04 §61）。
+    -->
+    <insert id="insertRunning" useGeneratedKeys="true" keyProperty="s.id" keyColumn="id">
+        INSERT INTO agent_step_record (incident_id, investigation_id, run_no, step_no, status, started_at, created_at,
+                                       updated_at)
+        SELECT #{s.incidentId}, #{s.investigationId}, #{s.runNo}, COALESCE(MAX(step_no), 0) + 1, 'RUNNING',
+               #{s.startedAt}, #{s.startedAt}, #{s.startedAt}
+        FROM agent_step_record
+        WHERE investigation_id = #{s.investigationId}
+    </insert>
+
+    <select id="selectIncidentId" resultType="java.lang.Long">
+        SELECT incident_id
+        FROM agent_step_record
+        WHERE id = #{id}
+    </select>
+
+    <select id="selectByIdForUpdate" resultMap="agentStepRow">
+        SELECT id, incident_id, investigation_id, run_no, step_no, status, started_at
+        FROM agent_step_record
+        WHERE id = #{id}
+        FOR UPDATE
+    </select>
+
+    <update id="markSucceeded">
+        UPDATE agent_step_record
+        SET status = 'SUCCEEDED',
+            intent_type = #{intentType},
+            output_schema_version = 1,
+            output_payload = #{outputPayload},
+            model_provider = #{modelProvider},
+            model_name = #{modelName},
+            prompt_template_version = #{promptTemplateVersion},
+            prompt_tokens = #{promptTokens},
+            completion_tokens = #{completionTokens},
+            latency_ms = #{latencyMs},
+            finished_at = #{finishedAt},
+            updated_at = #{finishedAt}
+        WHERE id = #{id}
+          AND status = 'RUNNING'
+    </update>
+
+    <update id="markFailed">
+        UPDATE agent_step_record
+        SET status = 'FAILED',
+            error_code = #{errorCode},
+            error_message = #{errorMessage},
+            latency_ms = #{latencyMs},
+            finished_at = #{finishedAt},
+            updated_at = #{finishedAt}
+        WHERE id = #{id}
+          AND status = 'RUNNING'
+    </update>
+</mapper>

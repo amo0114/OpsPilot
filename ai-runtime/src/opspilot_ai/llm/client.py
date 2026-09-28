@@ -13,14 +13,23 @@ class LlmPrompt:
     context: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class LlmCompletion:
+    """The model's raw answer and, when the backend reports it, token usage."""
+
+    text: str
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+
+
 class LlmClient(Protocol):
-    """Returns the model's raw answer text; callers validate it against protocol v1.
+    """Returns the model's raw answer; callers validate the text against protocol v1.
 
     Implementations raise LlmUnavailableError or LlmTimeoutError; they never retry on their own
     (07 §86), because each attempt must stay visible to Java as its own AgentStep.
     """
 
-    def complete(self, prompt: LlmPrompt) -> str: ...
+    def complete(self, prompt: LlmPrompt) -> LlmCompletion: ...
 
 
 def answer_object(answer: str) -> dict[str, Any]:

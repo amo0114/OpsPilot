@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  AI 上下文投影（08 TASK-037、02 §15）：只选列出的列。不读 capability_invocation 的请求/响应、observation/timeline 的 payload、
+  incident.description、连接凭证或任何 Fault Lab 表（09 §20～§22）。
+-->
+<mapper namespace="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.investigation.InvestigationContextMapper">
+
+    <resultMap id="headRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.investigation.InvestigationContextRows$HeadRow">
+        <constructor>
+            <arg column="incident_id" javaType="_long"/>
+            <arg column="incident_key" javaType="String"/>
+            <arg column="title" javaType="String"/>
+            <arg column="impact_summary" javaType="String"/>
+            <arg column="started_at" javaType="java.time.LocalDateTime"/>
+            <arg column="status" javaType="String"/>
+            <arg column="investigation_id" javaType="_long"/>
+            <arg column="current_run_no" javaType="_int"/>
+            <arg column="current_run_started_at" javaType="java.time.LocalDateTime"/>
+            <arg column="current_run_capability_count" javaType="_int"/>
+            <arg column="max_capability_calls" javaType="_int"/>
+            <arg column="max_duration_seconds" javaType="_int"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="resourceRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.investigation.InvestigationContextRows$ResourceRow">
+        <constructor>
+            <arg column="id" javaType="_long"/>
+            <arg column="resource_key" javaType="String"/>
+            <arg column="resource_type" javaType="String"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="hypothesisRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.investigation.InvestigationContextRows$HypothesisRow">
+        <constructor>
+            <arg column="id" javaType="_long"/>
+            <arg column="title" javaType="String"/>
+            <arg column="description" javaType="String"/>
+            <arg column="status" javaType="String"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="evidenceRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.investigation.InvestigationContextRows$EvidenceRow">
+        <constructor>
+            <arg column="id" javaType="_long"/>
+            <arg column="observation_id" javaType="_long"/>
+            <arg column="hypothesis_id" javaType="_long"/>
+            <arg column="relation" javaType="String"/>
+            <arg column="reason" javaType="String"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="observationRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.investigation.InvestigationContextRows$ObservationRow">
+        <constructor>
+            <arg column="id" javaType="_long"/>
+            <arg column="run_no" javaType="_int"/>
+            <arg column="resource_key" javaType="String"/>
+            <arg column="observation_kind" javaType="String"/>
+            <arg column="summary" javaType="String"/>
+            <arg column="observed_at" javaType="java.time.LocalDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="diagnosisRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.investigation.InvestigationContextRows$DiagnosisRow">
+        <constructor>
+            <arg column="id" javaType="_long"/>
+            <arg column="version_no" javaType="_int"/>
+            <arg column="run_no" javaType="_int"/>
+            <arg column="conclusion_type" javaType="String"/>
+            <arg column="primary_hypothesis_id" javaType="Long"/>
+            <arg column="summary" javaType="String"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="timelineRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.investigation.InvestigationContextRows$TimelineRow">
+        <constructor>
+            <arg column="event_type" javaType="String"/>
+            <arg column="occurred_at" javaType="java.time.LocalDateTime"/>
+            <arg column="summary" javaType="String"/>
+        </constructor>
+    </resultMap>
+
+    <select id="selectHead" resultMap="headRow">
+        SELECT i.id AS incident_id, i.incident_key, i.title, i.impact_summary, i.started_at, i.status,
+               v.id AS investigation_id, v.current_run_no, v.current_run_started_at, v.current_run_capability_count,
+               v.max_capability_calls, v.max_duration_seconds
+        FROM incident i
+        JOIN investigation v ON v.incident_id = i.id
+        WHERE i.id = #{incidentId}
+    </select>
+
+    <select id="selectAffectedResources" resultMap="resourceRow">
+        SELECT r.id, r.resource_key, r.resource_type
+        FROM incident_affected_resource a
+        JOIN managed_resource r ON r.id = a.managed_resource_id
+        WHERE a.incident_id = #{incidentId}
+        ORDER BY r.id
+    </select>
+
+    <select id="selectHypotheses" resultMap="hypothesisRow">
+        SELECT id, title, description, status
+        FROM hypothesis
+        WHERE investigation_id = #{investigationId}
+        ORDER BY id
+    </select>
+
+    <!-- 本轮建立的，或被任一 Diagnosis 冻结引用的 -->
+    <select id="selectContextEvidence" resultMap="evidenceRow">
+        SELECT e.id, e.observation_id, e.hypothesis_id, e.relation, e.reason
+        FROM evidence e
+        WHERE e.investigation_id = #{investigationId}
+          AND (e.created_at &gt;= #{runStartedAt}
+               OR EXISTS (SELECT 1
+                          FROM diagnosis_evidence_ref r
+                          JOIN diagnosis d ON d.id = r.diagnosis_id
+                          WHERE r.evidence_id = e.id AND d.investigation_id = #{investigationId}))
+        ORDER BY e.id
+    </select>
+
+    <!-- 来源调用属于本轮，或被上下文 Evidence 引用；run 取自来源调用（04 §22） -->
+    <select id="selectContextObservations" resultMap="observationRow">
+        SELECT o.id, ci.run_no, r.resource_key, o.observation_kind, o.summary, o.observed_at
+        FROM observation o
+        JOIN capability_invocation ci ON ci.id = o.capability_invocation_id
+        JOIN managed_resource r ON r.id = o.managed_resource_id
+        WHERE o.investigation_id = #{investigationId}
+          AND (ci.run_no = #{runNo}
+               <if test="!referenced.isEmpty()">
+                   OR o.id IN
+                   <foreach collection="referenced" item="id" open="(" separator="," close=")">#{id}</foreach>
+               </if>)
+        ORDER BY o.id
+    </select>
+
+    <select id="selectLatestDiagnosis" resultMap="diagnosisRow">
+        SELECT id, version_no, run_no, conclusion_type, primary_hypothesis_id, summary
+        FROM diagnosis
+        WHERE investigation_id = #{investigationId}
+        ORDER BY version_no DESC
+        LIMIT 1
+    </select>
+
+    <select id="selectDiagnosisEvidenceIds" resultType="long">
+        SELECT evidence_id
+        FROM diagnosis_evidence_ref
+        WHERE diagnosis_id = #{diagnosisId}
+        ORDER BY evidence_id
+    </select>
+
+    <!-- 只取类型、时间与摘要，不读 payload、发起人与关联 ID -->
+    <select id="selectRecentTimeline" resultMap="timelineRow">
+        SELECT event_type, occurred_at, summary
+        FROM (SELECT id, event_type, occurred_at, summary
+              FROM incident_timeline_event
+              WHERE incident_id = #{incidentId}
+                AND event_type IN
+                <foreach collection="eventTypes" item="type" open="(" separator="," close=")">#{type}</foreach>
+              ORDER BY id DESC
+              LIMIT #{limit}) recent
+        ORDER BY id
+    </select>
+</mapper>
