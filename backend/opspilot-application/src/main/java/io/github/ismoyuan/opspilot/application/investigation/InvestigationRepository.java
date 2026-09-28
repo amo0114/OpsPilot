@@ -8,6 +8,13 @@ import java.util.Optional;
 /** Investigation 持久化端口；调用方须已在同一事务中锁定所属 Incident（Incident → Investigation 锁序）。 */
 public interface InvestigationRepository {
 
+    /**
+     * 不加锁判断该 Incident 是否已有 Investigation（TASK-016）：只用于 Start/Continue 决定插入首轮还是锁定既有行。调用方须已持有
+     * Incident 行锁（同一 Incident 的 Start/Continue 由此串行），且本事务在取得该锁之前没有做过一致性读，从而能看到已提交的
+     * Investigation；对不存在的行加锁读取会取得间隙锁并使不同 Incident 的并发首次 Start 死锁。
+     */
+    boolean existsForIncident(long incidentId);
+
     /** 加排他锁读取。 */
     Optional<Investigation> findByIncidentIdForUpdate(long incidentId);
 

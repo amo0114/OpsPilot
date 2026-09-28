@@ -50,6 +50,8 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mysql.MySQLContainer;
@@ -102,6 +104,9 @@ class InvestigationRunIntegrationTest {
 
     @Autowired
     JdbcTemplate jdbc;
+
+    @Autowired
+    PlatformTransactionManager transactionManager;
 
     long incidentId;
 
@@ -225,6 +230,45 @@ class InvestigationRunIntegrationTest {
         assertThat(count("investigation")).isEqualTo(1);
         assertThat(count("incident_timeline_event")).isEqualTo(1);
         verify(dispatcher).dispatchInvestigation(incidentId, 1);
+    }
+
+    /**
+     * 不同 Incident 的首次 Start 互不阻塞（TASK-016 修复，TASK-039 修复冒烟发现的死锁）：A 的 Start 已写入 Investigation 但未提交时，
+     * B 的首次 Start 不必等它提交即可完成。原实现对尚不存在的 Investigation 加锁读取，在 uk_investigation_incident 上留下间隙锁，
+     * 另一 Incident 的插入须等其提交，两者并发时互相等待成死锁。
+     */
+    @Test
+    void firstStartsOfDifferentIncidentsDoNotBlockEachOther() throws Exception {
+        String otherKey = "INC-20260927-0002";
+        jdbc.update(
+                "INSERT INTO incident (incident_key, managed_system_id, title, impact_summary, status,"
+                        + " created_source, created_by, started_at, detected_at, created_at, updated_at, lock_version)"
+                        + " SELECT ?, id, '统计数据延迟', '统计停止更新', 'CREATED', 'MANUAL', 'demo-user', UTC_TIMESTAMP(3),"
+                        + " UTC_TIMESTAMP(3), UTC_TIMESTAMP(3), UTC_TIMESTAMP(3), 0 FROM managed_system",
+                otherKey);
+        CountDownLatch written = new CountDownLatch(1);
+        CountDownLatch commit = new CountDownLatch(1);
+        // 外层事务未提交：Start 加入该事务，Investigation 已插入但仍持有锁
+        CompletableFuture<InvestigationRunResult> first =
+                CompletableFuture.supplyAsync(() -> new TransactionTemplate(transactionManager).execute(status -> {
+                    InvestigationRunResult result =
+                            service.startInvestigation(new StartInvestigationCommand(KEY, 0, "demo-user"));
+                    written.countDown();
+                    await(commit);
+                    return result;
+                }));
+        assertThat(written.await(5, TimeUnit.SECONDS)).isTrue();
+
+        CompletableFuture<InvestigationRunResult> other = CompletableFuture.supplyAsync(
+                () -> service.startInvestigation(new StartInvestigationCommand(otherKey, 0, "demo-user")));
+        try {
+            assertThat(other.get(5, TimeUnit.SECONDS).status()).isEqualTo(IncidentStatus.INVESTIGATING);
+        } finally {
+            commit.countDown();
+        }
+
+        assertThat(first.get(5, TimeUnit.SECONDS).status()).isEqualTo(IncidentStatus.INVESTIGATING);
+        assertThat(count("investigation")).isEqualTo(2);
     }
 
     /**
@@ -487,6 +531,14 @@ class InvestigationRunIntegrationTest {
             return outcomes;
         } finally {
             executor.shutdownNow();
+        }
+    }
+
+    private static void await(CountDownLatch latch) {
+        try {
+            latch.await(10, TimeUnit.SECONDS);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
         }
     }
 

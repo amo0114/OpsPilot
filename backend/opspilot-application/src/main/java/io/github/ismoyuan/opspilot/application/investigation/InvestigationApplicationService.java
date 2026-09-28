@@ -155,10 +155,14 @@ public class InvestigationApplicationService {
             }
             var transition = incident.transitionFor(trigger, expectedVersion);
 
-            Investigation investigation = investigations
-                    .findByIncidentIdForUpdate(incident.id())
-                    .map(current -> investigations.saveNextRun(current, current.nextRun(now)))
-                    .orElseGet(() -> investigations.insertFirstRun(incident.id(), limits, now));
+            // 首次 Start 时 Investigation 尚不存在：不对它加锁读取（间隙锁会使不同 Incident 的并发首次 Start 死锁，TASK-016），
+            // 只在 Incident 行锁下以普通读判断后插入；已存在（Continue）时照旧排他锁定后进入下一 run
+            Investigation investigation = investigations.existsForIncident(incident.id())
+                    ? investigations
+                            .findByIncidentIdForUpdate(incident.id())
+                            .map(current -> investigations.saveNextRun(current, current.nextRun(now)))
+                            .orElseThrow()
+                    : investigations.insertFirstRun(incident.id(), limits, now);
             int previousRunNo = investigation.currentRunNo() - 1;
             Incident investigating = incidents.apply(transition, now);
 

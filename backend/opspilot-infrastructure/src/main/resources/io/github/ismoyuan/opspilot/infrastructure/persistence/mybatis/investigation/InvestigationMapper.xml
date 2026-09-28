@@ -23,6 +23,17 @@
         </constructor>
     </resultMap>
 
+    <!--
+      首次 Start 前判断 Investigation 是否已存在（TASK-016）：普通一致性读，不加锁。对不存在的行执行 FOR UPDATE 会在
+      uk_investigation_incident 上取间隙锁，使不同 Incident 并发首次 Start 互相等待成死锁。调用方须已持有 Incident 行锁，
+      且这是本事务取得该锁后的第一次一致性读。
+    -->
+    <select id="countByIncidentId" resultType="_int">
+        SELECT COUNT(*)
+        FROM investigation
+        WHERE incident_id = #{incidentId}
+    </select>
+
     <select id="selectByIncidentIdForUpdate" resultMap="investigationRow">
         SELECT id, incident_id, started_at, last_activity_at, current_run_no, current_run_started_at,
                current_run_capability_count, capability_call_count, consecutive_ai_failure_count,

@@ -20,6 +20,11 @@ class MyBatisInvestigationRepository implements InvestigationRepository {
     }
 
     @Override
+    public boolean existsForIncident(long incidentId) {
+        return mapper.countByIncidentId(incidentId) > 0;
+    }
+
+    @Override
     public Optional<Investigation> findByIncidentIdForUpdate(long incidentId) {
         return Optional.ofNullable(mapper.selectByIncidentIdForUpdate(incidentId))
                 .map(MyBatisInvestigationRepository::toDomain);

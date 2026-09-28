@@ -2,20 +2,21 @@
 
 更新时间：2026-09-28（本地）
 仓库/分支：/root/projects/OpsPilot-V0.1-IMPLEMENTATION，main；无 remote
-当前批次/状态：TASK-039 准入死锁修复 DONE（代码 30aea1f）；下一步 TASK-016 首次 Start 死锁独立修复；B13 未开始
-成员 Task 及顺序：B12 = TASK-042 → TASK-043（均 DONE）；下一步为 TASK-039 死锁独立修复，之后 B13 = TASK-044 → 046
-固定 Base SHA：TASK-016 修复开工时读取当时 HEAD
+当前批次/状态：TASK-016 首次 Start 死锁修复 Review PASS，提交中；B13 未开始
+成员 Task 及顺序：B12 = TASK-042 → TASK-043（均 DONE）；B13 前依次独立修复 TASK-016（提交中）→ TASK-026 → TASK-040/043，之后 B13 = TASK-044 → 046
+固定 Base SHA：e5a560b82e270a6a1717d9652138edb20c0a3717（TASK-016 修复开工时 HEAD）
 批外前置核实：B13 开工时按 08 核对其成员的批外前置
-允许目录 / 明确不做 / 关键不变量：TASK-039 修复按 B12-R2 约定（只改 Step 编号查询/插入＋跨调查并发回归）；B13 开工时按 BATCH-PLAN 与 08 固定
-本批规格章节及 PROGRESS 记录：PROGRESS「TASK-039 修复」
-当前成员及位置：无进行中修复
+允许目录 / 明确不做 / 关键不变量：TASK-016 修复按其 Review 约定（首次 Start 在 Incident 行锁下普通读判断后插入，不全局修改 findByIncidentIdForUpdate，保留 Continue/Stop/Step 的锁）；B13 开工时按 BATCH-PLAN 与 08 固定
+本批规格章节及 PROGRESS 记录：PROGRESS「TASK-016 修复」
+当前成员及位置：TASK-016 修复实现与验证完成，待独立 Review
 已实现并针对性验证的成员：B01～B12 全部
-未完成 / 未执行验证：首次 Start 并发死锁（TASK-016 独立修复，下一步）；其余见 PROGRESS 待处理问题；MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
-未提交文件（含既有无关修改）：无（本交接卡与 PROGRESS 回填随 docs(progress) 提交）
-共同验证及独立 Review 证据编号：见 PROGRESS「TASK-039 修复」（Review PASS）
+未完成 / 未执行验证：TASK-016 修复 Review；新发现 Diagnosis 版本号并发死锁（TASK-026）与结果事务数据库失败留下 RUNNING Step（TASK-040/043），均待用户确认修复时机；其余见 PROGRESS 待处理问题；MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
+未提交文件（含既有无关修改）：InvestigationApplicationService.java、InvestigationRepository.java、InvestigationMapper.java、MyBatisInvestigationRepository.java、InvestigationMapper.xml、InvestigationRunIntegrationTest.java、docs/dev/CURRENT.md、docs/dev/PROGRESS.md；无既有无关修改
+共同验证及独立 Review 证据编号：见 PROGRESS「TASK-016 修复」（verify exit 0＋回归先失败后通过＋真实进程并发首次 Start）；Review NOT RUN
 下一步具体动作：
-1. TASK-016 首次 Start 死锁独立修复：首次 Start 在 Incident 行锁保护下不对不存在的 Investigation 加锁读取，保留 Continue/Stop/Step 既有行的锁，不全局修改 findByIncidentIdForUpdate，加跨 Incident 并发首次 Start 回归，不加通用重试；完成后送审
-2. 不推送；未获指示不开始 B13
+1. 独立 Reviewer 审查 Base e5a560b 到当前工作树（首次 Start 的普通读与跨 Incident 回归）
+2. PASS 后按用户授权提交（建议 `fix(investigation): first start without gap-locking a missing investigation (TASK-016)`）并回填记录
+3. Diagnosis 版本号死锁（TASK-026）与 RUNNING Step 残留（TASK-040/043）等待用户决定；不推送；不开始 B13
 本地启动 Demo 配置：在 OPSPILOT_DB_* 环境变量基础上加 --spring.profiles.active=demo
 
 后续 UI 约定（TASK-096/099 实施）：

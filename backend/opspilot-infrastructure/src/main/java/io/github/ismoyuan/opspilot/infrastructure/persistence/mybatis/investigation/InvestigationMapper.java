@@ -7,6 +7,8 @@ import org.apache.ibatis.annotations.Param;
 @Mapper
 interface InvestigationMapper {
 
+    int countByIncidentId(@Param("incidentId") long incidentId);
+
     InvestigationRow selectByIncidentIdForUpdate(@Param("incidentId") long incidentId);
 
     int insertFirstRun(
