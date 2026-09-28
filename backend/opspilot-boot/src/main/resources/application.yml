@@ -9,6 +9,12 @@ spring:
   flyway:
     locations: classpath:db/migration
 
+opspilot:
+  ai-runtime:
+    # 内部网络地址；Token 只来自环境变量，不写入仓库（05 §90、07 §89）
+    base-url: ${OPSPILOT_AI_RUNTIME_URL:http://localhost:8000}
+    token: ${OPSPILOT_AI_RUNTIME_TOKEN:}
+
 management:
   endpoints:
     web:

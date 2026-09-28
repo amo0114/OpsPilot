@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-27（B07 DONE，d796643；B08 未开始）
+> 最近更新：2026-09-28（B08 REVIEW，B08-R2 PASS，提交中）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -40,8 +40,8 @@
 | TASK-030 | B07 | Java Protocol Model | DONE | commit d796643（B07，Base 3df010c） | B07-V2；AiProtocolContractTest 110/110；B07-R1 PASS AFTER PATCH → B07-R2 PASS；见 PROGRESS「B07」 |
 | TASK-031 | B07 | Python Pydantic Protocol | DONE | commit d796643（B07，Base 3df010c） | B07-V2；pytest 115 passed（含无基础设施客户端检查、模式一致性）；B07-R1 PASS AFTER PATCH → B07-R2 PASS；见 PROGRESS「B07」 |
 | TASK-032 | B07 | Java / Python Contract Test | DONE | commit d796643（B07，Base 3df010c） | B07-V2；同一 108 份 fixture 双端＋Schema 一致；B07-R1 PASS AFTER PATCH → B07-R2 PASS；见 PROGRESS「B07」 |
-| TASK-033 | B08 | AI Runtime 最小推理服务 | TODO | — | NOT RUN |
-| TASK-034 | B08 | Java AiRuntimeClient | TODO | — | NOT RUN |
+| TASK-033 | B08 | AI Runtime 最小推理服务 | REVIEW | 未提交（B08，Base dfcbca6；文件见 PROGRESS「B08」） | B08-V2（ai-runtime 检查 exit 0、pytest 143）；uvicorn＋Fake 与跨语言冒烟；B08-R1 PASS AFTER PATCH → B08-R2 PASS |
+| TASK-034 | B08 | Java AiRuntimeClient | REVIEW | 未提交（B08，Base dfcbca6；文件见 PROGRESS「B08」） | B08-V2（backend verify exit 0）＋HttpAiRuntimeClientTest 17/17（含响应体延迟回归）；跨语言冒烟；B08-R1 PASS AFTER PATCH → B08-R2 PASS |
 | TASK-035 | B09 | WorkDispatcher | TODO | — | NOT RUN |
 | TASK-036 | B09 | SingleFlightRegistry | TODO | — | NOT RUN |
 | TASK-037 | B10 | Investigation Context Builder | TODO | — | NOT RUN |
@@ -294,6 +294,43 @@
 - B07-R2：独立 Reviewer 复核；Base 仍为 3df010c，范围至修复后工作树（含未跟踪文件）；结论 PASS，可提交，无新增阻塞项；确认三项原问题关闭：四类消息顶层 null 均返回 AI_OUTPUT_INVALID，Python 整数常量在转换前拒绝布尔与浮点，三方空白定义一致且关键字控制字符限制保留；独立实测 `./mvnw -B clean verify` exit 0（domain 30、infrastructure 371、web 21、boot 4，无跳过），Enforcer、Spotless 通过；ai-runtime 锁定同步与 Ruff 通过，pytest 115 passed（含 108 份共享 fixture）；`git diff --check` 通过；此前失败的 InvestigationRunIntegrationTest 本轮 14/14 通过，连接错误保留观察、不宣称根因已修复；端点、HTTP Client、真实 LLM、MySQL 8.0.16、Windows、ccg NOT VERIFIED；Commit Recommendation YES
 - 提交：代码提交 d796643d5d9e176822d9147a56f4dcb807e2ef1c（feat(ai-protocol): canonical v1 schemas, typed Java/Python models and contract tests (TASK-028–032)）；SHA 回填为后续 docs 提交；范围外问题：见「待处理问题」中 B07 行
 
+### B08 — Python 决策服务与 Java AI 客户端
+
+- 状态：REVIEW（B08-R2 PASS，提交中）
+- 成员及顺序：TASK-033 → TASK-034；批外前置：TASK-032 DONE（d796643，B07-R2 PASS）
+- Base SHA：dfcbca66eb61f3e84200a0190cfbc4ce1e9e551e
+- 范围：ai-runtime（api/investigation、api/remediation、investigation/service、remediation/service、llm/ 的 LlmClient 与 FakeLlmClient、config 与内部认证、测试）；backend application/ai（AiDecisionPort 增加单次等待上限参数）、infrastructure/ai（AiRuntimeProperties、HTTP 客户端）、opspilot-boot application.yml 的 AI Runtime 配置项、ErrorCode（AI_RUNTIME_UNAVAILABLE、AI_RUNTIME_TIMEOUT）及测试；docs/dev。明确不做：真实 LLM 客户端（首个需要真实 AI 决策的 TASK-058 之前另行接入，08 TASK-033“后续配置打开”）、Prompt 正文与模型调优、AgentStep 登记/审计与连续失败计数（TASK-038/039）、Context Builder（TASK-037）、Intent 分派（TASK-040）、Remediation 请求事务（TASK-065）、Compose 部署（TASK-105）
+- 规格：08 TASK-033～034；02 §14～§19、§27～§31、§43 BND-003/005/010/015/016；05 §74～§90、§93～§94；07 §5、§75～§79、§86、§88～§90、§125；contracts/ai-runtime/v1
+- 关键不变量：Python 只产出类型化 Intent/Proposal，不连业务基础设施、不保存权威状态（BND-005、BND-011）；protocolVersion、runNo、stepId、correlationId 由 Python 按请求回显，Java 客户端核对回显与所发请求一致，不据此授权（BND-015）；Remediation 只能从 allowedActions 选择；Java 客户端带内部 Token、correlationId 与单次超时（不超过调用方给定上限），不做透明 HTTP 重试（05 §89、07 §86）；超时/不可用/非法输出分别映射 AI_RUNTIME_TIMEOUT、AI_RUNTIME_UNAVAILABLE、AI_OUTPUT_INVALID，错误不回显 Token 或原始输出；Secret 不进仓库（07 §89）
+- 验证要求：ai-runtime `uv sync --locked`、`ruff format --check`、`ruff check`、`pytest`（端点、认证、Fake 固定 Intent、输出校验与 allowedActions 限制、共享 fixture 合同）；backend 真实 HTTP 桩验证客户端（成功与回显核对、各类失败映射、单次请求无重试、超时）；真实进程冒烟 uvicorn＋Fake；批尾 `cd backend && ./mvnw -B clean verify`（不跳过 Enforcer/Spotless）
+- 开工已有修改：无（工作树干净）
+- 成员进度：
+  - TASK-033：实现与针对性验证完成。ai-runtime：llm/client.py（LlmPrompt＝版本化模板 id＋Java 选定上下文；LlmClient 协议只返回模型原文，不自行重试；answer_object 要求 JSON 对象）、llm/fake.py（FakeLlmClient：先按序返回脚本答案，否则返回固定 Intent——调查为 COMPLETE_INVESTIGATION/UNDETERMINED、evidenceIds 为空、影响摘要取请求值；Remediation 为第一个 allowedAction 的 service.restart；模板 investigation-v1、remediation-v1）、investigation/service.py（InvestigationDecisionService：模型只给 Intent 与 payload，protocolVersion/runNo/stepId 一律取自请求再按 v1 严格校验，非法为 AiOutputInvalidError）、remediation/service.py（RemediationDraftService：同法注入 protocolVersion/correlationId/intentType，另核对动作必须在 allowedActions 内）、errors.py、api/internal.py（Authorization: Bearer 常量时间比对、固定错误体不回显请求/模型输出）、api/investigation.py 与 api/remediation.py（POST /internal/v1/investigation/step、/remediation/draft：原始请求体 model_validate_json 严格解析，非法 422 REQUEST_VALIDATION_FAILED 且不调用模型；模型输出非法 502 AI_OUTPUT_INVALID、模型超时 504 AI_RUNTIME_TIMEOUT、不可用 503 AI_RUNTIME_UNAVAILABLE；401 UNAUTHORIZED 在解析请求前）；config.py（新增必填 OPSPILOT_AI_RUNTIME_TOKEN、OPSPILOT_AI_LLM_PROVIDER，目前只支持 fake，其他取值启动失败）；health 不需 Token，modelProvider 如实报告 fake（原常量 openai-compatible 删除），不返回 Token；main.py 装配服务。未引入新依赖；Python 仍无 Redis/MySQL/Docker 客户端与 07 §76 禁止目录
+  - TASK-034：实现与针对性验证完成。application/ai/AiDecisionPort.decideInvestigationStep 增加 maxWait 参数（调用方取单步超时与本轮剩余时间的较小值，05 §89；B07 端口签名的必要调整）；ErrorCode 新增 AI_RUNTIME_UNAVAILABLE（→503）、AI_RUNTIME_TIMEOUT（→504）；infrastructure/ai：AiRuntimeProperties（opspilot.ai-runtime：baseUrl 默认 http://localhost:8000、token 默认空、connectTimeout 2s、remediationTimeout 60s，均强类型）、HttpAiRuntimeClient（JDK java.net.http：每次调用一次 POST、不跟随重定向、无重试；请求带 Content-Type/Accept、Authorization: Bearer、X-Correlation-Id，按调用方上限设置单次超时；200 用 AiProtocolCodec 严格解码并核对 runNo/stepId 或 correlationId 回显；失败映射：连接失败/连接超时/401/403/5xx → AI_RUNTIME_UNAVAILABLE，请求超时与 504 → AI_RUNTIME_TIMEOUT，502 与非法/不符回显 → AI_OUTPUT_INVALID，其他 4xx → INTERNAL_ERROR；Token 为空时不发请求直接 AI_RUNTIME_UNAVAILABLE；错误与日志只含 code、correlationId、status）、AiRuntimeConfiguration 注册 AiDecisionPort Bean；opspilot-boot application.yml 增 opspilot.ai-runtime.base-url（OPSPILOT_AI_RUNTIME_URL）与 token（OPSPILOT_AI_RUNTIME_TOKEN，默认空，Secret 不入库）。选用 JDK HttpClient 而非 07 §5 基线 RestClient：infrastructure 模块无 spring-web，JDK 客户端原生支持单请求超时（调用方给定上限）且不重放 POST，无需新增依赖
+- 本批修改文件：修改 ai-runtime/src/opspilot_ai/{api/health.py,config.py,main.py}、tests/test_health.py，backend AiDecisionPort、ErrorCode、opspilot-boot application.yml、AiProtocolContractTest（CONTRACT 改为包内可见供客户端测试复用 fixture）；新增 ai-runtime/src/opspilot_ai/{errors.py,api/internal.py,api/investigation.py,api/remediation.py,llm/__init__.py,llm/client.py,llm/fake.py,investigation/__init__.py,investigation/service.py,remediation/__init__.py,remediation/service.py}、tests/test_internal_api.py，backend infrastructure/ai/{AiRuntimeProperties,HttpAiRuntimeClient,AiRuntimeConfiguration}.java、HttpAiRuntimeClientTest.java；docs/dev。无新依赖、无 Migration
+- B08-V1（最终代码树，本机实测）：
+  - ai-runtime/（清除 UV_DEFAULT_INDEX）：`uv sync --locked` exit 0；`uv run --locked ruff format --check .` exit 0；`uv run --locked ruff check .` exit 0；`uv run --locked pytest` 143 passed exit 0（2026-09-28 03:16 UTC）
+  - backend/：`./mvnw -B clean verify`；2026-09-28 03:16～03:22 UTC，JDK 21＋Docker（Testcontainers mysql:8.4.11）；exit 0；Enforcer 与 6 模块 spotless:check 通过；domain 30/30、infrastructure 387/387（含 HttpAiRuntimeClientTest 16、AiProtocolContractTest 110）、web 21/21、boot 4/4（应用上下文含 AiDecisionPort Bean、Token 为空仅告警），无跳过；日志无 "Connection is closed"
+  - 仓库根：`git diff --check` exit 0；覆盖 TASK-033～034
+- 专项证据/NOT RUN：
+  - TASK-033（pytest，test_internal_api 28 例＋health）：两个端点缺 Token、错 Token、无 Bearer、Basic 均 401 且模型未被调用、响应不含 Token；固定 Intent 通过 Schema、回显 (1, 2, 42)、模型收到的上下文逐字等于请求（investigation-v1）；脚本答案自带 runNo 99/stepId 7 被请求值覆盖；非 JSON、数组、缺 payload、双 payload、incidentStatus、PROPOSE_REMEDIATION 均 502 且不回显；LlmTimeoutError/LlmUnavailableError 在两端点分别 504/503；非法请求 fixture 422 且模型未调用；Remediation 固定建议通过 Schema、回显 correlationId、只选 allowedActions；目标不在 allowedActions、带 riskLevel/requiresApproval 均 502；Settings.from_env 缺 Token/Provider 或 Provider=openai 启动失败
+  - TASK-033 真实进程冒烟：`uv run uvicorn --factory opspilot_ai.main:app_from_env`（OPSPILOT_AI_LLM_PROVIDER=fake）＋curl：health 200、无 Token 401、调查 200（COMPLETE_INVESTIGATION/UNDETERMINED、回显 2/42）、Remediation 200（目标 12、回显 correlationId）、含 groundTruth 的请求 422；uvicorn 日志不含 Token，进程已停止
+  - TASK-034（HttpAiRuntimeClientTest 16/16，JDK HttpServer 桩）：请求方法、路径、Bearer Token、X-Correlation-Id、Content-Type 与协议请求体逐项核对；runNo、stepId、correlationId 回显不符 → AI_OUTPUT_INVALID；违反协议的 200 响应 → AI_OUTPUT_INVALID 且信息不含原文；502/504/503/500/401/403/422/404 分别映射且 details 含 status、不含响应原文，每例恰好 1 次请求；服务端延迟 2s、上限 300ms → AI_RUNTIME_TIMEOUT，1.5s 内返回且只 1 次请求；关闭端口 → AI_RUNTIME_UNAVAILABLE；Token 为空/空白 → AI_RUNTIME_UNAVAILABLE 且 0 次请求；maxWait 非正 → IllegalArgumentException 且 0 次请求
+  - 跨语言冒烟（jshell 在 opspilot-infrastructure 实际 classpath 上调用 HttpAiRuntimeClient → 真实 uvicorn/Fake）：调查返回 COMPLETE_INVESTIGATION runNo=2 stepId=42，Remediation 返回目标 12、correlationId 一致；错误 Token → AI_RUNTIME_UNAVAILABLE {status=401}；服务端日志不含 Token；uvicorn 已按 PID 停止
+  - NOT RUN：真实 LLM（OpenAI-compatible 客户端尚未接入，只支持 fake）；Prompt 正文；AgentStep 登记/连续失败计数与拒绝审计（TASK-038/039）；Remediation 请求事务（TASK-065）；内部网络隔离与 Compose（TASK-105）；ccg 质量关卡（本机未安装）；MySQL 8.0.16、Windows mvnw.cmd NOT RUN
+- B08-R1：独立 Reviewer；范围 dfcbca6 到当时工作树（含未跟踪文件）；结论 PASS AFTER PATCH，不可提交。P1：HttpAiRuntimeClient 以 HttpRequest.timeout＋同步 BodyHandlers.ofString 发送，timeout 只覆盖到响应头，收到头后等待响应体可超过 maxWait（Reviewer 实测 maxWait=300ms、响应头与首字节立即返回、其余响应体延迟 1.5s，客户端 1684ms 后成功返回而未超时），违反 05 §89，Remediation 共用同一方法。非阻塞：FakeLlmClient 无限保存完整 prompt，建议移到测试替身。其余（认证顺序、权威字段回显、allowedActions、错误映射、JDK HttpClient 选择）无阻塞问题；真实 LLM 归属须在 TASK-058 前明确，AgentStep 元数据由 TASK-038 实现。Reviewer 实测：Maven 完整构建 exit 0（domain 30、infrastructure 387、web 21、boot 4），Enforcer/Spotless 通过；Python 同步与 Ruff 通过、143 passed；`git diff --check` 通过；未重跑真实 Python 进程与跨语言冒烟；真实 LLM、MySQL 8.0.16、Windows、ccg NOT VERIFIED
+- B08-R1 修复（同批次、同 Base）：
+  - P1：发送改为 http.sendAsync＋future.get(maxWait)，上限覆盖连接、响应头与完整响应体；到期 cancel(true) 取消请求并返回 AI_RUNTIME_TIMEOUT，不再发起任何请求；执行异常按原因映射（连接超时/IO → AI_RUNTIME_UNAVAILABLE，HttpTimeoutException → AI_RUNTIME_TIMEOUT）；保留 HttpRequest.timeout。调查与 Remediation 共用该路径
+  - 回归测试 waitLimitCoversTheWholeResponseBody：桩立即返回响应头与首字节、1.5s 后发送其余响应体；调查（maxWait=300ms）与 Remediation（remediationTimeout=300ms）均 AI_RUNTIME_TIMEOUT 且各在 1s 内返回，共 2 次请求。修复前实测该用例失败（调用成功返回、未抛出），修复后通过；桩服务改用线程池，避免慢响应线程挡住下一次请求的记录
+  - 非阻塞项已处理：FakeLlmClient 不再保存 prompt；测试改用 RecordingLlm 替身（记录 prompt 并委托 FakeLlmClient）
+- B08-V2（修复后最终代码树，本机实测）：
+  - ai-runtime/（清除 UV_DEFAULT_INDEX）：`uv sync --locked`、`ruff format --check .`、`ruff check .` exit 0；`pytest` 143 passed exit 0（2026-09-28 03:37 UTC）
+  - backend/：`./mvnw -B clean verify`；2026-09-28 03:37～03:42 UTC，JDK 21＋Docker（Testcontainers mysql:8.4.11）；exit 0；Enforcer 与 6 模块 spotless:check 通过；domain 30/30、infrastructure 388/388（含 HttpAiRuntimeClientTest 17）、web 21/21、boot 4/4，无跳过；日志无 "Connection is closed"
+  - 真实进程与跨语言冒烟（修复后重跑）：uvicorn＋Fake health 200、无 Token 401、非法请求 422；jshell 在 opspilot-infrastructure 实际 classpath 上调用 HttpAiRuntimeClient：调查 COMPLETE_INVESTIGATION runNo=2 stepId=42、Remediation 目标 12 且 correlationId 一致、错误 Token → AI_RUNTIME_UNAVAILABLE {status=401}；服务端日志 5 次 POST、不含 Token；uvicorn 已按 PID 停止
+  - 仓库根：`git diff --check` exit 0
+- B08-R2：独立 Reviewer 复核；Base 仍为 dfcbca6，范围至修复后工作树（含未跟踪文件）；结论 PASS，可提交，无新增阻塞项；确认完整响应体读取受等待上限约束、到期取消请求并返回 AI_RUNTIME_TIMEOUT，调查与 Remediation 共用修复路径且未增加重试，Fake 的 prompt 历史已移到测试替身；独立实测 Maven clean verify exit 0（domain 30、infrastructure 388、web 21、boot 4，无跳过），Enforcer、Spotless 通过；Python 依赖同步与 Ruff 通过、143 passed；真实 uvicorn＋Java 客户端两类调用与回显通过，认证失败与非法请求被正确拒绝，日志不含 Token，临时服务已停止；`git diff --check` 通过；保留真实 LLM 接入归属与 TASK-038 元数据传递事项；真实 LLM、MySQL 8.0.16、Windows、ccg NOT VERIFIED；Commit Recommendation YES
+- 提交：未提交（等待独立 Review 与用户提交授权）；范围外问题：见「待处理问题」中 B08 行
+
 ### 工作流文档变更（不属于 TASK-012 或 B01）
 
 - 2026-09-27：用户确认批次流程，新增 BATCH-PLAN，同步 Agent 入口、07/08 工作流条款、Manifest、启动指南及进度/交接。
@@ -379,6 +416,11 @@
 | 调查 Observation 列表 SQL 与详情共用列片段，读取了列表最终不返回的 payload | infrastructure InvestigationQueryMapper.xml observationColumns | 后续调整查询时为列表去掉 payload 等大字段（B06-R1 非阻塞，无需补测） | 后续触及该查询的 Task |
 | 协议取值为本批自定：LogSeverity={ERROR,WARN,INFO,DEBUG}；purpose≤500；COMPLETE evidenceIds≤50；logs severity 至少 1 个、keywords 必填可为空；database limit 可缺省；metrics comparePreviousWindow 必填；Remediation title≤200、summary≤2000、action.summary≤500、expectedImpactSummary≤1000、resourceName≤128 | contracts/ai-runtime/v1、application/ai/protocol/v1、opspilot_ai/protocol/v1 | 改动须同时改 Schema、两端模型与 fixture；TASK-052/053 Provider、TASK-062 Plan 列长度沿用这些上限 | TASK-052/053/062 |
 | 调查请求在 05 §77 示例外补充：observations 含 resourceKey、evidence 条目字段、hypotheses 可带 description、可选 currentDiagnosis（02 §15）、recentTimeline 条目字段；历史观测以 observation.runNo 小于请求 runNo 标识 | investigation-step-request.schema.json | TASK-037 Context Builder 按此构造；不得放入 Ground Truth、控制日志、凭证 | TASK-037 |
-| AiProtocolCodec 为普通类（未注册 Bean），AiDecisionPort 尚无实现 | infrastructure/ai | TASK-034 HTTP Client 使用该编解码，并把 AI_OUTPUT_INVALID 记入 AgentStep 审计；Python 端点（TASK-033）响应前也用同一模型校验 | TASK-033/034 |
+| （已关闭，B08/TASK-033～034）AiDecisionPort 由 HttpAiRuntimeClient 实现并使用 AiProtocolCodec；Python 端点以同一 v1 模型校验请求与模型输出；AI_OUTPUT_INVALID 等失败记入 AgentStep 审计仍属 TASK-038～040 | infrastructure/ai、opspilot_ai/api | — | — |
 | 协议层只校验结构：echo 的 runNo/stepId 与已登记 Step 比对、Descriptor 中是否允许所选 metricKey/window/inspectionType、ID 是否存在与归属，均不在协议层 | application/ai/protocol/v1 | TASK-038～041 与 TASK-047/048 在业务事务中校验 | TASK-038～048 |
 | Reviewer 在 B07-R1 完整 verify 中见 InvestigationRunIntegrationTest 于 Flyway 初始化报 "Connection is closed"（14 个上下文加载失败），单独重跑通过；本机 B07-V2 完整 verify 未复现 | opspilot-infrastructure 集成测试（Testcontainers MySQL） | 疑为环境/容器资源时序问题，未定位根因；再次出现时保留 surefire 报告与容器日志排查，不以单独重跑替代完整门禁 | 观察（后续批次完整 verify） |
+| 真实 LLM 尚未接入：Settings 只接受 OPSPILOT_AI_LLM_PROVIDER=fake，Prompt 只有版本号（investigation-v1、remediation-v1）没有正文 | ai-runtime config.py、llm/ | 08 未指定接入 Task；须在首个需要真实 AI 决策的 TASK-058 之前实现 OpenAI-compatible LlmClient（02 §27：model/base_url/api_key 由配置提供，api_key 仅环境变量）与 Prompt 正文，并确认归属批次 | TASK-058 前（待确认） |
+| AgentStepRecord 需要 model_provider、model_name、prompt_template_version、token 用量（04 §59、08 TASK-038），但 v1 响应体不含这些字段 | contracts/ai-runtime/v1、AiDecisionPort | TASK-038 须确定传递方式（如响应头或协议版本演进），不得塞入现有 v1 响应体绕过契约；Java 可自测 latency | TASK-038 |
+| Python 内部错误体 {code, message} 未纳入 Canonical Schema；Java 只按 HTTP 状态映射（502/504/401/403/5xx/其他 4xx），不解析错误体 | ai-runtime api/internal.py、HttpAiRuntimeClient | 如需细分原因再在 contracts 增加错误 Schema 与 fixture | — |
+| HttpAiRuntimeClient 采用 JDK java.net.http，而非 07 §5 基线的 RestClient | infrastructure/ai | 原因：infrastructure 无 spring-web，JDK 客户端原生支持单请求超时（05 §89 调用方上限）且不重放 POST；如统一改 RestClient 需每次按上限构造请求工厂 | — |
+| AI Runtime 默认地址 http://localhost:8000、Token 默认空（空时调用即 AI_RUNTIME_UNAVAILABLE，不发请求） | opspilot-boot application.yml、AiRuntimeProperties | TASK-105 Compose 注入 OPSPILOT_AI_RUNTIME_URL/OPSPILOT_AI_RUNTIME_TOKEN（.env，不入库），AI Runtime 只监听内部网络 | TASK-105 |

@@ -43,7 +43,7 @@ import tools.jackson.databind.node.ObjectNode;
  */
 class AiProtocolContractTest {
 
-    private static final Path CONTRACT = locateContract();
+    static final Path CONTRACT = locateContract();
     private static final Map<String, Class<?>> MESSAGES = Map.of(
             "investigation-step-request", InvestigationStepRequest.class,
             "investigation-step-response", InvestigationStepResponse.class,

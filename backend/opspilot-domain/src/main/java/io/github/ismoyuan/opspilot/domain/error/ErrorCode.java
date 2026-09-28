@@ -24,6 +24,10 @@ public enum ErrorCode {
     STALE_RUN_RESULT(ErrorCategory.CONFLICT, "该结果属于已结束的调查轮次，未被采用。"),
     /** 同一 Observation × Hypothesis 已有 Evidence：Intent 拒绝码，原关系保持不变（05 §83、§93）。 */
     EVIDENCE_LINK_ALREADY_EXISTS(ErrorCategory.CONFLICT, "该观测与假设之间已存在证据关系，不能重复或改写。"),
+    /** AI Runtime 无法连接、拒绝内部认证或返回服务端错误（05 §31、§93）。 */
+    AI_RUNTIME_UNAVAILABLE(ErrorCategory.DEPENDENCY_UNAVAILABLE, "AI 服务暂不可用，请稍后重试。"),
+    /** 在调用方给定的等待上限内没有得到 AI Runtime 响应（05 §89）。 */
+    AI_RUNTIME_TIMEOUT(ErrorCategory.DEPENDENCY_TIMEOUT, "AI 服务响应超时，请稍后重试。"),
     /** AI Runtime 输出不符合 v1 协议（05 §93）：未知字段、联合类型不合法、缺字段或越界；不回显原始输出。 */
     AI_OUTPUT_INVALID(ErrorCategory.DEPENDENCY_INVALID_RESPONSE, "AI 服务返回的内容不符合协议。"),
     /** credentialRef 无法解析为可用凭据（08 TASK-009）；属部署配置错误，不在 05 §93 公开目录。 */
