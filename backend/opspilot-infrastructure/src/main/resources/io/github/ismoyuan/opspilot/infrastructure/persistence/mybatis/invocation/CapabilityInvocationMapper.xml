@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.invocation.CapabilityInvocationMapper">
+
+    <resultMap id="invocationRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.invocation.InvocationRow">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="incident_id" javaType="_long"/>
+            <arg column="investigation_id" javaType="Long"/>
+            <arg column="recovery_verification_id" javaType="Long"/>
+            <arg column="run_no" javaType="Integer"/>
+            <arg column="capability_key" javaType="String"/>
+            <arg column="managed_resource_id" javaType="_long"/>
+            <arg column="status" javaType="String"/>
+            <arg column="started_at" javaType="java.time.LocalDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <!-- 调查 OBSERVE 准入直接登记 RUNNING（04 §18）；恢复列为空，run_no 为准入时的当前轮 -->
+    <insert id="insertRunningInvestigationCall" useGeneratedKeys="true" keyProperty="i.id" keyColumn="id">
+        INSERT INTO capability_invocation (incident_id, investigation_id, run_no, capability_key, managed_resource_id,
+                                           status, request_schema_name, request_schema_version, request_payload,
+                                           started_at, correlation_id, created_at, updated_at)
+        VALUES (#{i.incidentId}, #{i.investigationId}, #{i.runNo}, #{i.capabilityKey}, #{i.managedResourceId},
+                'RUNNING', #{i.requestSchemaName}, #{i.requestSchemaVersion}, #{i.requestPayload},
+                #{i.startedAt}, #{i.correlationId}, #{i.startedAt}, #{i.startedAt})
+    </insert>
+
+    <select id="selectByIdForUpdate" resultMap="invocationRow">
+        SELECT id, incident_id, investigation_id, recovery_verification_id, run_no, capability_key,
+               managed_resource_id, status, started_at
+        FROM capability_invocation
+        WHERE id = #{id}
+        FOR UPDATE
+    </select>
+
+    <!-- 终态只从 RUNNING 条件更新（04 §18） -->
+    <update id="markSucceeded">
+        UPDATE capability_invocation
+        SET status = 'SUCCEEDED',
+            response_schema_name = #{responseSchemaName},
+            response_schema_version = #{responseSchemaVersion},
+            response_payload = #{responsePayload},
+            raw_result_ref = #{rawResultRef},
+            finished_at = #{finishedAt},
+            duration_ms = #{durationMs},
+            updated_at = #{finishedAt}
+        WHERE id = #{id}
+          AND status = 'RUNNING'
+    </update>
+
+    <update id="markFailed">
+        UPDATE capability_invocation
+        SET status = 'FAILED',
+            error_code = #{errorCode},
+            error_message = #{errorMessage},
+            finished_at = #{finishedAt},
+            duration_ms = #{durationMs},
+            updated_at = #{finishedAt}
+        WHERE id = #{id}
+          AND status = 'RUNNING'
+    </update>
+
+    <!--
+      Duplicate Guard 候选（07 §57）：同调查、同能力、同资源、同请求 Schema 的全部在途调用，以及 finished_at 距今小于保护窗口的终态调用；
+      按 finished_at 而不是 created_at，由状态与时间筛选，不加载全历史。规范化比较在应用层用唯一的 CanonicalJsonWriter 完成。
+    -->
+    <select id="selectGuardedRequestPayloads" resultType="string">
+        SELECT request_payload
+        FROM capability_invocation
+        WHERE investigation_id = #{investigationId}
+          AND capability_key = #{capabilityKey}
+          AND managed_resource_id = #{managedResourceId}
+          AND request_schema_name = #{requestSchemaName}
+          AND request_schema_version = #{requestSchemaVersion}
+          AND (status IN ('PENDING', 'RUNNING') OR finished_at &gt; #{finishedSince})
+    </select>
+</mapper>

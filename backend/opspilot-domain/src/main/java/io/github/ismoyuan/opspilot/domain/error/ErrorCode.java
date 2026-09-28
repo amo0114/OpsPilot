@@ -24,6 +24,22 @@ public enum ErrorCode {
     STALE_RUN_RESULT(ErrorCategory.CONFLICT, "该结果属于已结束的调查轮次，未被采用。"),
     /** 同一 Observation × Hypothesis 已有 Evidence：Intent 拒绝码，原关系保持不变（05 §83、§93）。 */
     EVIDENCE_LINK_ALREADY_EXISTS(ErrorCategory.CONFLICT, "该观测与假设之间已存在证据关系，不能重复或改写。"),
+    /** 请求的 Capability 不在 Registry 中（05 §93、06 §16 ①）。 */
+    CAPABILITY_NOT_FOUND(ErrorCategory.NOT_FOUND, "该能力不存在。"),
+    /** 目标资源没有启用该 Capability 的绑定（05 §93、06 §15、§16 ⑤）。 */
+    CAPABILITY_NOT_BOUND(ErrorCategory.RULE_VIOLATION, "该组件没有启用此能力。"),
+    /** 目标资源不属于本 Incident 所属系统、不是 ACTIVE 或类型不受该能力支持（05 §93、06 §16 ③④）。 */
+    CAPABILITY_NOT_ALLOWED(ErrorCategory.RULE_VIOLATION, "该组件当前不允许使用此能力。"),
+    /** 参数不在 AI 可见 Descriptor 的受控域内（06 §22），如资源未声明的 MetricKey。 */
+    CAPABILITY_ARGUMENT_INVALID(ErrorCategory.RULE_VIOLATION, "能力参数不在允许的范围内。"),
+    /** 比较窗口的总范围超过 60 分钟（06 §42）：LAST_60_MIN 与前一窗口比较一律拒绝。 */
+    METRIC_COMPARISON_WINDOW_EXCEEDS_LIMIT(ErrorCategory.RULE_VIOLATION, "指标比较窗口超过允许的总范围。"),
+    /** 同指纹的调用仍在进行或刚在保护窗口内结束（06 §124、07 §57）：不建调用、不扣预算。 */
+    CAPABILITY_DUPLICATE_REQUEST(ErrorCategory.CONFLICT, "相同的查询刚刚执行过或仍在执行。"),
+    /** 已准入的调用执行失败（05 §93、§95）：调用记为 FAILED，调查继续，不是 500。 */
+    CAPABILITY_INVOCATION_FAILED(ErrorCategory.DEPENDENCY_UNAVAILABLE, "能力调用失败。"),
+    /** 调查阶段 AI 请求了不允许的意图（06 §103），如写能力。 */
+    AI_INTENT_NOT_ALLOWED(ErrorCategory.RULE_VIOLATION, "当前阶段不允许该操作。"),
     /**
      * 资源上没有可执行该 Capability 的 ACTIVE Provider Binding，或唯一候选的选择器不可用（06 §16 ⑥、§18，08 TASK-046）。
      */

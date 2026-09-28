@@ -83,6 +83,17 @@
           AND lock_version = #{expectedVersion}
     </update>
 
+    <update id="updateCapabilityCounts">
+        UPDATE investigation
+        SET current_run_capability_count = #{currentRunCount},
+            capability_call_count = #{totalCount},
+            updated_at = #{updatedAt},
+            lock_version = lock_version + 1
+        WHERE id = #{id}
+          AND current_run_no = #{expectedRunNo}
+          AND lock_version = #{expectedVersion}
+    </update>
+
     <update id="updateAiFailureCount">
         UPDATE investigation
         SET consecutive_ai_failure_count = #{count},

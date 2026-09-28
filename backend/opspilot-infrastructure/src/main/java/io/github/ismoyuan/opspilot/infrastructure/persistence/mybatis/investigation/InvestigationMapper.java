@@ -42,4 +42,12 @@ interface InvestigationMapper {
             @Param("expectedVersion") long expectedVersion,
             @Param("count") int count,
             @Param("updatedAt") LocalDateTime updatedAt);
+
+    int updateCapabilityCounts(
+            @Param("id") long id,
+            @Param("expectedRunNo") int expectedRunNo,
+            @Param("expectedVersion") long expectedVersion,
+            @Param("currentRunCount") int currentRunCount,
+            @Param("totalCount") long totalCount,
+            @Param("updatedAt") LocalDateTime updatedAt);
 }

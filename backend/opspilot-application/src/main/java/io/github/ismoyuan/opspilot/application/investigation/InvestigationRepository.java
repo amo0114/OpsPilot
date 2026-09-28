@@ -42,4 +42,11 @@ public interface InvestigationRepository {
      * @return 写入后的 Investigation
      */
     Investigation saveAiFailureCount(Investigation previous, Investigation updated, Instant at);
+
+    /**
+     * 写入 {@link Investigation#withCapabilityCallAdmitted} 的本轮与累计调用计数：以原轮号与原版本为条件，lock_version 加一。
+     *
+     * @return 写入后的 Investigation
+     */
+    Investigation saveCapabilityAdmission(Investigation previous, Investigation updated, Instant at);
 }

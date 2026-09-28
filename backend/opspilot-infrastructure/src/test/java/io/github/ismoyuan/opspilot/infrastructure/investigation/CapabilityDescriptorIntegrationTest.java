@@ -9,6 +9,7 @@ import io.github.ismoyuan.opspilot.application.ai.protocol.v1.InspectionType;
 import io.github.ismoyuan.opspilot.application.ai.protocol.v1.InvestigationStepRequest;
 import io.github.ismoyuan.opspilot.application.ai.protocol.v1.LogSeverity;
 import io.github.ismoyuan.opspilot.application.ai.protocol.v1.WindowKey;
+import io.github.ismoyuan.opspilot.application.capability.CapabilityAccess;
 import io.github.ismoyuan.opspilot.application.capability.CapabilityDescriptorBuilder;
 import io.github.ismoyuan.opspilot.application.capability.CapabilityProviderResolver;
 import io.github.ismoyuan.opspilot.application.capability.ProviderBinding;
@@ -45,6 +46,7 @@ import org.testcontainers.mysql.MySQLContainer;
 @Import({
     CapabilityDescriptorBuilder.class,
     CapabilityProviderResolver.class,
+    CapabilityAccess.class,
     InvestigationContextBuilder.class,
     ClockConfiguration.class
 })

@@ -3,6 +3,7 @@ package io.github.ismoyuan.opspilot.infrastructure.investigation;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.ismoyuan.opspilot.application.ai.protocol.v1.InvestigationStepRequest;
+import io.github.ismoyuan.opspilot.application.capability.CapabilityAccess;
 import io.github.ismoyuan.opspilot.application.capability.CapabilityDescriptorBuilder;
 import io.github.ismoyuan.opspilot.application.capability.CapabilityProviderResolver;
 import io.github.ismoyuan.opspilot.application.investigation.context.InvestigationContextBuilder;
@@ -38,6 +39,7 @@ import org.testcontainers.mysql.MySQLContainer;
     InvestigationContextBuilder.class,
     CapabilityDescriptorBuilder.class,
     CapabilityProviderResolver.class,
+    CapabilityAccess.class,
     InvestigationContextIntegrationTest.FixedClock.class
 })
 class InvestigationContextIntegrationTest {

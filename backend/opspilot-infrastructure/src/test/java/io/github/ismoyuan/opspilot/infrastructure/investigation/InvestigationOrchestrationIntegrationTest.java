@@ -25,6 +25,7 @@ import io.github.ismoyuan.opspilot.application.ai.protocol.v1.ProposeHypothesis;
 import io.github.ismoyuan.opspilot.application.ai.protocol.v1.QueueInspectArgumentsV1;
 import io.github.ismoyuan.opspilot.application.ai.protocol.v1.RequestCapability;
 import io.github.ismoyuan.opspilot.application.ai.protocol.v1.UpdateHypothesis;
+import io.github.ismoyuan.opspilot.application.capability.CapabilityAccess;
 import io.github.ismoyuan.opspilot.application.capability.CapabilityDescriptorBuilder;
 import io.github.ismoyuan.opspilot.application.capability.CapabilityProviderResolver;
 import io.github.ismoyuan.opspilot.application.diagnosis.DiagnosisApplicationService;
@@ -100,6 +101,7 @@ import org.testcontainers.mysql.MySQLContainer;
     InvestigationContextBuilder.class,
     CapabilityDescriptorBuilder.class,
     CapabilityProviderResolver.class,
+    CapabilityAccess.class,
     StepAdmissionService.class,
     AgentStepRecorder.class,
     HypothesisApplicationService.class,

@@ -85,6 +85,21 @@ class MyBatisInvestigationRepository implements InvestigationRepository {
         return toDomain(mapper.selectByIncidentIdForUpdate(previous.incidentId()));
     }
 
+    @Override
+    public Investigation saveCapabilityAdmission(Investigation previous, Investigation updated, Instant at) {
+        int changed = mapper.updateCapabilityCounts(
+                previous.id(),
+                previous.currentRunNo(),
+                previous.version(),
+                updated.currentRunCapabilityCount(),
+                updated.capabilityCallCount(),
+                utc(at));
+        if (changed != 1) {
+            throw new IllegalStateException("Investigation changed while locked: id=" + previous.id());
+        }
+        return toDomain(mapper.selectByIncidentIdForUpdate(previous.incidentId()));
+    }
+
     private static LocalDateTime utc(Instant instant) {
         return LocalDateTime.ofInstant(instant.truncatedTo(ChronoUnit.MILLIS), ZoneOffset.UTC);
     }

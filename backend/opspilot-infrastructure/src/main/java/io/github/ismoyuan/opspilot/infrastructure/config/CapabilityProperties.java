@@ -1,5 +1,6 @@
 package io.github.ismoyuan.opspilot.infrastructure.config;
 
+import io.github.ismoyuan.opspilot.application.capability.CapabilityGuardSettings;
 import io.github.ismoyuan.opspilot.domain.capability.CapabilityKey;
 import io.github.ismoyuan.opspilot.domain.capability.CapabilityRegistry;
 import java.time.Duration;
@@ -8,11 +9,14 @@ import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * Capability 执行超时（06 §125：均为配置值）。未配置的项取 {@link CapabilityRegistry#DEFAULT_TIMEOUTS}；
- * 例如 {@code opspilot.capability.timeouts.cache-inspect=5s}。
+ * Capability 配置：执行超时（06 §125：均为配置值，未配置的项取 {@link CapabilityRegistry#DEFAULT_TIMEOUTS}，例如
+ * {@code opspilot.capability.timeouts.cache-inspect=5s}）与调查 Duplicate Guard 保护窗口（06 §124，默认 30 秒，
+ * {@code opspilot.capability.duplicate-window}）。
  */
 @ConfigurationProperties("opspilot.capability")
-public record CapabilityProperties(Timeouts timeouts) {
+public record CapabilityProperties(Timeouts timeouts, Duration duplicateWindow) {
+
+    public static final Duration DEFAULT_DUPLICATE_WINDOW = Duration.ofSeconds(30);
 
     public record Timeouts(
             Duration metricsQuery,
@@ -22,6 +26,10 @@ public record CapabilityProperties(Timeouts timeouts) {
             Duration queueInspect,
             Duration serviceInspect,
             Duration serviceRestart) {}
+
+    public CapabilityGuardSettings guardSettings() {
+        return new CapabilityGuardSettings(duplicateWindow == null ? DEFAULT_DUPLICATE_WINDOW : duplicateWindow);
+    }
 
     public Map<CapabilityKey, Duration> timeoutsByKey() {
         Map<CapabilityKey, Duration> result = new EnumMap<>(CapabilityRegistry.DEFAULT_TIMEOUTS);

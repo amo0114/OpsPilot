@@ -140,6 +140,27 @@ public record Investigation(
     }
 
     /** 本轮一次 AI 失败（连接、超时、输出非法，02 §28）；进程中断不经此计数。 */
+    /**
+     * 一次 OBSERVE 调用通过准入（06 §56、§123）：本轮计数与全工作空间累计计数同时加一。在准入事务内与 RUNNING Invocation 一起提交；
+     * 调用成功、失败或中断都不退还。
+     */
+    public Investigation withCapabilityCallAdmitted() {
+        return new Investigation(
+                id,
+                incidentId,
+                startedAt,
+                lastActivityAt,
+                currentRunNo,
+                currentRunStartedAt,
+                currentRunCapabilityCount + 1,
+                capabilityCallCount + 1,
+                consecutiveAiFailureCount,
+                stopRequestedAt,
+                stopRequestedBy,
+                limits,
+                version);
+    }
+
     public Investigation withAiStepFailure() {
         return withConsecutiveAiFailures(consecutiveAiFailureCount + 1);
     }
