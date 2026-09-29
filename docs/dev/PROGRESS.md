@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-29（B17 REVIEW，Base 03d9b75；B17-R1 修复完成，B17-V2 通过，待 B17-R2 复审）
+> 最近更新：2026-09-29（B17 DONE，72664ea；B18 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -61,9 +61,9 @@
 | TASK-051 | B15 | ObservationExtractor | DONE | commit 3ec7aea（B15，Base 0c0871d） | B15-V3 verify exit 0＋专项测试（B15-R1/R2 回归）；B15-R1、R2 NEEDS CHANGES 均已修复，B15-R3 PASS；见 PROGRESS「B15」 |
 | TASK-052 | B16 | metrics.query | DONE | commit 1ba1eb8（B16，Base 8535b08） | B16-V2 verify exit 0＋真实 Prometheus/Loki/MySQL 专项；B16-R1 NEEDS CHANGES 已修复，B16-R2 PASS；见 PROGRESS「B16」 |
 | TASK-053 | B16 | logs.search | DONE | commit 1ba1eb8（B16，Base 8535b08） | B16-V2 verify exit 0＋真实 Prometheus/Loki/MySQL 专项；B16-R1 NEEDS CHANGES 已修复，B16-R2 PASS；见 PROGRESS「B16」 |
-| TASK-054 | B17 | cache.inspect | REVIEW | 未提交（Base 03d9b75＋B17 工作树） | B17-V2 verify exit 0＋B17-R1 回归；待 B17-R2 复审；见 PROGRESS「B17」 |
-| TASK-055 | B17 | database.inspect | REVIEW | 未提交（Base 03d9b75＋B17 工作树） | B17-V2 verify exit 0＋B17-R1 回归；待 B17-R2 复审；见 PROGRESS「B17」 |
-| TASK-056 | B17 | queue.inspect | REVIEW | 未提交（Base 03d9b75＋B17 工作树） | B17-V2 verify exit 0＋B17-R1 回归；待 B17-R2 复审；见 PROGRESS「B17」 |
+| TASK-054 | B17 | cache.inspect | DONE | commit 72664ea（B17，Base 03d9b75） | B17-V2 verify exit 0＋真实 Redis/MySQL 专项；B17-R1 REQUEST CHANGES 已修复，B17-R2 PASS；见 PROGRESS「B17」 |
+| TASK-055 | B17 | database.inspect | DONE | commit 72664ea（B17，Base 03d9b75） | B17-V2 verify exit 0＋真实 Redis/MySQL 专项；B17-R1 REQUEST CHANGES 已修复，B17-R2 PASS；见 PROGRESS「B17」 |
+| TASK-056 | B17 | queue.inspect | DONE | commit 72664ea（B17，Base 03d9b75） | B17-V2 verify exit 0＋真实 Redis/MySQL 专项；B17-R1 REQUEST CHANGES 已修复，B17-R2 PASS；见 PROGRESS「B17」 |
 | TASK-057 | B18 | service.inspect | TODO | — | NOT RUN |
 | TASK-058 | B18 | Capability Execution Integration | TODO | — | NOT RUN |
 | TASK-059 | B19 | COMPLETE_INVESTIGATION 全链路 | TODO | — | NOT RUN |
@@ -607,7 +607,7 @@
 
 ### B17 — Redis / MySQL / Redis Stream 只读 Provider
 
-- 状态：REVIEW（B17-R2 PASS，B17-V2 通过；待用户授权提交，未提交）
+- 状态：DONE（B17-R2 PASS，已提交 72664ea）
 - 成员及顺序：TASK-054 → TASK-055 → TASK-056；批外前置：TASK-053 DONE（1ba1eb8，B16-R2 PASS）
 - Base SHA：03d9b759b21b9e5d8cd7e493ecb32265c0a3bc97
 - 范围：infrastructure（RedisCacheInspectProvider、MySqlDatabaseInspectProvider、RedisQueueInspectProvider；只能发送枚举白名单命令的最小 RESP2 客户端；固定 SQL 的 JDBC 只读访问；Redis/MySQL 连接配置与凭据经 SecretResolver；Provider 装配）、domain（redis/mysql.connection.config / 1 连接配置类型；必要时 ErrorCode）、infrastructure/schema（Codec 注册）；测试（真实 Redis、真实 MySQL、真实 MySQL 端到端）；docs/dev。明确不做：Redis SLOWLOG（06 §64 第一版可不启用）、service.inspect（TASK-057）、调查循环接入（TASK-058）、Demo 账号与 ACL 的部署落地（TASK-105；本批只写明所需最小权限并在测试中以受限账号验证）、新增表/Migration、AI 协议变更
@@ -653,7 +653,7 @@
   - 既有非阻断限制保留：LOCK_WAITS 扫描上限 1000，达到上限时 waitingCount 只能视为下限（既有待处理行）；XINFO STREAM 附带首末条目临时进入解析内存，但未进入结果/raw/Observation；TRX_WAIT_STARTED 的秒精度限制保留。不据此扩大本轮修复范围。
   - `git diff --check <base>` 及 12 个未跟踪文件行尾空白检查通过；HEAD 仍为固定 Base。完整 clean verify 本轮 NOT RUN，完整最终代码门禁采用 B17-V2 实施证据，不冒充独立重跑。Demo ACL/账号部署与 ShortLink 数据、Toxiproxy、真实进程调查链路、真实 LLM、ai-runtime、Redis <7.2、MySQL 8.0.16、Windows 本轮 NOT RUN。
   - B17 及 TASK-054～056 保持 REVIEW（已通过，待用户授权提交）；未提交、未推送、未开始 B18。
-- 提交：未提交；范围外问题：见「待处理问题」中 B17 新增行
+- 提交：代码提交 72664eab63ecfd28b869950e1ad3239a68925533（feat(capability): redis cache, mysql database and redis stream inspect providers (TASK-054–056)）；SHA 回填为后续 docs 提交；范围外问题：见「待处理问题」中 B17 行
 
 
 ### TASK-039 修复 — 准入 step_no 分配并发死锁（B12-R1/R2 约定）
