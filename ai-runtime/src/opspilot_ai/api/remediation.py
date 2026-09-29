@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
@@ -18,7 +19,8 @@ async def remediation_draft(request: Request) -> JSONResponse:
         return error(422, "REQUEST_VALIDATION_FAILED", "Request does not match protocol v1.")
     service: RemediationDraftService = request.app.state.remediation_service
     try:
-        draft = service.draft(draft_request)
+        # the model call blocks; keep it off the event loop
+        draft = await run_in_threadpool(service.draft, draft_request)
     except AiOutputInvalidError:
         return error(502, "AI_OUTPUT_INVALID", "Model output does not match protocol v1.")
     except LlmTimeoutError:

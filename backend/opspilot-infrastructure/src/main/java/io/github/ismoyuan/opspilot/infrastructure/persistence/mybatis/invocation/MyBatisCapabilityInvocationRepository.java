@@ -40,6 +40,16 @@ class MyBatisCapabilityInvocationRepository implements CapabilityInvocationRepos
     }
 
     @Override
+    public Optional<Long> findIncidentId(long id) {
+        return Optional.ofNullable(mapper.selectIncidentId(id));
+    }
+
+    @Override
+    public List<Long> findRunningInvestigationCallIds(long incidentId) {
+        return mapper.selectRunningInvestigationCallIds(incidentId);
+    }
+
+    @Override
     public Optional<InvocationRecord> findByIdForUpdate(long id) {
         return Optional.ofNullable(mapper.selectByIdForUpdate(id))
                 .map(row -> new InvocationRecord(

@@ -90,4 +90,17 @@ class ProviderConfiguration {
         return new RedisQueueInspectProvider(
                 new RedisAccess(new ProviderAuthentication(codecs, secrets), clock, properties.responseLimit()), clock);
     }
+
+    @Bean
+    ObserveProvider dockerServiceInspectProvider(
+            ProviderProperties properties,
+            SchemaCodecRegistry codecs,
+            SecretResolver secrets,
+            ObjectProvider<Clock> clocks) {
+        Clock clock = clocks.getIfAvailable(Clock::systemUTC);
+        return new DockerServiceInspectProvider(
+                new DockerEngineClient(clock, properties.responseLimit()),
+                new ProviderAuthentication(codecs, secrets),
+                clock);
+    }
 }

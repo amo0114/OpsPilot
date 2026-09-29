@@ -4,13 +4,22 @@ from dataclasses import dataclass
 from pydantic import ValidationError
 
 from opspilot_ai.errors import AiOutputInvalidError
-from opspilot_ai.llm.client import LlmClient, LlmCompletion, LlmPrompt, answer_object
+from opspilot_ai.llm.client import (
+    LlmClient,
+    LlmCompletion,
+    LlmPrompt,
+    answer_object,
+    log_rejected,
+    protocol_names,
+)
 from opspilot_ai.llm.fake import INVESTIGATION_TEMPLATE
 from opspilot_ai.protocol.v1 import (
     INVESTIGATION_STEP_RESPONSE,
     InvestigationStepRequest,
     InvestigationStepResponse,
 )
+
+_PROTOCOL_NAMES = protocol_names(INVESTIGATION_STEP_RESPONSE.json_schema())
 
 
 @dataclass(frozen=True)
@@ -39,5 +48,6 @@ class InvestigationDecisionService:
         try:
             response = INVESTIGATION_STEP_RESPONSE.validate_json(json.dumps(intent))
         except ValidationError as error:
+            log_rejected(error, _PROTOCOL_NAMES)
             raise AiOutputInvalidError("model answer is not a valid investigation step") from error
         return InvestigationDecision(response, INVESTIGATION_TEMPLATE, completion)

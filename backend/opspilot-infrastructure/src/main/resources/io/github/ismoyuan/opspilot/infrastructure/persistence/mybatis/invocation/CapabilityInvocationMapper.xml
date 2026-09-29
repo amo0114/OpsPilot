@@ -26,6 +26,17 @@
                 #{i.startedAt}, #{i.correlationId}, #{i.startedAt}, #{i.startedAt})
     </insert>
 
+    <!-- incident_id 创建后不变：结果事务先据此按 Incident → Invocation 锁序加锁（B18） -->
+    <select id="selectIncidentId" resultType="long">
+        SELECT incident_id FROM capability_invocation WHERE id = #{id}
+    </select>
+
+    <select id="selectRunningInvestigationCallIds" resultType="long">
+        SELECT id FROM capability_invocation
+        WHERE incident_id = #{incidentId} AND investigation_id IS NOT NULL AND status = 'RUNNING'
+        ORDER BY id
+    </select>
+
     <select id="selectByIdForUpdate" resultMap="invocationRow">
         SELECT id, incident_id, investigation_id, recovery_verification_id, run_no, capability_key,
                managed_resource_id, status, started_at

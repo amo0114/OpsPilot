@@ -10,7 +10,11 @@ interface CapabilityInvocationMapper {
 
     int insertRunningInvestigationCall(@Param("i") InvocationInsert invocation);
 
+    Long selectIncidentId(@Param("id") long id);
+
     InvocationRow selectByIdForUpdate(@Param("id") long id);
+
+    List<Long> selectRunningInvestigationCallIds(@Param("incidentId") long incidentId);
 
     int markSucceeded(
             @Param("id") long id,

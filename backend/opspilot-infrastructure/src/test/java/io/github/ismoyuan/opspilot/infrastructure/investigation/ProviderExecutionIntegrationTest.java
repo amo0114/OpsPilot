@@ -66,7 +66,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * 08 TASK-052～053 端到端：真实 MySQL 上的准入 → 生产 CapabilityInvoker（按能力分派）→ 真实 Prometheus / Loki Provider → 结果管线
- * （脱敏、编码、提取、原始结果）→ 结果事务 → Observation；Provider 失败记 06 §35 错误码、不产生 Observation 且不退还预算；尚无 Provider
+ * （脱敏、编码、提取、原始结果）→ 结果事务 → Observation；Provider 失败记 06 §35 错误码、不产生 Observation 且不退还预算；目标不存在
  * 的能力如实记失败。调查循环仍未接入执行服务（TASK-058）。
  */
 @SpringBootTest
@@ -232,7 +232,7 @@ class ProviderExecutionIntegrationTest {
         database = resource(system, "shortlink-mysql", "DATABASE");
         bind(cache, redis, "redis.resource.binding", "{}");
         bind(database, mysql, "mysql.resource.binding", "{\"databaseName\": \"test\"}");
-        bind(service, docker, "docker.resource.binding", "{\"containerName\": \"shortlink-redirect\"}");
+        bind(service, docker, "docker.resource.binding", "{\"containerName\": \"opspilot-e2e-no-such-container\"}");
         capability(cache, "cache.inspect");
         capability(database, "database.inspect");
         capability(service, "service.inspect");
@@ -354,7 +354,7 @@ class ProviderExecutionIntegrationTest {
                 .contains("尚未投递积压 1");
     }
 
-    /** Provider 失败：06 §35 错误码与固定文案，不产生 Observation，预算不退还；尚无 Provider 的能力如实记失败。 */
+    /** Provider 失败：06 §35 错误码与固定文案，不产生 Observation，预算不退还；目标不存在（真实 Docker 上无此容器）如实记失败。 */
     @Test
     void providerFailuresAreRecordedWithoutObservations() {
         CapabilityExecutionResult rejected = execution.execute(
@@ -362,7 +362,7 @@ class ProviderExecutionIntegrationTest {
                 1,
                 new RequestCapability.MetricsQuery(
                         service, new MetricsQueryArgumentsV1("broken.template", WindowKey.LAST_15_MIN, false), "p"));
-        // service.inspect 的 Provider 属 TASK-057
+        // 真实 Docker socket 上不存在的容器（TASK-057 起所有 OBSERVE 能力均有 Provider）
         CapabilityExecutionResult missing = execution.execute(
                 incident, 1, new RequestCapability.ServiceInspect(service, new ServiceInspectArgumentsV1(), "p"));
 
@@ -373,7 +373,7 @@ class ProviderExecutionIntegrationTest {
                         String.class))
                 .containsExactly(
                         "FAILED|" + ErrorCode.QUERY_REJECTED + "|Provider answered HTTP 400",
-                        "FAILED|CAPABILITY_INVOCATION_FAILED|No provider is available for this capability");
+                        "FAILED|RESOURCE_NOT_FOUND|Container does not exist");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM observation", Integer.class))
                 .isZero();
         assertThat(jdbc.queryForObject(

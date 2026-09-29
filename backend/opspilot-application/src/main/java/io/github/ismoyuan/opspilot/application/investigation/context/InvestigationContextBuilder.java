@@ -29,7 +29,10 @@ public class InvestigationContextBuilder {
     /** 进入 AI 上下文的时间线条数（本批取值）。 */
     public static final int RECENT_TIMELINE_LIMIT = 20;
 
-    /** 可进入 AI 上下文的时间线事件类型；新类型默认不进入。 */
+    /**
+     * 可进入 AI 上下文的时间线事件类型；新类型默认不进入。能力调用失败与请求被拒是给当前 run 的反馈（06 §124，B18）：摘要只有能力、资源与
+     * 错误/原因码；调用登记与 Observation 记录不进入（预算与 Observation 已在上下文中）。
+     */
     public static final Set<TimelineEventType> CONTEXT_EVENT_TYPES = EnumSet.of(
             TimelineEventType.INCIDENT_CREATED,
             TimelineEventType.INVESTIGATION_STARTED,
@@ -37,7 +40,9 @@ public class InvestigationContextBuilder {
             TimelineEventType.HYPOTHESIS_CREATED,
             TimelineEventType.HYPOTHESIS_STATUS_CHANGED,
             TimelineEventType.EVIDENCE_LINKED,
-            TimelineEventType.DIAGNOSIS_CREATED);
+            TimelineEventType.DIAGNOSIS_CREATED,
+            TimelineEventType.CAPABILITY_FAILED,
+            TimelineEventType.CAPABILITY_REQUEST_REJECTED);
 
     private final InvestigationContextQuery query;
     private final CapabilityDescriptorSource capabilities;

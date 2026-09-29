@@ -25,9 +25,19 @@ import io.github.ismoyuan.opspilot.application.ai.protocol.v1.ProposeHypothesis;
 import io.github.ismoyuan.opspilot.application.ai.protocol.v1.QueueInspectArgumentsV1;
 import io.github.ismoyuan.opspilot.application.ai.protocol.v1.RequestCapability;
 import io.github.ismoyuan.opspilot.application.ai.protocol.v1.UpdateHypothesis;
+import io.github.ismoyuan.opspilot.application.capability.AdmittedInvocation;
 import io.github.ismoyuan.opspilot.application.capability.CapabilityAccess;
+import io.github.ismoyuan.opspilot.application.capability.CapabilityAdmissionService;
 import io.github.ismoyuan.opspilot.application.capability.CapabilityDescriptorBuilder;
+import io.github.ismoyuan.opspilot.application.capability.CapabilityExecutionService;
+import io.github.ismoyuan.opspilot.application.capability.CapabilityInvoker;
 import io.github.ismoyuan.opspilot.application.capability.CapabilityProviderResolver;
+import io.github.ismoyuan.opspilot.application.capability.CapabilityResultRecorder;
+import io.github.ismoyuan.opspilot.application.capability.DuplicateGuard;
+import io.github.ismoyuan.opspilot.application.capability.InvocationOutcome;
+import io.github.ismoyuan.opspilot.application.capability.ObserveResultPipeline;
+import io.github.ismoyuan.opspilot.application.capability.extract.ObservationExtractor;
+import io.github.ismoyuan.opspilot.application.capability.sanitize.Sanitizer;
 import io.github.ismoyuan.opspilot.application.diagnosis.DiagnosisApplicationService;
 import io.github.ismoyuan.opspilot.application.dispatch.DispatchableWork;
 import io.github.ismoyuan.opspilot.application.dispatch.DispatchableWorkSource;
@@ -43,8 +53,8 @@ import io.github.ismoyuan.opspilot.application.investigation.InvestigationApplic
 import io.github.ismoyuan.opspilot.application.investigation.StopInvestigationCommand;
 import io.github.ismoyuan.opspilot.application.investigation.context.InvestigationContextBuilder;
 import io.github.ismoyuan.opspilot.application.investigation.orchestration.CapabilityRequestResult;
-import io.github.ismoyuan.opspilot.application.investigation.orchestration.GatedFakeCapabilityExecutor;
 import io.github.ismoyuan.opspilot.application.investigation.orchestration.IntentDispatcher;
+import io.github.ismoyuan.opspilot.application.investigation.orchestration.InvestigationCapabilityExecutor;
 import io.github.ismoyuan.opspilot.application.investigation.orchestration.InvestigationOrchestrator;
 import io.github.ismoyuan.opspilot.application.investigation.orchestration.InvestigationTerminator;
 import io.github.ismoyuan.opspilot.application.investigation.recovery.InvestigationInterruptionRecorder;
@@ -58,6 +68,7 @@ import io.github.ismoyuan.opspilot.domain.error.ErrorCode;
 import io.github.ismoyuan.opspilot.domain.evidence.EvidenceRelation;
 import io.github.ismoyuan.opspilot.domain.hypothesis.HypothesisStatus;
 import io.github.ismoyuan.opspilot.domain.investigation.StepAdmissionRejection;
+import io.github.ismoyuan.opspilot.infrastructure.capability.CapabilityResultSamples;
 import java.time.Clock;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -67,11 +78,14 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.RecoverableDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -97,7 +111,15 @@ import org.testcontainers.mysql.MySQLContainer;
     InvestigationTerminator.class,
     InvestigationInterruptionRecorder.class,
     IntentDispatcher.class,
-    GatedFakeCapabilityExecutor.class,
+    InvestigationCapabilityExecutor.class,
+    CapabilityExecutionService.class,
+    CapabilityAdmissionService.class,
+    DuplicateGuard.class,
+    CapabilityResultRecorder.class,
+    Sanitizer.class,
+    ObservationExtractor.class,
+    ObserveResultPipeline.class,
+    InvestigationOrchestrationIntegrationTest.ScriptedProvider.class,
     InvestigationContextBuilder.class,
     CapabilityDescriptorBuilder.class,
     CapabilityProviderResolver.class,
@@ -164,7 +186,29 @@ class InvestigationOrchestrationIntegrationTest {
     WorkDispatcher dispatcher;
 
     @MockitoSpyBean
-    GatedFakeCapabilityExecutor capabilities;
+    InvestigationCapabilityExecutor capabilities;
+
+    /** Provider 替身的行为；为空时经真实结果管线返回一份队列统计（TASK-058 控制面，真实 Provider 见 ProviderExecutionIntegrationTest）。 */
+    static final AtomicReference<Function<AdmittedInvocation, InvocationOutcome>> PROVIDER = new AtomicReference<>();
+
+    @TestConfiguration
+    static class ScriptedProvider {
+        @Bean
+        CapabilityInvoker capabilityInvoker(ObserveResultPipeline pipeline) {
+            return invocation -> {
+                Function<AdmittedInvocation, InvocationOutcome> behavior = PROVIDER.get();
+                return behavior != null
+                        ? behavior.apply(invocation)
+                        : pipeline.succeeded(
+                                invocation.definition(),
+                                invocation.incidentId(),
+                                invocation.invocationId(),
+                                CapabilityResultSamples.queue(2180L),
+                                null,
+                                invocation.startedAt());
+            };
+        }
+    }
 
     @MockitoSpyBean
     HypothesisApplicationService hypothesisService;
@@ -172,14 +216,37 @@ class InvestigationOrchestrationIntegrationTest {
     InvestigationFixture fixture;
     long incident;
     long observation;
+    long stream;
     final Deque<Function<InvestigationStepRequest, InvestigationStepResponse>> script = new ArrayDeque<>();
     final List<InvestigationStepRequest> requests = new ArrayList<>();
 
     @BeforeEach
     void seed() {
+        for (String table : List.of("capability_binding", "resource_binding", "data_source_connection")) {
+            jdbc.update("DELETE FROM " + table);
+        }
         fixture = InvestigationFixture.reset(jdbc);
         incident = fixture.incidentId();
+        stream = fixture.streamId();
+        jdbc.update(
+                "INSERT INTO data_source_connection (connection_key, name, provider_type, endpoint, config_schema_name,"
+                        + " config_schema_version, config_payload, status, created_at, updated_at) VALUES ('redis-local', 'R',"
+                        + " 'REDIS', 'redis://redis:6379', 'redis.connection.config', 1, '{}', 'ACTIVE', UTC_TIMESTAMP(3),"
+                        + " UTC_TIMESTAMP(3))");
+        jdbc.update(
+                "INSERT INTO resource_binding (managed_resource_id, data_source_connection_id, selector_schema_name,"
+                        + " selector_schema_version, selector_payload, created_at, updated_at) SELECT ?, id,"
+                        + " 'redis.resource.binding', 1, '{\"streamKey\": \"shortlink:stats\", \"consumerGroup\":"
+                        + " \"stats-consumer-group\"}', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3) FROM data_source_connection",
+                stream);
+        jdbc.update(
+                "INSERT INTO capability_binding (managed_resource_id, capability_key, enabled, created_at, updated_at)"
+                        + " VALUES (?, 'queue.inspect', TRUE, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
+                stream);
+        PROVIDER.set(null);
         observation = fixture.observation(incident, fixture.investigationId(), "inv-1");
+        // 夹具的来源调用已在 Duplicate Guard 窗口之外，本类新发起的 queue.inspect 不被当作重复请求
+        jdbc.update("UPDATE capability_invocation SET finished_at = UTC_TIMESTAMP(3) - INTERVAL 5 MINUTE");
         script.clear();
         requests.clear();
         doAnswer(invocation -> {
@@ -300,9 +367,12 @@ class InvestigationOrchestrationIntegrationTest {
         assertThat(incidentStatus()).isEqualTo("DIAGNOSED");
     }
 
-    /** REQUEST_CAPABILITY 在结果提交后经准入 Gate（Fake）：通过后如实“未执行”，不建调用、不扣预算，循环继续。 */
+    /**
+     * 08 TASK-058：REQUEST_CAPABILITY 在结果提交后经真实准入与执行服务（Provider 为替身，结果经真实管线）：登记调用并扣预算、产生
+     * Observation 与 04 §72 时间线；下一步上下文看到新 Observation，调用登记与 Observation 记录事件不进入 AI 时间线。
+     */
     @Test
-    void capabilityRequestsPassTheGateButAreNotExecutedYet() {
+    void capabilityRequestsAreExecutedAndTheNextStepSeesTheObservation() {
         script.add(r -> queueInspect(r));
         script.add(r -> complete(r, DiagnosisConclusionType.UNDETERMINED, null, List.of()));
 
@@ -310,14 +380,86 @@ class InvestigationOrchestrationIntegrationTest {
 
         assertThat(dispositions()).containsExactly("ACCEPTED", "APPLIED");
         verify(capabilities).execute(anyLong(), anyInt(), anyLong(), any());
-        assertThat(count("capability_invocation WHERE correlation_id <> 'inv-1'"))
-                .isZero();
+        assertThat(count("capability_invocation WHERE status = 'SUCCEEDED' AND (correlation_id IS NULL"
+                        + " OR correlation_id <> 'inv-1')"))
+                .isOne();
         assertThat(jdbc.queryForObject(
                         "SELECT current_run_capability_count FROM investigation WHERE id = ?",
                         Integer.class,
                         fixture.investigationId()))
-                .isZero();
+                .isOne();
+        assertThat(requests.get(1).observations())
+                .extracting(InvestigationStepRequest.Observation::summary)
+                .anySatisfy(summary -> assertThat(summary).startsWith("本次采样 Stream 长度 2400"));
+        assertThat(count("incident_timeline_event WHERE event_type = 'CAPABILITY_INVOKED'"))
+                .isOne();
+        assertThat(count("incident_timeline_event WHERE event_type = 'OBSERVATION_RECORDED'"))
+                .isOne();
+        assertThat(requests.get(1).recentTimeline())
+                .extracting(InvestigationStepRequest.TimelineEntry::eventType)
+                .doesNotContain("CAPABILITY_INVOKED", "OBSERVATION_RECORDED");
         assertThat(incidentStatus()).isEqualTo("DIAGNOSED");
+    }
+
+    /**
+     * 08 TASK-058：上一个 Worker 留下的 RUNNING 调查调用在准入第一步之前补完，AI 在第一步的时间线中看到这次失败，调用不重放。
+     */
+    @Test
+    void anOrphanedRunningCallIsClosedBeforeTheFirstStep() {
+        jdbc.update(
+                "INSERT INTO capability_invocation (incident_id, investigation_id, run_no, capability_key,"
+                        + " managed_resource_id, status, request_schema_name, request_schema_version, request_payload,"
+                        + " started_at, correlation_id, created_at, updated_at) VALUES (?, ?, 1, 'queue.inspect', ?,"
+                        + " 'RUNNING', 'queue.inspect.request', 1, '{}', UTC_TIMESTAMP(3) - INTERVAL 1 MINUTE,"
+                        + " 'orphan', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
+                incident,
+                fixture.investigationId(),
+                stream);
+        script.add(r -> complete(r, DiagnosisConclusionType.UNDETERMINED, null, List.of()));
+
+        orchestrator.runInvestigation(incident, 1);
+
+        assertThat(jdbc.queryForObject(
+                        "SELECT CONCAT(status, '/', error_code) FROM capability_invocation WHERE correlation_id = 'orphan'",
+                        String.class))
+                .isEqualTo("FAILED/CAPABILITY_INVOCATION_FAILED");
+        assertThat(requests.getFirst().recentTimeline())
+                .extracting(InvestigationStepRequest.TimelineEntry::eventType)
+                .contains("CAPABILITY_FAILED");
+        verify(capabilities, never()).execute(anyLong(), anyInt(), anyLong(), any());
+        assertThat(incidentStatus()).isEqualTo("DIAGNOSED");
+    }
+
+    /**
+     * 06 §124：调用失败与 Guard 拒绝（此处为 30 秒内的重复请求）都以时间线反馈进入下一步上下文，只含能力、资源与错误/原因码；不产生
+     * Observation，拒绝不扣预算。
+     */
+    @Test
+    void failedAndRefusedCapabilityRequestsAreFedBackToTheNextStep() {
+        PROVIDER.set(invocation ->
+                new InvocationOutcome.Failed(ErrorCode.TIMEOUT, "Provider call exceeded the capability timeout"));
+        script.add(r -> queueInspect(r));
+        script.add(r -> queueInspect(r));
+        script.add(r -> complete(r, DiagnosisConclusionType.UNDETERMINED, null, List.of()));
+
+        orchestrator.runInvestigation(incident, 1);
+
+        assertThat(requests.get(1).recentTimeline()).anySatisfy(entry -> {
+            assertThat(entry.eventType()).isEqualTo("CAPABILITY_FAILED");
+            assertThat(entry.summary()).isEqualTo("queue.inspect（statistics-stream）调用失败：TIMEOUT");
+        });
+        assertThat(requests.get(2).recentTimeline()).anySatisfy(entry -> {
+            assertThat(entry.eventType()).isEqualTo("CAPABILITY_REQUEST_REJECTED");
+            assertThat(entry.summary()).contains("CAPABILITY_DUPLICATE_REQUEST / RECENT_OR_IN_FLIGHT");
+        });
+        assertThat(count("capability_invocation WHERE status = 'FAILED' AND error_code = 'TIMEOUT'"))
+                .isOne();
+        assertThat(count("observation")).isOne(); // 只有夹具中的那条
+        assertThat(jdbc.queryForObject(
+                        "SELECT current_run_capability_count FROM investigation WHERE id = ?",
+                        Integer.class,
+                        fixture.investigationId()))
+                .isOne();
     }
 
     /** AI 失败逐步记录并计数，达到阈值后下一次准入被拒并以 AI_RUNTIME_UNAVAILABLE 收束；不透明重试（02 §28）。 */
@@ -1097,11 +1239,11 @@ class InvestigationOrchestrationIntegrationTest {
                 new CompleteInvestigation(new DiagnosisDraftV1(type, primary, "诊断摘要", "统计数据延迟", evidenceIds)));
     }
 
-    private static InvestigationStepResponse queueInspect(InvestigationStepRequest r) {
+    private InvestigationStepResponse queueInspect(InvestigationStepRequest r) {
         return new InvestigationStepResponse.RequestCapabilityStep(
                 1,
                 r.runNo(),
                 r.stepId(),
-                new RequestCapability.QueueInspect(13, new QueueInspectArgumentsV1(), "核对消费者组积压。"));
+                new RequestCapability.QueueInspect(stream, new QueueInspectArgumentsV1(), "核对消费者组积压。"));
     }
 }

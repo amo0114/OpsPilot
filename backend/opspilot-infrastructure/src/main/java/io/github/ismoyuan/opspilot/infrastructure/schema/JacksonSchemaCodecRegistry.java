@@ -20,6 +20,7 @@ import io.github.ismoyuan.opspilot.domain.system.binding.LokiResourceBindingV1;
 import io.github.ismoyuan.opspilot.domain.system.binding.MySqlResourceBindingV1;
 import io.github.ismoyuan.opspilot.domain.system.binding.PrometheusResourceBindingV1;
 import io.github.ismoyuan.opspilot.domain.system.binding.RedisResourceBindingV1;
+import io.github.ismoyuan.opspilot.domain.system.connection.DockerConnectionConfigV1;
 import io.github.ismoyuan.opspilot.domain.system.connection.HttpConnectionConfigV1;
 import io.github.ismoyuan.opspilot.domain.system.connection.MySqlConnectionConfigV1;
 import io.github.ismoyuan.opspilot.domain.system.connection.RedisConnectionConfigV1;
@@ -82,6 +83,10 @@ class JacksonSchemaCodecRegistry implements SchemaCodecRegistry {
                     MySqlConnectionConfigV1.SCHEMA_NAME,
                     MySqlConnectionConfigV1.SCHEMA_VERSION,
                     MySqlConnectionConfigV1.class),
+            entry(
+                    DockerConnectionConfigV1.SCHEMA_NAME,
+                    DockerConnectionConfigV1.SCHEMA_VERSION,
+                    DockerConnectionConfigV1.class),
             // Capability 结果（06 §118～§119）
             entry(MetricsQueryResultV1.SCHEMA_NAME, MetricsQueryResultV1.SCHEMA_VERSION, MetricsQueryResultV1.class),
             entry(LogsSearchResultV1.SCHEMA_NAME, LogsSearchResultV1.SCHEMA_VERSION, LogsSearchResultV1.class),

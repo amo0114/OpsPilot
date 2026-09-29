@@ -27,14 +27,17 @@ public class CapabilityExecutionService {
     private final CapabilityAdmissionService admissions;
     private final CapabilityResultRecorder results;
     private final ObjectProvider<CapabilityInvoker> invokers;
+    private final CapabilityInvocationRepository invocations;
 
     public CapabilityExecutionService(
             CapabilityAdmissionService admissions,
             CapabilityResultRecorder results,
-            ObjectProvider<CapabilityInvoker> invokers) {
+            ObjectProvider<CapabilityInvoker> invokers,
+            CapabilityInvocationRepository invocations) {
         this.admissions = admissions;
         this.results = results;
         this.invokers = invokers;
+        this.invocations = invocations;
     }
 
     /**
@@ -87,6 +90,25 @@ public class CapabilityExecutionService {
                     ex.getClass().getName());
             return recordFailed(invocation, ErrorCode.CAPABILITY_INVOCATION_FAILED, UNRECORDED_RESULT);
         }
+    }
+
+    /**
+     * 补完已退出 Worker 留下的 RUNNING 调查调用（08 TASK-058，与 closeOrphanedSteps 同一前提）：调查调用只在本 Incident 的 Worker
+     * 内同步执行，调用方持有 Worker 拥有权、在准入新 Step 之前调用，此刻没有存活的执行者，这些调用的结果与收尾都未能落账；
+     * 旧进程遗留的由启动恢复先行标记。逐条按 Incident → Invocation 锁序记 FAILED/CAPABILITY_INVOCATION_FAILED（与结果无法落账
+     * 同一文案）并写 CAPABILITY_FAILED，不重放 Provider 调用、不退还预算。否则它们一直 RUNNING，按在途规则挡住同指纹请求。
+     * 失败时抛出，由调用方放弃本次准入。
+     *
+     * @return 补完的条数
+     */
+    public int closeOrphanedCalls(long incidentId) {
+        int closed = 0;
+        for (long invocationId : invocations.findRunningInvestigationCallIds(incidentId)) {
+            if (results.recordFailed(invocationId, ErrorCode.CAPABILITY_INVOCATION_FAILED, UNRECORDED_RESULT)) {
+                closed++;
+            }
+        }
+        return closed;
     }
 
     /** 已是终态时本次失败没有写入，如实报告为未采用（B14-R1）。 */

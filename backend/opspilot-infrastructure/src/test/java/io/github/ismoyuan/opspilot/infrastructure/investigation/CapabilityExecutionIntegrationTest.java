@@ -17,6 +17,7 @@ import io.github.ismoyuan.opspilot.application.capability.CapabilityAdmission;
 import io.github.ismoyuan.opspilot.application.capability.CapabilityAdmissionService;
 import io.github.ismoyuan.opspilot.application.capability.CapabilityExecutionResult;
 import io.github.ismoyuan.opspilot.application.capability.CapabilityExecutionService;
+import io.github.ismoyuan.opspilot.application.capability.CapabilityInvocationRepository;
 import io.github.ismoyuan.opspilot.application.capability.CapabilityInvoker;
 import io.github.ismoyuan.opspilot.application.capability.CapabilityProviderResolver;
 import io.github.ismoyuan.opspilot.application.capability.CapabilityResultRecorder;
@@ -130,6 +131,9 @@ class CapabilityExecutionIntegrationTest {
     CapabilityExecutionService execution;
 
     @Autowired
+    CapabilityInvocationRepository invocations;
+
+    @Autowired
     InvestigationInterruptionRecorder interruptions;
 
     @Autowired
@@ -223,11 +227,15 @@ class CapabilityExecutionIntegrationTest {
 
         assertThat(count("capability_invocation")).isZero();
         assertThat(counts()).containsExactly(3L, 30L);
+        assertThat(events()).isEmpty();
     }
 
-    /** 能力规则拒绝（06 §16、§22、§42）：各自的错误码与原因，都不建调用、不扣预算。 */
+    /**
+     * 能力规则拒绝（06 §16、§22、§42）：各自的错误码与原因，都不建调用、不扣预算；每次拒绝写一条 CAPABILITY_REQUEST_REJECTED 时间线（06 §124
+     * 的反馈），载荷只有能力、资源 ID、错误码与原因码，不含 AI 参数或理由。
+     */
     @Test
-    void capabilityRuleRejectionsWriteNothing() {
+    void capabilityRuleRejectionsOnlyRecordTheRefusal() {
         long otherSystemResource = otherSystemResource();
         assertRejected(
                 new RequestCapability.QueueInspect(otherSystemResource, new QueueInspectArgumentsV1(), "核对积压"),
@@ -263,6 +271,19 @@ class CapabilityExecutionIntegrationTest {
 
         assertThat(count("capability_invocation")).isZero();
         assertThat(counts()).containsExactly(0L, 0L);
+        assertThat(events()).hasSize(7).containsOnly("CAPABILITY_REQUEST_REJECTED");
+        assertThat(jdbc.queryForList(
+                        "SELECT CONCAT(actor_type, ' ', JSON_UNQUOTE(JSON_EXTRACT(payload, '$.errorCode')), ' ',"
+                                + " JSON_UNQUOTE(JSON_EXTRACT(payload, '$.reason'))) FROM incident_timeline_event"
+                                + " WHERE event_type = 'CAPABILITY_REQUEST_REJECTED' ORDER BY id",
+                        String.class))
+                .startsWith("SYSTEM CAPABILITY_NOT_ALLOWED RESOURCE_NOT_IN_SYSTEM")
+                .endsWith("SYSTEM CAPABILITY_NOT_ALLOWED RESOURCE_NOT_ACTIVE");
+        assertThat(jdbc.queryForList(
+                        "SELECT CONCAT(summary, payload) FROM incident_timeline_event"
+                                + " WHERE event_type = 'CAPABILITY_REQUEST_REJECTED'",
+                        String.class))
+                .noneMatch(text -> text.contains("核对积压") || text.contains("windowKey"));
     }
 
     /** LAST_30_MIN＋比较（总范围 60 分钟）在上限内，可以准入。 */
@@ -380,6 +401,15 @@ class CapabilityExecutionIntegrationTest {
                 .containsEntry("resource", service)
                 .containsEntry("observation_kind", "METRIC");
         assertThat(counts()).containsExactly(1L, 1L);
+        // 04 §72：准入事务写调用事件，结果事务按 Observation 写记录事件
+        assertThat(events()).containsExactly("CAPABILITY_INVOKED", "OBSERVATION_RECORDED");
+        assertThat(jdbc.queryForObject(
+                        "SELECT JSON_EXTRACT(payload, '$.observationId') = (SELECT id FROM observation"
+                                + " WHERE capability_invocation_id = ?) FROM incident_timeline_event"
+                                + " WHERE event_type = 'OBSERVATION_RECORDED'",
+                        Boolean.class,
+                        id))
+                .isTrue();
     }
 
     /** 调用失败只记错误、不产生 Observation；Invoker 抛出的意外异常按 CAPABILITY_INVOCATION_FAILED 记录，预算不退还。 */
@@ -409,6 +439,14 @@ class CapabilityExecutionIntegrationTest {
         assertThat(count("observation WHERE capability_invocation_id IN (SELECT id FROM capability_invocation)"))
                 .isZero();
         assertThat(counts()).containsExactly(2L, 2L);
+        assertThat(events())
+                .containsExactly("CAPABILITY_INVOKED", "CAPABILITY_FAILED", "CAPABILITY_INVOKED", "CAPABILITY_FAILED");
+        assertThat(jdbc.queryForList(
+                        "SELECT summary FROM incident_timeline_event WHERE event_type = 'CAPABILITY_FAILED' ORDER BY id",
+                        String.class))
+                .containsExactly(
+                        "metrics.query（redirect-service）调用失败：CAPABILITY_INVOCATION_FAILED",
+                        "queue.inspect（statistics-stream）调用失败：CAPABILITY_INVOCATION_FAILED");
     }
 
     /** 终态只从 RUNNING 条件更新：已终结的调用再次落账不覆盖；中断标记后的迟到结果不写入，也不退还预算。 */
@@ -431,6 +469,8 @@ class CapabilityExecutionIntegrationTest {
         assertThat(count("observation WHERE capability_invocation_id = " + second))
                 .isZero();
         assertThat(counts()).containsExactly(2L, 2L);
+        // 只有真正落账的那次失败写事件；未采用的结果不写
+        assertThat(events()).containsExactly("CAPABILITY_INVOKED", "CAPABILITY_FAILED", "CAPABILITY_INVOKED");
     }
 
     /** 旧 run 在途调用的真实结果写回原 Invocation，Observation 归属原调用；新 run 的计数与状态不变（01 §11）。 */
@@ -449,6 +489,40 @@ class CapabilityExecutionIntegrationTest {
         assertThat(count("observation WHERE capability_invocation_id = " + call))
                 .isOne();
         assertThat(runControl()).isEqualTo(before);
+    }
+
+    /**
+     * 08 TASK-058：已退出 Worker 留下的 RUNNING 调查调用在下一个 Worker 准入前补完为 FAILED/CAPABILITY_INVOCATION_FAILED 并写
+     * CAPABILITY_FAILED；已终结的调用与其他 Incident 的调用不动，预算不退还；再次补完没有可做的。
+     */
+    @Test
+    void orphanedRunningCallsAreClosedBeforeTheNextWorker() {
+        long first = admitted(metrics("http.request.latency.p99", WindowKey.LAST_15_MIN, false));
+        long second = admitted(new RequestCapability.QueueInspect(stream, new QueueInspectArgumentsV1(), "核对积压"));
+        long finished = admitted(metrics("http.request.rate", WindowKey.LAST_15_MIN, false));
+        results.recordFailed(finished, ErrorCode.TIMEOUT, "Provider call exceeded the capability timeout");
+
+        assertThat(execution.closeOrphanedCalls(incident)).isEqualTo(2);
+
+        assertThat(jdbc.queryForList(
+                        "SELECT CONCAT(id, '/', status, '/', error_code, '/', error_message) FROM capability_invocation"
+                                + " ORDER BY id",
+                        String.class))
+                .containsExactly(
+                        first + "/FAILED/CAPABILITY_INVOCATION_FAILED/Capability result could not be recorded",
+                        second + "/FAILED/CAPABILITY_INVOCATION_FAILED/Capability result could not be recorded",
+                        finished + "/FAILED/TIMEOUT/Provider call exceeded the capability timeout");
+        assertThat(events())
+                .containsExactly(
+                        "CAPABILITY_INVOKED",
+                        "CAPABILITY_INVOKED",
+                        "CAPABILITY_INVOKED",
+                        "CAPABILITY_FAILED",
+                        "CAPABILITY_FAILED",
+                        "CAPABILITY_FAILED");
+        assertThat(counts()).containsExactly(3L, 3L);
+        assertThat(execution.closeOrphanedCalls(incident)).isZero();
+        assertThat(execution.closeOrphanedCalls(incident + 1000)).isZero();
     }
 
     /**
@@ -477,6 +551,7 @@ class CapabilityExecutionIntegrationTest {
                 .containsExactly("FAILED/PROCESS_INTERRUPTED", "FAILED/PROCESS_INTERRUPTED");
         assertThat(count("observation WHERE capability_invocation_id IN (SELECT id FROM capability_invocation)"))
                 .isZero();
+        assertThat(events()).containsExactly("CAPABILITY_INVOKED", "CAPABILITY_INVOKED");
     }
 
     // ---------------------------------------------------------------- TASK-049～051 结果管线
@@ -593,7 +668,10 @@ class CapabilityExecutionIntegrationTest {
     @Test
     void withoutAnInvokerNothingIsAdmitted() {
         CapabilityExecutionService unwired = new CapabilityExecutionService(
-                admissions, results, new DefaultListableBeanFactory().getBeanProvider(CapabilityInvoker.class));
+                admissions,
+                results,
+                new DefaultListableBeanFactory().getBeanProvider(CapabilityInvoker.class),
+                invocations);
 
         assertThatThrownBy(
                         () -> unwired.execute(incident, 1, metrics("http.request.rate", WindowKey.LAST_15_MIN, false)))
@@ -694,6 +772,14 @@ class CapabilityExecutionIntegrationTest {
                 "{\"streamKey\": \"other:stats\", \"consumerGroup\": \"other-group\"}");
         capability(other, "queue.inspect");
         return other;
+    }
+
+    /** 本批新增的能力相关时间线事件类型，按写入顺序。 */
+    private List<String> events() {
+        return jdbc.queryForList(
+                "SELECT event_type FROM incident_timeline_event WHERE event_type IN ('CAPABILITY_INVOKED',"
+                        + " 'CAPABILITY_FAILED', 'OBSERVATION_RECORDED', 'CAPABILITY_REQUEST_REJECTED') ORDER BY id",
+                String.class);
     }
 
     private List<Long> counts() {

@@ -14,7 +14,13 @@ public interface CapabilityInvocationRepository {
     /** @return 新 Invocation 的 id */
     long insertRunningInvestigationCall(NewInvestigationInvocation invocation);
 
+    /** 不加锁读取调用所属 Incident（创建后不变），供结果事务先锁 Incident。 */
+    Optional<Long> findIncidentId(long id);
+
     Optional<InvocationRecord> findByIdForUpdate(long id);
+
+    /** 不加锁读取该 Incident 下仍为 RUNNING 的调查调用 id（按 id 升序；不含恢复采样调用）。 */
+    List<Long> findRunningInvestigationCallIds(long incidentId);
 
     /** RUNNING → SUCCEEDED：响应 Schema 与已结构化、已脱敏的结果（06 §119）。@return 是否由本次更新 */
     boolean markSucceeded(

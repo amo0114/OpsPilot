@@ -12,6 +12,17 @@ public enum TimelineEventType {
     /** Hypothesis 当前状态的每一次变化（01 §14），历史只在时间线保存。 */
     HYPOTHESIS_STATUS_CHANGED,
     EVIDENCE_LINKED,
+    /** 一次 OBSERVE 调用已通过准入并登记（04 §72 事务一）；来源于 AI 的调查请求时发起方为 AI_RUNTIME。 */
+    CAPABILITY_INVOKED,
+    /** 调用失败（04 §72 事务二），载荷含 06 §35 错误码；不产生 Observation。 */
+    CAPABILITY_FAILED,
+    /** 调用成功产生的一条 Observation（每条一个事件，摘要即 Observation 摘要，05 §60）。 */
+    OBSERVATION_RECORDED,
+    /**
+     * AI 的能力请求被准入 Guard 拒绝（如重复、参数不在受控域、未绑定）：不建调用、不扣预算，作为给当前 run 的结构化反馈（06 §124），
+     * 01 §35 最低清单之外的补充类型。
+     */
+    CAPABILITY_REQUEST_REJECTED,
     /** 新 Diagnosis 版本已冻结，Incident 同事务 INVESTIGATING → DIAGNOSED。 */
     DIAGNOSIS_CREATED
 }

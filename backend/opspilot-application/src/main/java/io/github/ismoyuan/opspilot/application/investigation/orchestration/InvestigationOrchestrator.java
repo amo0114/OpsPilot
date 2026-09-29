@@ -26,7 +26,7 @@ import org.springframework.stereotype.Service;
  *   <li>准入短事务：持锁检查并登记 RUNNING Step（TASK-039）；
  *   <li>提交后调用 AI，等待不超过 min(单步超时, 本轮剩余时间)，不透明重试；
  *   <li>结果短事务：记录 Step，并按 run/Stop 规则处置一个主 Intent（TASK-040～041）；
- *   <li>REQUEST_CAPABILITY 在结果提交后经 Capability 准入（当前为 Fake Gate）；
+ *   <li>REQUEST_CAPABILITY 在结果提交后经 Capability 准入与执行（TASK-058：真实 Provider、Observation 与时间线反馈）；
  *   <li>下一步，直到准入拒绝、结果不再属于当前 run 或 Diagnosis 已形成。
  * </ol>
  *
@@ -66,11 +66,19 @@ public class InvestigationOrchestrator implements InvestigationWorker {
 
     @Override
     public void runInvestigation(long incidentId, int runNo) {
-        // 先补完已退出 Worker 留下的 RUNNING Step 再准入新 Step（TASK-040/043 修复）；补完失败即抛出，本次不准入，留待下一次唤醒重试
+        // 先补完已退出 Worker 留下的 RUNNING Step 与调查调用再准入新 Step（TASK-040/043 修复、TASK-058）；补完失败即抛出，本次不准入，
+        // 留待下一次唤醒重试
         int closed = recorder.closeOrphanedSteps(incidentId);
         if (closed > 0) {
             log.warn(
                     "Orphaned investigation steps closed before admission: incidentId={} count={}", incidentId, closed);
+        }
+        int closedCalls = capabilities.closeOrphanedCalls(incidentId);
+        if (closedCalls > 0) {
+            log.warn(
+                    "Orphaned capability calls closed before admission: incidentId={} count={}",
+                    incidentId,
+                    closedCalls);
         }
         while (step(incidentId, runNo)) {
             // 继续本 run 的下一步
