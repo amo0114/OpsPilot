@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-29（B16 REVIEW，Base 8535b08，B16-R2 PASS；待用户授权提交）
+> 最近更新：2026-09-29（B16 DONE，1ba1eb8；B17 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -59,8 +59,8 @@
 | TASK-049 | B15 | Sanitizer Framework | DONE | commit 3ec7aea（B15，Base 0c0871d） | B15-V3 verify exit 0＋专项测试（B15-R1/R2 回归）；B15-R1、R2 NEEDS CHANGES 均已修复，B15-R3 PASS；见 PROGRESS「B15」 |
 | TASK-050 | B15 | RawResultStore | DONE | commit 3ec7aea（B15，Base 0c0871d） | B15-V3 verify exit 0＋专项测试（B15-R1/R2 回归）；B15-R1、R2 NEEDS CHANGES 均已修复，B15-R3 PASS；见 PROGRESS「B15」 |
 | TASK-051 | B15 | ObservationExtractor | DONE | commit 3ec7aea（B15，Base 0c0871d） | B15-V3 verify exit 0＋专项测试（B15-R1/R2 回归）；B15-R1、R2 NEEDS CHANGES 均已修复，B15-R3 PASS；见 PROGRESS「B15」 |
-| TASK-052 | B16 | metrics.query | REVIEW | 未提交（Base 8535b08＋B16 工作树） | B16-V2 verify exit 0＋B16-R1 回归；B16-R2 PASS，独立专项 92/92；待授权提交；见 PROGRESS「B16」 |
-| TASK-053 | B16 | logs.search | REVIEW | 未提交（Base 8535b08＋B16 工作树） | B16-V2 verify exit 0＋B16-R1 回归；B16-R2 PASS，独立专项 92/92；待授权提交；见 PROGRESS「B16」 |
+| TASK-052 | B16 | metrics.query | DONE | commit 1ba1eb8（B16，Base 8535b08） | B16-V2 verify exit 0＋真实 Prometheus/Loki/MySQL 专项；B16-R1 NEEDS CHANGES 已修复，B16-R2 PASS；见 PROGRESS「B16」 |
+| TASK-053 | B16 | logs.search | DONE | commit 1ba1eb8（B16，Base 8535b08） | B16-V2 verify exit 0＋真实 Prometheus/Loki/MySQL 专项；B16-R1 NEEDS CHANGES 已修复，B16-R2 PASS；见 PROGRESS「B16」 |
 | TASK-054 | B17 | cache.inspect | TODO | — | NOT RUN |
 | TASK-055 | B17 | database.inspect | TODO | — | NOT RUN |
 | TASK-056 | B17 | queue.inspect | TODO | — | NOT RUN |
@@ -556,7 +556,7 @@
 
 ### B16 — Metrics / Logs Provider
 
-- 状态：REVIEW（B16-R2 PASS，R1 四项发现已关闭；待用户授权提交）
+- 状态：DONE（B16-R2 PASS，已提交 1ba1eb8）
 - 成员及顺序：TASK-052 → TASK-053；批外前置：TASK-051 DONE（3ec7aea，B15-R3 PASS）
 - Base SHA：8535b08d781b62f1e369ef57afb8fa9fc34380dd
 - 范围：application（OBSERVE Provider 端口与按能力分派的 CapabilityInvoker——成功结果只经 ObserveResultPipeline；指标序列统计与趋势、日志行脱敏/归一化/聚合为模式；Metrics/Logs 设置；调查上下文每次 logs.search 至多 Top N 个模式进入 AI）、domain（06 §35 Provider 错误码）、infrastructure（Prometheus / Loki HTTP Provider、带总期限与响应大小上限的 HTTP 取数、配置、上下文查询 SQL）；测试（真实 Prometheus / Loki 容器、真实 Micrometer 导出、真实 MySQL 端到端）；docs/dev。明确不做：ShortLink 靶场与 Demo Compose（TASK-105/106，真实 ShortLink 导出校准在其内完成）、其余 Provider（TASK-054～057）、调查循环接入执行服务（TASK-058，B11 Fake Gate 保持）、真实 LLM、新增表/Migration、AI 协议变更
@@ -602,7 +602,7 @@
   - 凭据修复：两种 HTTP connection config 注册严格 Codec，BASIC/BEARER 与 credentialRef 一致性在边界检查，凭据通过现有 SecretResolver 解析，仅进入该次请求 Authorization 头；配置错误、缺失凭据与 401 使用安全错误文案。真实 Prometheus Basic Auth 正确/错误密码测试通过；无认证 Seed 配置兼容。测试桩服务器 executor 清理已修复。
   - 独立实测：backend/ 执行 `./mvnw -B -pl opspilot-infrastructure -am -Dtest=ProviderHttpFailureTest,PrometheusMetricsQueryProviderIntegrationTest,ProviderCapabilityInvokerTest,LokiLogsSearchProviderIntegrationTest,MetricSeriesSummarizerTest,ProviderAuthenticationTest,LogPatternAggregatorTest,ProviderExecutionIntegrationTest,InvestigationContextIntegrationTest,JacksonSchemaCodecRegistryTest -Dsurefire.failIfNoSpecifiedTests=false verify`，2026-09-29 16:53～16:55 +08:00，exit 0；92/92，无失败/错误/跳过；真实 Prometheus v3.5.0（含 Basic Auth）、Loki 3.5.3、MySQL 8.4.11，4 个所选 reactor 模块 Enforcer/Spotless 通过。日志 `/tmp/opspilot-b16-r2-targeted.log`。`git diff --check <base>` 和 27 个未跟踪文件行尾空白检查通过；验证期间未改源码。
   - 本轮 NOT RUN：完整 clean verify（完整最终代码门禁保留 B16-V2 实施证据，未冒充独立重跑）、ShortLink 真实导出/日志格式、真实进程调查链路、真实 LLM、ai-runtime、MySQL 8.0.16、Windows。批次与成员仍 REVIEW，待授权提交后回填真实 SHA 并一起 DONE；未提交、未推送、未开始 B17。
-- 提交：未提交；范围外问题：见「待处理问题」中 B16 新增行
+- 提交：代码提交 1ba1eb82a0c8bf6237afcb46e26bbffe01bdd2c2（feat(capability): prometheus metrics and loki logs providers (TASK-052–053)）；SHA 回填为后续 docs 提交；范围外问题：见「待处理问题」中 B16 行
 
 
 ### TASK-039 修复 — 准入 step_no 分配并发死锁（B12-R1/R2 约定）
