@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-30（B19 REVIEW：B19-R1 PASS，待用户提交，Base b2e8f3d）
+> 最近更新：2026-09-30（B19 DONE，commit 789f9f8；B20 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -66,9 +66,9 @@
 | TASK-056 | B17 | queue.inspect | DONE | commit 72664ea（B17，Base 03d9b75） | B17-V2 verify exit 0＋真实 Redis/MySQL 专项；B17-R1 REQUEST CHANGES 已修复，B17-R2 PASS；见 PROGRESS「B17」 |
 | TASK-057 | B18 | service.inspect | DONE | commit b2d29c7（B18，Base ec4cf51） | B18-V4 verify exit 0＋真实 Docker 专项（含非法数据回归）；B18-R1/R2 NEEDS CHANGES 已修复，B18-R3 PASS；见 PROGRESS「B18」 |
 | TASK-058 | B18 | Capability Execution Integration | DONE | commit b2d29c7（B18，Base ec4cf51） | B18-V4 verify exit 0＋ai-runtime 177 passed；真实闭合运行 RealLlmClosureRun 7 次（deepseek-v4.1-flash，真实 queue.inspect/service.inspect Observation 后再次决策）；B18-R3 PASS；见 PROGRESS「B18」 |
-| TASK-059 | B19 | COMPLETE_INVESTIGATION 全链路 | REVIEW | 未提交（B19 工作树） | B19-V1 verify exit 0＋InvestigationOrchestrationIntegrationTest 32/32（本批新增 4 项，见 B19）；B19-R1 PASS，待提交 |
-| TASK-060 | B19 | Diagnosis Version Evolution | REVIEW | 未提交（B19 工作树） | B19-V1 verify exit 0＋InvestigationOrchestrationIntegrationTest 32/32（本批新增 4 项，见 B19）；B19-R1 PASS，待提交 |
-| TASK-061 | B19 | Undetermined Outcomes | REVIEW | 未提交（B19 工作树） | B19-V1 verify exit 0＋InvestigationOrchestrationIntegrationTest 32/32（本批新增 4 项，见 B19）；B19-R1 PASS，待提交 |
+| TASK-059 | B19 | COMPLETE_INVESTIGATION 全链路 | DONE | commit 789f9f8（B19，Base b2e8f3d） | B19-V1 verify exit 0＋InvestigationOrchestrationIntegrationTest 32/32（本批新增 4 项）；B19-R1 PASS；见 PROGRESS「B19」 |
+| TASK-060 | B19 | Diagnosis Version Evolution | DONE | commit 789f9f8（B19，Base b2e8f3d） | B19-V1 verify exit 0＋InvestigationOrchestrationIntegrationTest 32/32（本批新增 4 项）；B19-R1 PASS；见 PROGRESS「B19」 |
+| TASK-061 | B19 | Undetermined Outcomes | DONE | commit 789f9f8（B19，Base b2e8f3d） | B19-V1 verify exit 0＋InvestigationOrchestrationIntegrationTest 32/32（本批新增 4 项）；B19-R1 PASS；见 PROGRESS「B19」 |
 | TASK-062 | B20 | Remediation 数据结构 | TODO | — | NOT RUN |
 | TASK-063 | B20 | Remediation Draft Context | TODO | — | NOT RUN |
 | TASK-064 | B20 | Remediation Proposal 校验 | TODO | — | NOT RUN |
@@ -722,7 +722,7 @@
 
 ### B19 — 调查完成、诊断版本演进与未确定结论
 
-- 状态：REVIEW（B19-R1 PASS，待用户提交；未提交、未推送）
+- 状态：DONE（B19-R1 PASS，已提交 789f9f8）
 - 成员及顺序：TASK-059 → TASK-060 → TASK-061；批外前置：TASK-058 DONE（b2d29c7，B18-R3 PASS）
 - Base SHA：b2e8f3d332523727043ae571b0ca6a728e9dfd48
 - 范围：application（COMPLETE_INVESTIGATION 结果事务、Diagnosis 创建、确定性收束、Continue）及其 infrastructure 持久化与测试（真实 MySQL）；docs/dev。明确不做：Remediation 数据结构与 Plan 失效的实际表（TASK-062 起）、Web/UI 新接口、真实 LLM 与 S1～S3、Migration
@@ -747,6 +747,7 @@
   - 无生产代码修改、无新依赖、Migration；本次只更新 CURRENT/PROGRESS 的 Review 与交接记录，未提交、未推送。
 
 - 修改文件：backend/opspilot-infrastructure/src/test/java/io/github/ismoyuan/opspilot/infrastructure/investigation/InvestigationOrchestrationIntegrationTest.java（新增 4 项）；docs/dev。无生产代码修改、无 Migration、无新依赖
+- 提交：代码提交 789f9f819d026cd780ff3d39e2372ff7611c2945（test(investigation): end-to-end completion, diagnosis versioning and undetermined outcomes (TASK-059–061)）；SHA 回填为后续 docs 提交；未推送
 
 ### TASK-039 修复 — 准入 step_no 分配并发死锁（B12-R1/R2 约定）
 
