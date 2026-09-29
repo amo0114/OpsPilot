@@ -21,6 +21,8 @@ import io.github.ismoyuan.opspilot.domain.system.binding.MySqlResourceBindingV1;
 import io.github.ismoyuan.opspilot.domain.system.binding.PrometheusResourceBindingV1;
 import io.github.ismoyuan.opspilot.domain.system.binding.RedisResourceBindingV1;
 import io.github.ismoyuan.opspilot.domain.system.connection.HttpConnectionConfigV1;
+import io.github.ismoyuan.opspilot.domain.system.connection.MySqlConnectionConfigV1;
+import io.github.ismoyuan.opspilot.domain.system.connection.RedisConnectionConfigV1;
 import java.util.Map;
 import java.util.StringJoiner;
 import org.springframework.stereotype.Component;
@@ -72,6 +74,14 @@ class JacksonSchemaCodecRegistry implements SchemaCodecRegistry {
                     HttpConnectionConfigV1.LOKI_SCHEMA_NAME,
                     HttpConnectionConfigV1.SCHEMA_VERSION,
                     HttpConnectionConfigV1.class),
+            entry(
+                    RedisConnectionConfigV1.SCHEMA_NAME,
+                    RedisConnectionConfigV1.SCHEMA_VERSION,
+                    RedisConnectionConfigV1.class),
+            entry(
+                    MySqlConnectionConfigV1.SCHEMA_NAME,
+                    MySqlConnectionConfigV1.SCHEMA_VERSION,
+                    MySqlConnectionConfigV1.class),
             // Capability 结果（06 §118～§119）
             entry(MetricsQueryResultV1.SCHEMA_NAME, MetricsQueryResultV1.SCHEMA_VERSION, MetricsQueryResultV1.class),
             entry(LogsSearchResultV1.SCHEMA_NAME, LogsSearchResultV1.SCHEMA_VERSION, LogsSearchResultV1.class),

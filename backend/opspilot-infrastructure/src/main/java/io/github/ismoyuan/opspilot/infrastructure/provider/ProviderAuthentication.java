@@ -11,7 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
 /**
- * HTTP 数据源的认证（06 §20、07 §63，B16-R1）：按连接配置（{@link HttpConnectionConfigV1}）确定认证方式，凭据只经连接的 credentialRef 由
+ * 数据源连接配置与凭据（06 §20、07 §63，B16-R1；B17 起 Redis/MySQL 共用配置解码与凭据解析）。HTTP 数据源的认证：按连接配置（{@link HttpConnectionConfigV1}）确定认证方式，凭据只经连接的 credentialRef 由
  * {@link SecretResolver} 在发请求前解析，只放入该次请求的 Authorization 头，不进入日志、错误文案、结果或持久化。
  *
  * <p>配置与凭据引用必须一致：都没有为不认证；只有其一为 INVALID_BINDING（不猜测认证方式）；引用无法解析为 SECRET_NOT_FOUND。
@@ -32,20 +32,7 @@ final class ProviderAuthentication {
      * @throws ProviderCallException INVALID_BINDING 或 SECRET_NOT_FOUND
      */
     String authorization(DataSourceConnection connection, String expectedSchemaName) {
-        if (!connection.configSchema().name().equals(expectedSchemaName)
-                || connection.configSchema().version() != HttpConnectionConfigV1.SCHEMA_VERSION) {
-            throw new ProviderCallException(ErrorCode.INVALID_BINDING, "Connection config schema is not supported");
-        }
-        HttpConnectionConfigV1 config;
-        try {
-            config = codecs.decode(
-                    expectedSchemaName,
-                    HttpConnectionConfigV1.SCHEMA_VERSION,
-                    connection.configPayload(),
-                    HttpConnectionConfigV1.class);
-        } catch (SchemaPayloadException ex) {
-            throw new ProviderCallException(ErrorCode.INVALID_BINDING, "Connection config is invalid");
-        }
+        HttpConnectionConfigV1 config = config(connection, expectedSchemaName, HttpConnectionConfigV1.class);
         String reference = connection.credentialRef();
         if (config.authScheme() == null && reference == null) {
             return null;
@@ -55,16 +42,7 @@ final class ProviderAuthentication {
                     ErrorCode.INVALID_BINDING,
                     "Connection authentication scheme and credential must be configured together");
         }
-        String credential;
-        try {
-            credential = secrets.resolve(reference).reveal();
-        } catch (SecretNotFoundException ex) {
-            throw new ProviderCallException(ErrorCode.SECRET_NOT_FOUND, "Connection credential is not available");
-        }
-        if (credential.chars().anyMatch(c -> c < 0x20 || c == 0x7F)) {
-            throw new ProviderCallException(
-                    ErrorCode.INVALID_BINDING, "Connection credential is not usable in a header");
-        }
+        String credential = credential(connection);
         return switch (config.authScheme()) {
             case BEARER -> "Bearer " + credential;
             case BASIC ->
@@ -73,5 +51,45 @@ final class ProviderAuthentication {
                                 .encodeToString(
                                         (config.username() + ":" + credential).getBytes(StandardCharsets.UTF_8));
         };
+    }
+
+    /**
+     * 按该 Provider 的连接配置 Schema 解码连接配置（version 1）。
+     *
+     * @throws ProviderCallException INVALID_BINDING
+     */
+    <T> T config(DataSourceConnection connection, String expectedSchemaName, Class<T> type) {
+        if (!connection.configSchema().name().equals(expectedSchemaName)
+                || connection.configSchema().version() != 1) {
+            throw new ProviderCallException(ErrorCode.INVALID_BINDING, "Connection config schema is not supported");
+        }
+        try {
+            return codecs.decode(expectedSchemaName, 1, connection.configPayload(), type);
+        } catch (SchemaPayloadException ex) {
+            throw new ProviderCallException(ErrorCode.INVALID_BINDING, "Connection config is invalid");
+        }
+    }
+
+    /**
+     * 解析连接的 credentialRef；只在建立连接的那一刻取值。
+     *
+     * @return 明文凭据；连接没有 credentialRef 时为空
+     * @throws ProviderCallException SECRET_NOT_FOUND（引用无法解析）或 INVALID_BINDING（含控制字符，不能安全放入协议）
+     */
+    String credential(DataSourceConnection connection) {
+        if (connection.credentialRef() == null) {
+            return null;
+        }
+        String credential;
+        try {
+            credential = secrets.resolve(connection.credentialRef()).reveal();
+        } catch (SecretNotFoundException ex) {
+            throw new ProviderCallException(ErrorCode.SECRET_NOT_FOUND, "Connection credential is not available");
+        }
+        if (credential.chars().anyMatch(c -> c < 0x20 || c == 0x7F)) {
+            throw new ProviderCallException(
+                    ErrorCode.INVALID_BINDING, "Connection credential contains control characters");
+        }
+        return credential;
     }
 }

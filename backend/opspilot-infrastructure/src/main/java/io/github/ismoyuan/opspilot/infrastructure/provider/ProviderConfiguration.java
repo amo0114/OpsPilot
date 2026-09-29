@@ -61,4 +61,33 @@ class ProviderConfiguration {
                 clock,
                 logs.rawMatchLimit());
     }
+
+    @Bean
+    ObserveProvider redisCacheInspectProvider(
+            ProviderProperties properties,
+            SchemaCodecRegistry codecs,
+            SecretResolver secrets,
+            ObjectProvider<Clock> clocks) {
+        Clock clock = clocks.getIfAvailable(Clock::systemUTC);
+        return new RedisCacheInspectProvider(
+                new RedisAccess(new ProviderAuthentication(codecs, secrets), clock, properties.responseLimit()), clock);
+    }
+
+    @Bean
+    ObserveProvider mySqlDatabaseInspectProvider(
+            SchemaCodecRegistry codecs, SecretResolver secrets, ObjectProvider<Clock> clocks) {
+        return new MySqlDatabaseInspectProvider(
+                new ProviderAuthentication(codecs, secrets), clocks.getIfAvailable(Clock::systemUTC));
+    }
+
+    @Bean
+    ObserveProvider redisQueueInspectProvider(
+            ProviderProperties properties,
+            SchemaCodecRegistry codecs,
+            SecretResolver secrets,
+            ObjectProvider<Clock> clocks) {
+        Clock clock = clocks.getIfAvailable(Clock::systemUTC);
+        return new RedisQueueInspectProvider(
+                new RedisAccess(new ProviderAuthentication(codecs, secrets), clock, properties.responseLimit()), clock);
+    }
 }

@@ -133,7 +133,7 @@ class ProviderAuthenticationTest {
                         failed(ErrorCode.SECRET_NOT_FOUND, "Connection credential is not available")),
                 Map.entry(
                         prometheus(metrics("env://OPSPILOT_BROKEN_TOKEN", "{\"authScheme\":\"BEARER\"}")),
-                        failed(ErrorCode.INVALID_BINDING, "Connection credential is not usable in a header")));
+                        failed(ErrorCode.INVALID_BINDING, "Connection credential contains control characters")));
         cases.forEach(pair -> assertThat(pair.getKey()).isEqualTo(pair.getValue()));
 
         AdmittedInvocation wrongSchema = ProviderInvocations.admitted(

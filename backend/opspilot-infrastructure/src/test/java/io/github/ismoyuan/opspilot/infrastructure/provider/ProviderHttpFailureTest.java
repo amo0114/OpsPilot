@@ -204,7 +204,9 @@ class ProviderHttpFailureTest {
             "http://user:pw@prometheus:9090",
             "http://prometheus:9090?x=1",
             "prometheus:9090",
-            "http:// bad"
+            "http:// bad",
+            "http://prometheus:65536",
+            "http://prometheus:0"
         }) {
             assertThatThrownBy(() -> ProviderHttpClient.baseUri(endpoint))
                     .as(endpoint)

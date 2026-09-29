@@ -3,11 +3,15 @@ package io.github.ismoyuan.opspilot.infrastructure.investigation;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.ismoyuan.opspilot.application.ClockConfiguration;
+import io.github.ismoyuan.opspilot.application.ai.protocol.v1.CacheInspectArgumentsV1;
+import io.github.ismoyuan.opspilot.application.ai.protocol.v1.DatabaseInspectArgumentsV1;
+import io.github.ismoyuan.opspilot.application.ai.protocol.v1.InspectionType;
 import io.github.ismoyuan.opspilot.application.ai.protocol.v1.LogSeverity;
 import io.github.ismoyuan.opspilot.application.ai.protocol.v1.LogsSearchArgumentsV1;
 import io.github.ismoyuan.opspilot.application.ai.protocol.v1.MetricsQueryArgumentsV1;
 import io.github.ismoyuan.opspilot.application.ai.protocol.v1.QueueInspectArgumentsV1;
 import io.github.ismoyuan.opspilot.application.ai.protocol.v1.RequestCapability;
+import io.github.ismoyuan.opspilot.application.ai.protocol.v1.ServiceInspectArgumentsV1;
 import io.github.ismoyuan.opspilot.application.ai.protocol.v1.WindowKey;
 import io.github.ismoyuan.opspilot.application.capability.CapabilityAccess;
 import io.github.ismoyuan.opspilot.application.capability.CapabilityAdmissionService;
@@ -23,6 +27,9 @@ import io.github.ismoyuan.opspilot.application.capability.raw.RawResultStore;
 import io.github.ismoyuan.opspilot.application.capability.result.MetricsQueryResultV1;
 import io.github.ismoyuan.opspilot.application.capability.sanitize.Sanitizer;
 import io.github.ismoyuan.opspilot.application.schema.SchemaCodecRegistry;
+import io.github.ismoyuan.opspilot.application.secret.SecretNotFoundException;
+import io.github.ismoyuan.opspilot.application.secret.SecretResolver;
+import io.github.ismoyuan.opspilot.application.secret.SecretValue;
 import io.github.ismoyuan.opspilot.domain.error.ErrorCode;
 import java.io.IOException;
 import java.net.URI;
@@ -41,7 +48,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -72,7 +82,8 @@ import tools.jackson.databind.json.JsonMapper;
     ObservationExtractor.class,
     ObserveResultPipeline.class,
     ProviderCapabilityInvoker.class,
-    ClockConfiguration.class
+    ClockConfiguration.class,
+    ProviderExecutionIntegrationTest.TestSecrets.class
 })
 class ProviderExecutionIntegrationTest {
 
@@ -97,7 +108,25 @@ class ProviderExecutionIntegrationTest {
             .withExposedPorts(3100)
             .waitingFor(Wait.forHttp("/ready").forPort(3100).withStartupTimeout(Duration.ofMinutes(2)));
 
+    @Container
+    static final GenericContainer<?> REDIS = new GenericContainer<>("redis:7.4.5").withExposedPorts(6379);
+
     static final Path RAW_RESULTS = createTempDirectory();
+
+    /** 只为本测试解析业务 MySQL 的只读口令；其他引用照常不存在。 */
+    @TestConfiguration
+    static class TestSecrets {
+        @Bean
+        @Primary
+        SecretResolver testSecretResolver() {
+            return reference -> {
+                if (reference.equals("env://OPSPILOT_TEST_MYSQL_PASSWORD")) {
+                    return new SecretValue(MYSQL.getPassword());
+                }
+                throw new SecretNotFoundException(SecretNotFoundException.Reason.NOT_FOUND, "missing " + reference);
+            };
+        }
+    }
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
@@ -128,6 +157,9 @@ class ProviderExecutionIntegrationTest {
                         HttpResponse.BodyHandlers.ofString());
         assertThat(pushed.statusCode()).isEqualTo(204);
         awaitPrometheusHistory();
+        REDIS.execInContainer(
+                "redis-cli", "XGROUP", "CREATE", "shortlink:stats", "stats-consumer-group", "$", "MKSTREAM");
+        REDIS.execInContainer("redis-cli", "XADD", "shortlink:stats", "*", "payload", "secret-payload");
     }
 
     /**
@@ -170,6 +202,8 @@ class ProviderExecutionIntegrationTest {
     InvestigationFixture fixture;
     long incident;
     long service;
+    long cache;
+    long database;
 
     @BeforeEach
     void seed() {
@@ -186,7 +220,22 @@ class ProviderExecutionIntegrationTest {
                 "SELECT id FROM managed_resource WHERE resource_key = 'redirect-service'", Long.class);
         long prometheus = connection("prometheus-local", "PROMETHEUS", endpoint(PROMETHEUS, 9090));
         long loki = connection("loki-local", "LOKI", endpoint(LOKI, 3100));
-        long redis = connection("redis-local", "REDIS", "redis://redis:6379");
+        long redis = connection("redis-local", "REDIS", "redis://" + REDIS.getHost() + ":" + REDIS.getMappedPort(6379));
+        long mysql = connection(
+                "mysql-readonly",
+                "MYSQL",
+                "mysql://" + MYSQL.getHost() + ":" + MYSQL.getMappedPort(3306),
+                "env://OPSPILOT_TEST_MYSQL_PASSWORD",
+                "{\"username\": \"" + MYSQL.getUsername() + "\"}");
+        long docker = connection("docker-local", "DOCKER", "unix:///var/run/docker.sock");
+        cache = resource(system, "shortlink-redis", "CACHE");
+        database = resource(system, "shortlink-mysql", "DATABASE");
+        bind(cache, redis, "redis.resource.binding", "{}");
+        bind(database, mysql, "mysql.resource.binding", "{\"databaseName\": \"test\"}");
+        bind(service, docker, "docker.resource.binding", "{\"containerName\": \"shortlink-redirect\"}");
+        capability(cache, "cache.inspect");
+        capability(database, "database.inspect");
+        capability(service, "service.inspect");
         bind(
                 service,
                 prometheus,
@@ -265,6 +314,46 @@ class ProviderExecutionIntegrationTest {
                 .contains("出现 2 次");
     }
 
+    /** B17：Redis（cache.inspect、queue.inspect）与 MySQL（database.inspect）经生产 Invoker 落账为结果与 Observation，不含消息正文。 */
+    @Test
+    void realRedisAndMySqlInspectionsAreRecorded() {
+        List<CapabilityExecutionResult> results = List.of(
+                execution.execute(
+                        incident, 1, new RequestCapability.CacheInspect(cache, new CacheInspectArgumentsV1(), "p")),
+                execution.execute(
+                        incident,
+                        1,
+                        new RequestCapability.QueueInspect(fixture.streamId(), new QueueInspectArgumentsV1(), "p")),
+                execution.execute(
+                        incident,
+                        1,
+                        new RequestCapability.DatabaseInspect(
+                                database, new DatabaseInspectArgumentsV1(InspectionType.SERVER_SUMMARY, null), "p")));
+
+        assertThat(results)
+                .allSatisfy(result -> assertThat(result).isInstanceOf(CapabilityExecutionResult.Succeeded.class));
+        assertThat(jdbc.queryForList(
+                        "SELECT CONCAT(ci.capability_key, '|', ci.status, '|', o.observation_kind, '|', o.schema_name)"
+                                + " FROM capability_invocation ci JOIN observation o ON o.capability_invocation_id = ci.id"
+                                + " ORDER BY ci.id",
+                        String.class))
+                .containsExactly(
+                        "cache.inspect|SUCCEEDED|CACHE_STATUS|cache-status.observation",
+                        "queue.inspect|SUCCEEDED|QUEUE_STATUS|queue-status.observation",
+                        "database.inspect|SUCCEEDED|DATABASE_STATUS|database-status.observation");
+        assertThat(jdbc.queryForList(
+                        "SELECT CONCAT(CAST(ci.response_payload AS CHAR), o.summary, CAST(o.payload AS CHAR))"
+                                + " FROM capability_invocation ci JOIN observation o ON o.capability_invocation_id = ci.id",
+                        String.class))
+                .allSatisfy(text -> assertThat(text).doesNotContain("secret-payload"));
+        assertThat(jdbc.queryForObject(
+                        "SELECT o.summary FROM observation o JOIN capability_invocation ci ON ci.id = o.capability_invocation_id"
+                                + " WHERE ci.capability_key = 'queue.inspect'",
+                        String.class))
+                .startsWith("本次采样 Stream 长度 1")
+                .contains("尚未投递积压 1");
+    }
+
     /** Provider 失败：06 §35 错误码与固定文案，不产生 Observation，预算不退还；尚无 Provider 的能力如实记失败。 */
     @Test
     void providerFailuresAreRecordedWithoutObservations() {
@@ -273,10 +362,9 @@ class ProviderExecutionIntegrationTest {
                 1,
                 new RequestCapability.MetricsQuery(
                         service, new MetricsQueryArgumentsV1("broken.template", WindowKey.LAST_15_MIN, false), "p"));
+        // service.inspect 的 Provider 属 TASK-057
         CapabilityExecutionResult missing = execution.execute(
-                incident,
-                1,
-                new RequestCapability.QueueInspect(fixture.streamId(), new QueueInspectArgumentsV1(), "p"));
+                incident, 1, new RequestCapability.ServiceInspect(service, new ServiceInspectArgumentsV1(), "p"));
 
         assertThat(rejected).isInstanceOf(CapabilityExecutionResult.Failed.class);
         assertThat(missing).isInstanceOf(CapabilityExecutionResult.Failed.class);
@@ -305,16 +393,33 @@ class ProviderExecutionIntegrationTest {
     }
 
     private long connection(String key, String providerType, String endpoint) {
+        return connection(key, providerType, endpoint, null, "{}");
+    }
+
+    private long connection(String key, String providerType, String endpoint, String credentialRef, String config) {
         jdbc.update(
-                "INSERT INTO data_source_connection (connection_key, name, provider_type, endpoint, config_schema_name,"
-                        + " config_schema_version, config_payload, status, created_at, updated_at) VALUES (?, ?, ?, ?,"
-                        + " ?, 1, '{}', 'ACTIVE', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
+                "INSERT INTO data_source_connection (connection_key, name, provider_type, endpoint, credential_ref,"
+                        + " config_schema_name, config_schema_version, config_payload, status, created_at, updated_at)"
+                        + " VALUES (?, ?, ?, ?, ?, ?, 1, ?, 'ACTIVE', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
                 key,
                 key,
                 providerType,
                 endpoint,
-                providerType.toLowerCase() + ".connection.config");
+                credentialRef,
+                providerType.toLowerCase() + ".connection.config",
+                config);
         return jdbc.queryForObject("SELECT id FROM data_source_connection WHERE connection_key = ?", Long.class, key);
+    }
+
+    private long resource(long system, String key, String type) {
+        jdbc.update(
+                "INSERT INTO managed_resource (managed_system_id, resource_key, name, resource_type, status, created_at,"
+                        + " updated_at) VALUES (?, ?, ?, ?, 'ACTIVE', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
+                system,
+                key,
+                key,
+                type);
+        return jdbc.queryForObject("SELECT id FROM managed_resource WHERE resource_key = ?", Long.class, key);
     }
 
     private void bind(long resourceId, long connectionId, String schemaName, String payload) {

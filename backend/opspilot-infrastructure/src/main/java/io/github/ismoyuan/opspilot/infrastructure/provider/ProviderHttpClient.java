@@ -65,7 +65,9 @@ final class ProviderHttpClient {
                 || uri.getHost() == null
                 || uri.getRawUserInfo() != null
                 || uri.getRawQuery() != null
-                || uri.getRawFragment() != null) {
+                || uri.getRawFragment() != null
+                || uri.getPort() == 0
+                || uri.getPort() > 65535) {
             throw new ProviderCallException(
                     ErrorCode.INVALID_BINDING, "Provider endpoint must be an http(s) URL without credentials");
         }
