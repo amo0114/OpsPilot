@@ -1008,6 +1008,156 @@ class InvestigationOrchestrationIntegrationTest {
         assertTerminated("USER_STOPPED", 1);
     }
 
+    // ---------------------------------------------------------------- TASK-059～061（B19）
+
+    /**
+     * 08 TASK-059～060、01 §19：run 1 由 AI 完成 v1（POSSIBLE_CAUSE），经真实 Continue 进入 run 2；run 2 上下文带 v1 与其冻结的 Evidence 及
+     * 历史 Observation，AI 经真实能力链取得新观测、建立新证据后完成 v2（PRIMARY_CAUSE_IDENTIFIED，可同时引用 v1 冻结的证据）。
+     * v1 的行与冻结引用保持原样，只新增版本。
+     */
+    @Test
+    void continueAfterAV1DiagnosisAddsV2AndLeavesV1Untouched() {
+        script.add(r -> hypothesis(r, "Redis 响应变慢"));
+        script.add(r -> link(r, observation, hypothesisId(r, 0), EvidenceRelation.SUPPORTS, null));
+        script.add(r -> complete(r, DiagnosisConclusionType.POSSIBLE_CAUSE, hypothesisId(r, 0), evidenceIds(r)));
+        orchestrator.runInvestigation(incident, 1);
+        long e1 = jdbc.queryForObject("SELECT id FROM evidence", Long.class);
+        Map<String, Object> v1 = jdbc.queryForMap("SELECT * FROM diagnosis WHERE version_no = 1");
+        assertThat(v1).containsEntry("conclusion_type", "POSSIBLE_CAUSE");
+
+        continueToRun2();
+        script.add(r -> {
+            assertThat(r.runNo()).isEqualTo(2);
+            assertThat(r.currentDiagnosis().version()).isOne();
+            assertThat(r.currentDiagnosis().evidenceIds()).containsExactly(e1);
+            assertThat(r.evidence())
+                    .extracting(InvestigationStepRequest.Evidence::id)
+                    .containsExactly(e1);
+            assertThat(r.observations())
+                    .singleElement()
+                    .satisfies(o -> assertThat(o.runNo()).isOne());
+            return queueInspect(r);
+        });
+        script.add(r -> hypothesis(r, "统计消费者已停止"));
+        script.add(r -> {
+            long fresh = r.observations().stream()
+                    .filter(o -> o.runNo() == 2)
+                    .findFirst()
+                    .orElseThrow()
+                    .id();
+            return link(r, fresh, hypothesisId(r, 1), EvidenceRelation.SUPPORTS, HypothesisStatus.SUPPORTED);
+        });
+        script.add(
+                r -> complete(r, DiagnosisConclusionType.PRIMARY_CAUSE_IDENTIFIED, hypothesisId(r, 1), evidenceIds(r)));
+        orchestrator.runInvestigation(incident, 2);
+
+        long e2 = jdbc.queryForObject("SELECT MAX(id) FROM evidence", Long.class);
+        assertThat(jdbc.queryForList(
+                        "SELECT CONCAT(version_no, '/', run_no, '/', conclusion_type, '/', termination_reason)"
+                                + " FROM diagnosis ORDER BY version_no",
+                        String.class))
+                .containsExactly("1/1/POSSIBLE_CAUSE/AGENT_COMPLETED", "2/2/PRIMARY_CAUSE_IDENTIFIED/AGENT_COMPLETED");
+        assertThat(jdbc.queryForMap("SELECT * FROM diagnosis WHERE version_no = 1"))
+                .isEqualTo(v1);
+        assertThat(frozenEvidence(1)).containsExactly(e1);
+        assertThat(frozenEvidence(2)).containsExactly(e1, e2);
+        assertThat(incidentStatus()).isEqualTo("DIAGNOSED");
+        assertThat(jdbc.queryForList(
+                        "SELECT actor_type FROM incident_timeline_event WHERE event_type = 'DIAGNOSIS_CREATED' ORDER BY id",
+                        String.class))
+                .containsExactly("AI_RUNTIME", "AI_RUNTIME");
+    }
+
+    /**
+     * 08 TASK-061、01 §20：没有真实支持证据不会写成 PRIMARY/POSSIBLE——只引用 CONTEXT、不引用任何证据、引用其他假设的 SUPPORTS 都被拒绝并
+     * 审计，调查继续；随后 AI 连续不可用，以真实原因收束为 UNDETERMINED，从未出现 PRIMARY/POSSIBLE。
+     */
+    @Test
+    void conclusionsWithoutRealSupportAreNeverWrittenAsPrimary() {
+        script.add(r -> hypothesis(r, "Redis 响应变慢"));
+        script.add(r -> hypothesis(r, "统计消费者已停止"));
+        script.add(r -> link(r, observation, hypothesisId(r, 0), EvidenceRelation.CONTEXT, null));
+        script.add(r -> link(r, observation, hypothesisId(r, 1), EvidenceRelation.SUPPORTS, null));
+        script.add(
+                r -> complete(r, DiagnosisConclusionType.PRIMARY_CAUSE_IDENTIFIED, hypothesisId(r, 0), evidenceIds(r)));
+        script.add(r -> complete(r, DiagnosisConclusionType.POSSIBLE_CAUSE, hypothesisId(r, 0), List.of()));
+        for (int i = 0; i < 3; i++) {
+            script.add(r -> {
+                throw new ApplicationException(ErrorCode.AI_RUNTIME_UNAVAILABLE, "AI runtime is unavailable");
+            });
+        }
+
+        orchestrator.runInvestigation(incident, 1);
+
+        assertThat(rejectionReasons()).containsExactly("SUPPORTING_EVIDENCE_REQUIRED", "SUPPORTING_EVIDENCE_REQUIRED");
+        assertThat(count("diagnosis")).isOne();
+        assertTerminated("AI_RUNTIME_UNAVAILABLE", 1);
+    }
+
+    /** 01 §11：同轮 Stop 后在途的 COMPLETE 不合法（无支持证据）时不收束为 PRIMARY，下一次准入以 USER_STOPPED 形成 UNDETERMINED。 */
+    @Test
+    void anInvalidCompleteAfterStopEndsAsUserStopped() {
+        script.add(r -> hypothesis(r, "Redis 响应变慢"));
+        script.add(r -> {
+            stop();
+            return complete(r, DiagnosisConclusionType.PRIMARY_CAUSE_IDENTIFIED, hypothesisId(r, 0), List.of());
+        });
+
+        orchestrator.runInvestigation(incident, 1);
+
+        assertThat(dispositions()).containsExactly("APPLIED", "REJECTED");
+        assertThat(rejectionReasons()).containsExactly("SUPPORTING_EVIDENCE_REQUIRED");
+        verify(ai, times(2)).decideInvestigationStep(any(), any());
+        assertThat(count("diagnosis")).isOne();
+        assertTerminated("USER_STOPPED", 1);
+    }
+
+    /**
+     * 08 TASK-061 Continue 用例、ACC-FINAL-01：超时收束后显式 Continue 得到新 run——新 deadline、本轮计数与连续失败清零、Stop 清除、
+     * 累计计数与历史（Step、Invocation、Diagnosis v1）保留；新 run 的 AI 看到的本轮预算从零开始。
+     */
+    @Test
+    void continueAfterATimeoutStartsAFreshRunAndKeepsHistory() {
+        update("current_run_started_at = UTC_TIMESTAMP(3) - INTERVAL 481 SECOND, current_run_capability_count = 3,"
+                + " capability_call_count = 3, consecutive_ai_failure_count = 1");
+        orchestrator.runInvestigation(incident, 1);
+        verify(ai, never()).decideInvestigationStep(any(), any());
+        assertTerminated("INVESTIGATION_TIMEOUT", 1);
+        Map<String, Object> v1 = jdbc.queryForMap("SELECT * FROM diagnosis WHERE version_no = 1");
+        int invocations = count("capability_invocation");
+
+        continueToRun2();
+
+        Map<String, Object> run2 = runControl();
+        assertThat(((Number) run2.get("current_run_no")).intValue()).isEqualTo(2);
+        assertThat(((Number) run2.get("current_run_capability_count")).intValue())
+                .isZero();
+        assertThat(((Number) run2.get("consecutive_ai_failure_count")).intValue())
+                .isZero();
+        assertThat(((Number) run2.get("capability_call_count")).intValue()).isEqualTo(3);
+        assertThat(run2.get("stop_requested_at")).isNull();
+        assertThat(jdbc.queryForObject(
+                        "SELECT TIMESTAMPDIFF(SECOND, current_run_started_at, UTC_TIMESTAMP(3)) FROM investigation"
+                                + " WHERE id = ?",
+                        Integer.class,
+                        fixture.investigationId()))
+                .isLessThan(60);
+
+        script.add(r -> complete(r, DiagnosisConclusionType.UNDETERMINED, null, List.of()));
+        orchestrator.runInvestigation(incident, 2);
+
+        assertThat(requests).singleElement().satisfies(r -> {
+            assertThat(r.runNo()).isEqualTo(2);
+            assertThat(r.budget().capabilityCallsUsed()).isZero();
+            assertThat(r.budget().elapsedSeconds()).isLessThan(60);
+        });
+        assertThat(jdbc.queryForMap("SELECT * FROM diagnosis WHERE version_no = 1"))
+                .isEqualTo(v1);
+        assertThat(count("capability_invocation")).isEqualTo(invocations);
+        assertThat(jdbc.queryForList("SELECT termination_reason FROM diagnosis ORDER BY version_no", String.class))
+                .containsExactly("INVESTIGATION_TIMEOUT", "AGENT_COMPLETED");
+    }
+
     // ---------------------------------------------------------------- helpers
 
     /** 直接确认另一连接正在等待 Incident 行锁（而不是以 sleep 推断）。 */

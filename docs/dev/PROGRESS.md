@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-30（B18 DONE，commit b2d29c7；B19 未开始）
+> 最近更新：2026-09-30（B19 REVIEW：B19-R1 PASS，待用户提交，Base b2e8f3d）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -66,9 +66,9 @@
 | TASK-056 | B17 | queue.inspect | DONE | commit 72664ea（B17，Base 03d9b75） | B17-V2 verify exit 0＋真实 Redis/MySQL 专项；B17-R1 REQUEST CHANGES 已修复，B17-R2 PASS；见 PROGRESS「B17」 |
 | TASK-057 | B18 | service.inspect | DONE | commit b2d29c7（B18，Base ec4cf51） | B18-V4 verify exit 0＋真实 Docker 专项（含非法数据回归）；B18-R1/R2 NEEDS CHANGES 已修复，B18-R3 PASS；见 PROGRESS「B18」 |
 | TASK-058 | B18 | Capability Execution Integration | DONE | commit b2d29c7（B18，Base ec4cf51） | B18-V4 verify exit 0＋ai-runtime 177 passed；真实闭合运行 RealLlmClosureRun 7 次（deepseek-v4.1-flash，真实 queue.inspect/service.inspect Observation 后再次决策）；B18-R3 PASS；见 PROGRESS「B18」 |
-| TASK-059 | B19 | COMPLETE_INVESTIGATION 全链路 | TODO | — | NOT RUN |
-| TASK-060 | B19 | Diagnosis Version Evolution | TODO | — | NOT RUN |
-| TASK-061 | B19 | Undetermined Outcomes | TODO | — | NOT RUN |
+| TASK-059 | B19 | COMPLETE_INVESTIGATION 全链路 | REVIEW | 未提交（B19 工作树） | B19-V1 verify exit 0＋InvestigationOrchestrationIntegrationTest 32/32（本批新增 4 项，见 B19）；B19-R1 PASS，待提交 |
+| TASK-060 | B19 | Diagnosis Version Evolution | REVIEW | 未提交（B19 工作树） | B19-V1 verify exit 0＋InvestigationOrchestrationIntegrationTest 32/32（本批新增 4 项，见 B19）；B19-R1 PASS，待提交 |
+| TASK-061 | B19 | Undetermined Outcomes | REVIEW | 未提交（B19 工作树） | B19-V1 verify exit 0＋InvestigationOrchestrationIntegrationTest 32/32（本批新增 4 项，见 B19）；B19-R1 PASS，待提交 |
 | TASK-062 | B20 | Remediation 数据结构 | TODO | — | NOT RUN |
 | TASK-063 | B20 | Remediation Draft Context | TODO | — | NOT RUN |
 | TASK-064 | B20 | Remediation Proposal 校验 | TODO | — | NOT RUN |
@@ -720,6 +720,34 @@
 - 修改文件：domain/system/connection/DockerConnectionConfigV1、domain/timeline/{CapabilityInvokedPayloadV1,CapabilityFailedPayloadV1,ObservationRecordedPayloadV1,CapabilityRequestRejectedPayloadV1}（新）、domain/timeline/TimelineEventType；application/capability/{CapabilityAdmissionService,CapabilityExecutionService,CapabilityInvocationRepository,CapabilityResultRecorder}、investigation/context/InvestigationContextBuilder、investigation/orchestration/{CapabilityExecutionPort,CapabilityRequestResult,InvestigationOrchestrator}、InvestigationCapabilityExecutor（新）、GatedFakeCapabilityExecutor（删除）；infrastructure/provider/{DockerEngineClient,DockerServiceInspectProvider}（新）、ProviderConfiguration、schema/JacksonSchemaCodecRegistry、persistence/mybatis/invocation/{CapabilityInvocationMapper(.java/.xml),MyBatisCapabilityInvocationRepository}；测试 provider/DockerServiceInspectProviderIntegrationTest（新）、investigation/RealLlmClosureRun（新，显式运行器）、investigation/{CapabilityExecutionIntegrationTest,InvestigationOrchestrationIntegrationTest,ProviderExecutionIntegrationTest}；ai-runtime llm/{openai_compatible,prompts}（新）、llm/client、config、main、api/{investigation,remediation}、{investigation,remediation}/service、tests/test_openai_compatible_client.py（新）；docs/dev。无 Migration、无新依赖
 - 提交：代码提交 b2d29c7742b4b0f9cff19617c6e671fdf29320a9（feat(capability): docker service.inspect and real capability execution in the investigation loop (TASK-057–058)）；SHA 回填为后续 docs 提交；范围外问题：见「待处理问题」中 B18 行；未推送
 
+### B19 — 调查完成、诊断版本演进与未确定结论
+
+- 状态：REVIEW（B19-R1 PASS，待用户提交；未提交、未推送）
+- 成员及顺序：TASK-059 → TASK-060 → TASK-061；批外前置：TASK-058 DONE（b2d29c7，B18-R3 PASS）
+- Base SHA：b2e8f3d332523727043ae571b0ca6a728e9dfd48
+- 范围：application（COMPLETE_INVESTIGATION 结果事务、Diagnosis 创建、确定性收束、Continue）及其 infrastructure 持久化与测试（真实 MySQL）；docs/dev。明确不做：Remediation 数据结构与 Plan 失效的实际表（TASK-062 起）、Web/UI 新接口、真实 LLM 与 S1～S3、Migration
+- 规格：08 TASK-059～061；01 §9、§11～§12、§19～§21、§35；04 §72；05 §55～§56、§85～§86；09 §108 ACC-FINAL-01/05
+- 关键不变量：Diagnosis 只属当前 run，PRIMARY/POSSIBLE 必须在冻结引用中含关联主假设的真实 SUPPORTS Evidence，引用只来自本轮或以前 Diagnosis 已冻结的范围；旧 run COMPLETE 只审计；同轮 Stop 后只有在途合法 COMPLETE 可收束；已取消不迁移；旧 Diagnosis 与其冻结引用不修改，新结论只新增版本；到退出边界不再问 AI，以真实原因形成 UNDETERMINED，不复制旧结论；Continue 走唯一 resumeInvestigation（新 run、计数与 Stop 清零、新 deadline、历史保留），重启不走该路径
+- 开工核查（gap analysis）：TASK-026/040～043 已实现并测试的部分——当前 run 校验（STALE_RUN_RESULT）、引用归属与支持证据（DiagnosisDraft.checkReferences）、引用范围（ReferenceScopeQuery）、旧 run/Stop/取消处置（AgentStepRecorder）、四种收束原因（InvestigationTerminator）、Start/Continue 共用 resumeInvestigation 与重启不刷新（B12）、Diagnosis 历史与详情 API（05 §55～§56）、ACC-FINAL-05（oldRunCompleteDoesNotDiagnoseTheNewRun）。缺口：TASK-060 版本演进只在服务层以 SQL 模拟 run 2 验证，未经真实 Continue 与调查循环核对 run 2 上下文与 v1 原样保留；TASK-061“不会被强行写成 PRIMARY”未经调查循环端到端（含 Stop 后非法 COMPLETE）；超时后 Continue（新 deadline、计数清零、历史保留）未单独验证；「待处理问题」UNDETERMINED 冻结范围行待 TASK-061 裁定
+- 验证要求：真实 MySQL 调查编排集成测试覆盖上述缺口；批尾 backend `./mvnw -B clean verify`；本批计划不改 ai-runtime
+- 新增依赖：无
+- 开工已有修改：无（工作树干净）
+- 成员进度：
+  - 结论：生产代码无需修改——开工核查所列规则均已由 TASK-026、040～043 实现；本批补足端到端验证并裁定一项待处理问题。均在 infrastructure 测试 InvestigationOrchestrationIntegrationTest（真实 MySQL、真实调查编排、真实准入/结果事务，AI 为脚本替身，能力 Provider 为经真实结果管线的替身）
+  - TASK-059/060：continueAfterAV1DiagnosisAddsV2AndLeavesV1Untouched——run 1 AI 提出假设、建立 SUPPORTS 证据、COMPLETE POSSIBLE_CAUSE → v1；经真实 continueInvestigation 进入 run 2，run 2 首个请求的 currentDiagnosis 为 v1、evidence 只含 v1 冻结的 e1、observations 只含 e1 引用的 run 1 观测（runNo=1）；AI 经真实能力链 queue.inspect 取得 run 2 观测、提出新假设、建立 SUPPORTS（附带 SUPPORTED）后 COMPLETE PRIMARY_CAUSE_IDENTIFIED 引用 e1＋e2 → v2（run 2）；v1 整行（SELECT *）与冻结引用 [e1] 前后完全相同，v2 冻结 [e1, e2]，两次 DIAGNOSIS_CREATED 发起方均为 AI_RUNTIME，Incident DIAGNOSED
+  - TASK-061：conclusionsWithoutRealSupportAreNeverWrittenAsPrimary——只引用 CONTEXT 与其他假设 SUPPORTS 的 PRIMARY、无引用的 POSSIBLE 均以 SUPPORTING_EVIDENCE_REQUIRED 拒绝并审计，调查继续；随后 AI 连续 3 次不可用 → UNDETERMINED/AI_RUNTIME_UNAVAILABLE，库中只有这一版 Diagnosis。anInvalidCompleteAfterStopEndsAsUserStopped——AI 调用期间提交 Stop、在途 COMPLETE PRIMARY 无支持证据 → REJECTED，不再问 AI，以 USER_STOPPED 形成 UNDETERMINED。continueAfterATimeoutStartsAFreshRunAndKeepsHistory（ACC-FINAL-01 超时变体）——超时收束（不问 AI）后 Continue：run 2、本轮计数与连续失败清零、Stop 为空、current_run_started_at 为新时间、累计计数 3 保留；run 2 请求预算 capabilityCallsUsed=0、elapsedSeconds<60；v1 整行不变、调用历史保留，v2 为 AGENT_COMPLETED
+  - 「待处理问题」UNDETERMINED 冻结范围行：裁定保持现行实现并关闭（理由见该行）
+  - 变异检查（均已还原，cmp 确认）：支持证据不要求关联主假设 → conclusionsWithoutRealSupport… 失败；Continue 不刷新 run 开始时间 → continueAfterATimeout… 失败；run 2 上下文不含以前 Diagnosis 冻结的 Evidence → continueAfterAV1… 失败
+- B19-V1（最终代码树，本机实测）：backend/；`./mvnw -B clean verify`；2026-09-29 17:13～17:23 UTC，JDK 21＋Docker（Testcontainers mysql:8.4.11 等）；exit 0；Enforcer 与 Spotless check 通过；domain 41、infrastructure 590、web 21、boot 6，均 0 失败 0 跳过；RealLlmClosureRun 未被 verify 运行；`git diff --check` 通过。ai-runtime 未修改（NOT RUN）；真实 LLM、S1～S3 NOT RUN（本批不要求）
+
+- B19-R1（2026-09-30，独立 Review）：主审 Codex；范围 `b2e8f3d332523727043ae571b0ca6a728e9dfd48` 到当前工作树全部变化，已核对 git status/diff 与未跟踪文件清单（为空）；结论 **PASS**。无 P0/P1、无提交前阻塞项；Commit Recommendation：可按用户计划提交测试代码及进度文档，未提交前批次与成员保持 REVIEW。
+  - 核对 08 TASK-059～061、01 §11～§12/§19～§20：无需重复修改既有生产实现。新增 Continue→v2 测试走真实 Continue 与调查编排，验证 v1 Diagnosis 行和冻结 Evidence ID 集合不变；既有 referencesAreLimitedToTheCurrentRunAndFrozenHistory 补充未冻结旧事实的排除验证。非法主结论、Stop 后非法 COMPLETE、超时后 Continue 与既有预算收束/重启保留 run/旧 run COMPLETE 审计测试共同覆盖本批 DoD。
+  - UNDETERMINED 冻结本轮真实 Evidence（含 REFUTES/CONTEXT）的裁定与 01 §12/§20 相容；其关系不变、结论不升级为 PRIMARY，不复制旧 Diagnosis。支持证据仍必须属于所引用的主假设；状态转换与版本新增仍经权威事务。
+  - 本次实际验证：backend/ `./mvnw -B test -pl opspilot-infrastructure -am -Dtest=InvestigationOrchestrationIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false` → exit 0，32 tests / 0 failures / 0 errors / 0 skipped，42.447s（真实 MySQL；AI 与 Provider 为替身，准入/结果事务与结果管线为真实实现）。仓库根 `git diff --check` 通过。现有常规 Surefire XML 汇总 658/0/0/0，与 B19-V1 一致；完整 clean verify 本次 NOT RUN，沿用 B19-V1 的 Enforcer/Spotless/完整验证证据。ai-runtime、真实 LLM、S1～S3 本次 NOT RUN，本批无对应变更或要求；变异检查未独立重跑。
+  - 无生产代码修改、无新依赖、Migration；本次只更新 CURRENT/PROGRESS 的 Review 与交接记录，未提交、未推送。
+
+- 修改文件：backend/opspilot-infrastructure/src/test/java/io/github/ismoyuan/opspilot/infrastructure/investigation/InvestigationOrchestrationIntegrationTest.java（新增 4 项）；docs/dev。无生产代码修改、无 Migration、无新依赖
+
 ### TASK-039 修复 — 准入 step_no 分配并发死锁（B12-R1/R2 约定）
 
 - 状态：DONE（Review PASS，已提交 30aea1f）
@@ -932,7 +960,7 @@
 | B11-V1、B12-V1 完整 verify 中 infrastructure 测试 JVM 退出时 Hikari 池逐个关闭超过 surefire 30 s 等待（"kill self fork JVM ... after System.exit(0)"，结果不受影响；B11 单独重跑未复现，B12 再次出现，且整次 verify 增至约 12 分钟）；推断与缓存上下文数量及容器已停止有关 | infrastructure 测试（Spring 测试上下文缓存＋每类独立 Testcontainers） | 若反复出现，可考虑限制上下文缓存、合并相同配置的测试上下文或调整 surefire forkedProcessExitTimeoutInSeconds；不以跳过测试处理 | 后续触及测试基础设施的 Task |
 | （调查调用部分已关闭，B18：调查循环已接入执行服务，重启中断标记对真实准入的调用由 CapabilityExecutionIntegrationTest 覆盖；恢复采样仍属 TASK-083）调查调用的中断标记已实现，但 Java 尚无调查调用写入口（TASK-048），真实进程中不会出现在途调查调用；恢复采样调用（recovery_verification_id 非空）不在此处理 | application/investigation/recovery、persistence/mybatis/invocation | TASK-048 接入后在真实链路复核中断标记；恢复采样调用的中断由 TASK-083 处理 | TASK-048、TASK-083 |
 | 中断界限为 StartupRecoveryCoordinator 构造时刻（应用时钟，毫秒）；依赖单实例部署与旧进程写入的 started_at 不晚于新进程时钟（时钟回拨会使旧记录漏标，漏标记录只保持 RUNNING，不影响准入与收束） | application/dispatch/StartupRecoveryCoordinator | 保持；部署保证单实例与时钟同步（07 §51） | — |
-| UNDETERMINED 收束冻结本轮建立的全部 Evidence（含 REFUTES/CONTEXT），summary 为按原因的固定文案；规格只要求“依据本轮已提交事实”，未规定冻结范围 | InvestigationTerminator | 若 TASK-061 或 UI 需要不同的冻结范围或文案，在其 Task 内调整 | TASK-061 |
+| （已关闭，B19/TASK-061 裁定保持：01 §12 要求 UNDETERMINED 展示“已经检查了什么、已经排除了什么、当前掌握哪些证据”，排除依据 REFUTES 与背景 CONTEXT 同属应保留的本轮事实；01 §20 允许 UNDETERMINED 引用真实历史调查信息，冻结本轮真实 Evidence 不构成编造支持；文案只说明收束原因、不推断根因；UI 展示在 TASK-096～099）UNDETERMINED 收束冻结本轮建立的全部 Evidence（含 REFUTES/CONTEXT），summary 为按原因的固定文案；规格只要求“依据本轮已提交事实”，未规定冻结范围 | InvestigationTerminator | 若 TASK-061 或 UI 需要不同的冻结范围或文案，在其 Task 内调整 | TASK-061 |
 | 观察：TASK-040/043 修复 Review-3 中恢复扫描测试结束后出现 Hikari 连接已关闭告警，未致测试失败（与既有测试上下文关闭时的连接告警同类） | infrastructure 调度/恢复扫描集成测试 | 保持观察；若导致失败或反复出现再调查 | 观察 |
 | Provider 解析以“连接 ACTIVE 且类型受支持”计候选；选择器非法的绑定仍计入候选，因此“一个合法＋一个非法”的两个 ACTIVE 绑定判为 AMBIGUOUS（从严，配置错误须先修正），唯一候选非法则 NOT_CONFIGURED | application/capability/CapabilityProviderResolver | 如规格要求“只计合法绑定”再调整；V0.1 Seed 每个资源每类 Provider 只有一个绑定 | 已接受（B13-R1） |
 | Descriptor 的 severities 暴露 LogSeverity 全集（含 INFO、DEBUG）、supportsPreviousWindowComparison 恒为 true；规格只给出参数域名称未限定取值，LAST_60_MIN＋比较与 Descriptor 外取值的拒绝属准入 | CapabilityDescriptorBuilder | TASK-047/048 按 Descriptor 与 06 §42 在准入前拒绝 CAPABILITY_ARGUMENT_INVALID / METRIC_COMPARISON_WINDOW_EXCEEDS_LIMIT | TASK-047/048 |
