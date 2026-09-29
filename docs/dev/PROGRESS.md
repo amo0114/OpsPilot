@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-29（B15 REVIEW，Base 0c0871d，B15-R3 PASS；待用户授权提交）
+> 最近更新：2026-09-29（B15 DONE，3ec7aea；B16 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -56,9 +56,9 @@
 | TASK-046 | B13 | Provider Resolver | DONE | commit 36fd25a（B13，Base 6c5d10d） | B13-V1/V2 verify exit 0＋CapabilityDescriptorIntegrationTest（唯一、0 个、歧义、选择器不可用）；B13-R2 PASS；见 PROGRESS「B13」 |
 | TASK-047 | B14 | Canonical JSON + Duplicate Guard | DONE | commit d97c442（B14，Base 711c6db） | B14-V1/V2 verify exit 0＋JacksonCanonicalJsonWriterTest 4、CapabilityExecutionIntegrationTest（Duplicate 部分）；B14-R1 两个 P2 已修复，B14-R2 PASS；见 PROGRESS「B14」 |
 | TASK-048 | B14 | CapabilityInvocation 执行骨架 | DONE | commit d97c442（B14，Base 711c6db） | B14-V1/V2 verify exit 0＋WindowResolverTest 3、CapabilityExecutionIntegrationTest（准入、窗口解析、拒绝、结果事务、执行骨架、Discarded 部分）；B14-R1 两个 P2 已修复，B14-R2 PASS；见 PROGRESS「B14」 |
-| TASK-049 | B15 | Sanitizer Framework | REVIEW | 未提交（Base 0c0871d＋B15 工作树） | B15-V3 verify exit 0＋B15-R1/R2 回归；B15-R3 PASS，独立专项 103/103；待授权提交；见 PROGRESS「B15」 |
-| TASK-050 | B15 | RawResultStore | REVIEW | 未提交（Base 0c0871d＋B15 工作树） | B15-V3 verify exit 0＋B15-R1/R2 回归；B15-R3 PASS，独立专项 103/103；待授权提交；见 PROGRESS「B15」 |
-| TASK-051 | B15 | ObservationExtractor | REVIEW | 未提交（Base 0c0871d＋B15 工作树） | B15-V3 verify exit 0＋B15-R1/R2 回归；B15-R3 PASS，独立专项 103/103；待授权提交；见 PROGRESS「B15」 |
+| TASK-049 | B15 | Sanitizer Framework | DONE | commit 3ec7aea（B15，Base 0c0871d） | B15-V3 verify exit 0＋专项测试（B15-R1/R2 回归）；B15-R1、R2 NEEDS CHANGES 均已修复，B15-R3 PASS；见 PROGRESS「B15」 |
+| TASK-050 | B15 | RawResultStore | DONE | commit 3ec7aea（B15，Base 0c0871d） | B15-V3 verify exit 0＋专项测试（B15-R1/R2 回归）；B15-R1、R2 NEEDS CHANGES 均已修复，B15-R3 PASS；见 PROGRESS「B15」 |
+| TASK-051 | B15 | ObservationExtractor | DONE | commit 3ec7aea（B15，Base 0c0871d） | B15-V3 verify exit 0＋专项测试（B15-R1/R2 回归）；B15-R1、R2 NEEDS CHANGES 均已修复，B15-R3 PASS；见 PROGRESS「B15」 |
 | TASK-052 | B16 | metrics.query | TODO | — | NOT RUN |
 | TASK-053 | B16 | logs.search | TODO | — | NOT RUN |
 | TASK-054 | B17 | cache.inspect | TODO | — | NOT RUN |
@@ -498,7 +498,7 @@
 
 ### B15 — 脱敏、原始结果保存与确定性提取
 
-- 状态：REVIEW（B15-R3 PASS，R1/R2 发现均已关闭；待用户授权提交）
+- 状态：DONE（B15-R3 PASS，已提交 3ec7aea）
 - 成员及顺序：TASK-049 → TASK-050 → TASK-051；批外前置：TASK-048 DONE（d97c442，B14-R2 PASS）
 - Base SHA：0c0871dfcbb07001c4c8ad1730c53b9471da4e17
 - 范围：application（Sanitizer 与已脱敏类型、RawResultStore 端口、六种 Capability 结果类型与六种 Observation 载荷类型、确定性 ObservationExtractor、把 Provider 结果按 Sanitizer → RawResultStore → 编码 → Extractor 组装为 InvocationOutcome 的结果管线；调用失败文案落账前脱敏；SchemaCodecRegistry 增加 encode）、infrastructure（LocalFileRawResultStore 与目录配置、脱敏配置、Codec 注册结果与 Observation Schema）、boot 配置；测试；docs/dev。明确不做：各真实 Provider 与 PromQL/LogQL/Redis/MySQL/Docker 访问、趋势/changePercent 的计算、日志模式归一化与聚合（TASK-052～057，本批只定义它们产出的已结构化结果类型并在构造时校验）；CapabilityInvoker 生产实现与调查循环接入（TASK-058）；AI Context 的条数裁剪（TASK-053/058）；恢复采样（TASK-078）；技术详情读取原始结果的 API（05 未定义）；新增表/列/Migration
@@ -552,7 +552,7 @@
   - 整批接合核对：结构化结果脱敏后编码/提取，raw 最后写；失败文案持久化前脱敏；Observation 所有权取自锁定的 Invocation；外部调用在结果事务之外；结果/Observation Codec 注册与类型校验保持。Header 到行尾及公开 Succeeded 旁路沿用 R2 已记录取舍与后续归属，不新增本批范围。
   - 独立实测：backend/ 执行 `./mvnw -B -pl opspilot-infrastructure -am -Dtest=SanitizerTest,LocalFileRawResultStoreTest,CapabilityResultTest,ObservationExtractorTest,CapabilityPayloadCodecTest,JacksonSchemaCodecRegistryTest,CapabilityExecutionIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false verify`，2026-09-29 14:57 +08:00，exit 0；103/103，无失败/错误/跳过，真实 Testcontainers mysql:8.4.11，4 个所选 reactor 模块 Enforcer/Spotless 通过。日志 `/tmp/opspilot-b15-r3-targeted.log`。`git diff --check <base>` 与 32 个未跟踪文件行尾空白检查通过；验证期间未改源码。
   - 本轮 NOT RUN：完整 clean verify（完整最终代码门禁使用既有 B15-V3 实施证据，本轮未冒充重跑）、生产 Provider/真实进程冒烟、ai-runtime、真实 LLM、MySQL 8.0.16、Windows。批次与三项成员仍为 REVIEW，待用户授权提交后回填真实 SHA 并一起 DONE；未提交、未推送、未开始 B16。
-- 提交：未提交；范围外问题：见「待处理问题」中 B15 新增行
+- 提交：代码提交 3ec7aea73ad793b2d2d09234515f102ba4b30396（feat(capability): sanitizer, raw result store and deterministic observation extraction (TASK-049–051)）；SHA 回填为后续 docs 提交；范围外问题：见「待处理问题」中 B15 行
 
 ### TASK-039 修复 — 准入 step_no 分配并发死锁（B12-R1/R2 约定）
 
