@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-30（B18 REVIEW：B18-R3 PASS，待提交，Base ec4cf51）
+> 最近更新：2026-09-30（B18 DONE，commit b2d29c7；B19 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -64,8 +64,8 @@
 | TASK-054 | B17 | cache.inspect | DONE | commit 72664ea（B17，Base 03d9b75） | B17-V2 verify exit 0＋真实 Redis/MySQL 专项；B17-R1 REQUEST CHANGES 已修复，B17-R2 PASS；见 PROGRESS「B17」 |
 | TASK-055 | B17 | database.inspect | DONE | commit 72664ea（B17，Base 03d9b75） | B17-V2 verify exit 0＋真实 Redis/MySQL 专项；B17-R1 REQUEST CHANGES 已修复，B17-R2 PASS；见 PROGRESS「B17」 |
 | TASK-056 | B17 | queue.inspect | DONE | commit 72664ea（B17，Base 03d9b75） | B17-V2 verify exit 0＋真实 Redis/MySQL 专项；B17-R1 REQUEST CHANGES 已修复，B17-R2 PASS；见 PROGRESS「B17」 |
-| TASK-057 | B18 | service.inspect | REVIEW | 未提交（B18 工作树，见 B18 修改文件） | 针对性：DockerServiceInspectProviderIntegrationTest 4/4（真实 Docker）、ProviderExecutionIntegrationTest 4/4；批尾验证见 B18 |
-| TASK-058 | B18 | Capability Execution Integration | REVIEW | 未提交（B18 工作树） | 控制面：InvestigationOrchestrationIntegrationTest 28/28、CapabilityExecutionIntegrationTest 16/16；ai-runtime 本地桩 28 项；真实闭合运行 RealLlmClosureRun 1/1（deepseek-v4.1-flash，6 步，queue.inspect＋service.inspect 真实 Observation 后再次决策，DIAGNOSED）；批尾验证见 B18 |
+| TASK-057 | B18 | service.inspect | DONE | commit b2d29c7（B18，Base ec4cf51） | B18-V4 verify exit 0＋真实 Docker 专项（含非法数据回归）；B18-R1/R2 NEEDS CHANGES 已修复，B18-R3 PASS；见 PROGRESS「B18」 |
+| TASK-058 | B18 | Capability Execution Integration | DONE | commit b2d29c7（B18，Base ec4cf51） | B18-V4 verify exit 0＋ai-runtime 177 passed；真实闭合运行 RealLlmClosureRun 7 次（deepseek-v4.1-flash，真实 queue.inspect/service.inspect Observation 后再次决策）；B18-R3 PASS；见 PROGRESS「B18」 |
 | TASK-059 | B19 | COMPLETE_INVESTIGATION 全链路 | TODO | — | NOT RUN |
 | TASK-060 | B19 | Diagnosis Version Evolution | TODO | — | NOT RUN |
 | TASK-061 | B19 | Undetermined Outcomes | TODO | — | NOT RUN |
@@ -658,7 +658,7 @@
 
 ### B18 — Docker 只读 Provider 与真实调查链路集成
 
-- 状态：REVIEW（B18-R3 PASS，待用户提交；未提交、未推送）
+- 状态：DONE（B18-R3 PASS，已提交 b2d29c7）
 - 成员及顺序：TASK-057 → TASK-058；批外前置：TASK-056 DONE（72664ea，B17-R2 PASS）
 - Base SHA：ec4cf51af6d8b1c3660f6f69b96356b53b77115e
 - 用户决定（2026-09-29）：真实 LLM 接入（ai-runtime 的 OpenAI-compatible LlmClient 与 investigation-v1 Prompt 正文）纳入本批 TASK-058（关闭「待处理问题」中“真实 LLM 接入归属待确认”行）；真实模型端点稍后由用户提供——先以本地桩验证客户端，真实闭合运行在取得端点后执行，未执行前 TASK-058 不得标完成
@@ -718,6 +718,7 @@
   - 受审实现范围指纹（排除 docs；含删除标记）：38 个路径，SHA-256 `2d7f397188573a302d79f8dc981085d103396265b965e634af845aba09695859`。算法：按路径排序，逐项对“UTF-8 路径＋NUL＋文件内容 SHA-256 原始字节（删除时为 DELETED）”累计 SHA-256。本次仅更新 CURRENT/PROGRESS；无新增依赖、Migration 或实现修改。
 
 - 修改文件：domain/system/connection/DockerConnectionConfigV1、domain/timeline/{CapabilityInvokedPayloadV1,CapabilityFailedPayloadV1,ObservationRecordedPayloadV1,CapabilityRequestRejectedPayloadV1}（新）、domain/timeline/TimelineEventType；application/capability/{CapabilityAdmissionService,CapabilityExecutionService,CapabilityInvocationRepository,CapabilityResultRecorder}、investigation/context/InvestigationContextBuilder、investigation/orchestration/{CapabilityExecutionPort,CapabilityRequestResult,InvestigationOrchestrator}、InvestigationCapabilityExecutor（新）、GatedFakeCapabilityExecutor（删除）；infrastructure/provider/{DockerEngineClient,DockerServiceInspectProvider}（新）、ProviderConfiguration、schema/JacksonSchemaCodecRegistry、persistence/mybatis/invocation/{CapabilityInvocationMapper(.java/.xml),MyBatisCapabilityInvocationRepository}；测试 provider/DockerServiceInspectProviderIntegrationTest（新）、investigation/RealLlmClosureRun（新，显式运行器）、investigation/{CapabilityExecutionIntegrationTest,InvestigationOrchestrationIntegrationTest,ProviderExecutionIntegrationTest}；ai-runtime llm/{openai_compatible,prompts}（新）、llm/client、config、main、api/{investigation,remediation}、{investigation,remediation}/service、tests/test_openai_compatible_client.py（新）；docs/dev。无 Migration、无新依赖
+- 提交：代码提交 b2d29c7742b4b0f9cff19617c6e671fdf29320a9（feat(capability): docker service.inspect and real capability execution in the investigation loop (TASK-057–058)）；SHA 回填为后续 docs 提交；范围外问题：见「待处理问题」中 B18 行；未推送
 
 ### TASK-039 修复 — 准入 step_no 分配并发死锁（B12-R1/R2 约定）
 

@@ -2,21 +2,21 @@
 
 更新时间：2026-09-30（本地）
 仓库/分支：/root/projects/OpsPilot-V0.1-IMPLEMENTATION，main；无 remote
-当前批次/状态：B18 REVIEW（B18-R3 PASS，待用户提交）
-成员 Task 及顺序：B18 = TASK-057 → 058
-固定 Base SHA：ec4cf51af6d8b1c3660f6f69b96356b53b77115e
-批外前置核实：TASK-056 DONE（72664ea，B17-R2 PASS）
-允许目录 / 明确不做 / 关键不变量：见 PROGRESS「B18」（Docker Provider、调查循环接入执行服务、ai-runtime 真实 LLM 客户端与调查 Prompt；不做 service.restart、Remediation 真实模型运行、Demo Compose、Migration）
+当前批次/状态：B18 DONE（代码 b2d29c7，B18-R3 PASS）；B19 未开始
+成员 Task 及顺序：B18 = TASK-057 → 058（均 DONE）；下一批 B19 = TASK-059 → 061
+固定 Base SHA：B18 为 ec4cf51af6d8b1c3660f6f69b96356b53b77115e；B19 开工时读取当时 HEAD
+批外前置核实：B19 开工时按 08 核对其成员的批外前置
+允许目录 / 明确不做 / 关键不变量：B19 开工时按 BATCH-PLAN 与 08 固定
 本批规格章节及 PROGRESS 记录：PROGRESS「B18」
-当前成员及位置：TASK-057、TASK-058 均已实现并验证（含真实闭合运行）；B18-R1、B18-R2 各项已修复（TLS 握手纳入总期限、诊断日志以占位替换自造键；据真实日志补充 hypothesisUpdate 字段说明）；B18-R3 PASS，断点在用户提交（代码、进度文档两次提交）
-已实现并针对性验证的成员：B01～B17 全部，及 B13 前的独立修复；B18 的 TASK-057、TASK-058（含真实闭合运行）
-未完成 / 未执行验证：B18 提交与真实 SHA 回填；模型输出质量在验收运行继续观察（见 PROGRESS 待处理）；恢复采样准入（TASK-078）；AgentStep 输出信封读取方（TASK-100 等）；Demo 调查账号/ACL 部署与 ShortLink 校准（TASK-105/106）；观察项：surefire 退出等待、Hikari 连接已关闭告警、Fake runtime 偶发 AI_RUNTIME_UNAVAILABLE；其余见 PROGRESS 待处理问题；Redis < 7.2、MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
-未提交文件（含既有无关修改）：开工时工作树干净；本批修改见 git status
-共同验证及独立 Review 证据编号：B18-V4（最终 Java 构建，其后 Java 未修改）、真实闭合运行 7 次（见 PROGRESS「B18」）；B18-R3 PASS（R1/R2 提交前问题均关闭，见 PROGRESS）
+当前成员及位置：无进行中批次
+已实现并针对性验证的成员：B01～B18 全部，及 B13 前的独立修复
+未完成 / 未执行验证：调查完成、诊断版本演进与未确定结论（TASK-059～061，下一批）；模型输出质量在验收运行继续观察（见 PROGRESS 待处理）；Remediation Prompt 与真实模型（TASK-063）；恢复采样准入（TASK-078）；AgentStep 输出信封读取方（TASK-100 等）；Demo 调查账号/ACL 部署、docker.sock 挂载与 ShortLink 真实导出、日志格式校准（TASK-105/106）；观察项：surefire 退出等待、Hikari 连接已关闭告警、Fake runtime 偶发 AI_RUNTIME_UNAVAILABLE、AI 客户端 h2c 升级告警；其余见 PROGRESS 待处理问题；Redis < 7.2、MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
+未提交文件（含既有无关修改）：无（本交接卡与 PROGRESS 回填随 docs(progress) 提交）
+共同验证及独立 Review 证据编号：B18-V1～V4、真实闭合运行 7 次、B18-R1、B18-R2、B18-R3
 下一步具体动作：
-1. 用户按计划提交代码，再回填真实代码 SHA、将批次及 TASK-057/058 一起标 DONE 后提交进度文档；未提交前保持 REVIEW，不推送
-2. 重跑闭合运行：先以 openai-compatible 启动 ai-runtime（Key 文件 ~/.config/opspilot/llm.env 只加载进该进程），再 `-Dtest=RealLlmClosureRun`（见该类注释）
-3. ai-runtime 命令一律 `uv run --frozen`（本机镜像索引会重写 uv.lock 下载地址）
+1. 等待用户指示开始 B19（TASK-059 → 061，调查完成、诊断版本演进与未确定结论）
+2. 重跑真实闭合：先以 openai-compatible 启动 ai-runtime（Key 文件 ~/.config/opspilot/llm.env 只加载进该进程），再 `-Dtest=RealLlmClosureRun`（见该类注释）；ai-runtime 命令一律 `uv run --frozen`
+3. 不推送
 
 本地启动 Demo 配置：在 OPSPILOT_DB_* 环境变量基础上加 --spring.profiles.active=demo
 
