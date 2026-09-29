@@ -30,10 +30,14 @@ public interface InvestigationContextQuery {
 
     /**
      * 来源调用属于本轮的调查 Observation，加上 {@code referencedObservationIds} 中的历史 Observation（被上下文 Evidence 引用），
-     * 按 id 升序。旧 run 未被引用的迟到结果不在其中。
+     * 按 id 升序。旧 run 未被引用的迟到结果不在其中。同一调用产生的 LOG_PATTERN 只取 id 最小的 {@code maxLogPatternsPerInvocation} 条
+     * （提取顺序即出现次数降序，06 §122），被引用的除外。
      */
     List<InvestigationStepRequest.Observation> findContextObservations(
-            long investigationId, int runNo, Collection<Long> referencedObservationIds);
+            long investigationId,
+            int runNo,
+            Collection<Long> referencedObservationIds,
+            int maxLogPatternsPerInvocation);
 
     Optional<InvestigationStepRequest.CurrentDiagnosis> findLatestDiagnosis(long investigationId);
 

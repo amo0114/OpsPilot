@@ -38,6 +38,24 @@ public enum ErrorCode {
     CAPABILITY_DUPLICATE_REQUEST(ErrorCategory.CONFLICT, "相同的查询刚刚执行过或仍在执行。"),
     /** 已准入的调用执行失败（05 §93、§95）：调用记为 FAILED，调查继续，不是 500。 */
     CAPABILITY_INVOCATION_FAILED(ErrorCategory.DEPENDENCY_UNAVAILABLE, "能力调用失败。"),
+    /*
+     * 06 §35 统一 Provider 错误类型：只作为 capability_invocation.error_code 记录一次调用为什么失败（05 §95：调用 FAILED、调查继续），
+     * 不由公开 API 直接返回。
+     */
+    /** 无法连接 Provider（拒绝连接、无法解析主机等）。 */
+    CONNECTION_FAILED(ErrorCategory.DEPENDENCY_UNAVAILABLE, "无法连接数据源。"),
+    /** 在该能力的配置超时内没有完成（06 §46、§125）。 */
+    TIMEOUT(ErrorCategory.DEPENDENCY_TIMEOUT, "数据源响应超时。"),
+    AUTHENTICATION_FAILED(ErrorCategory.DEPENDENCY_UNAVAILABLE, "数据源拒绝了认证。"),
+    AUTHORIZATION_DENIED(ErrorCategory.DEPENDENCY_UNAVAILABLE, "数据源拒绝了该查询的权限。"),
+    /** 受信绑定或连接配置不可用于执行（如端点不合法、模板返回多条序列）；属配置问题，不是 AI 参数问题。 */
+    INVALID_BINDING(ErrorCategory.INTERNAL, "数据源绑定配置不可用。"),
+    /** Provider 拒绝了由受信模板生成的查询。 */
+    QUERY_REJECTED(ErrorCategory.DEPENDENCY_UNAVAILABLE, "数据源拒绝了该查询。"),
+    PROVIDER_RESPONSE_INVALID(ErrorCategory.DEPENDENCY_INVALID_RESPONSE, "数据源返回的内容无法识别。"),
+    /** 响应超过配置的大小上限，未读取完。 */
+    RESULT_TOO_LARGE(ErrorCategory.DEPENDENCY_INVALID_RESPONSE, "数据源返回的结果过大。"),
+    PROVIDER_UNAVAILABLE(ErrorCategory.DEPENDENCY_UNAVAILABLE, "数据源暂不可用。"),
     /** 调查阶段 AI 请求了不允许的意图（06 §103），如写能力。 */
     AI_INTENT_NOT_ALLOWED(ErrorCategory.RULE_VIOLATION, "当前阶段不允许该操作。"),
     /**

@@ -218,6 +218,32 @@ class InvestigationContextIntegrationTest {
         assertThat(codec.decode(json, InvestigationStepRequest.class)).isEqualTo(request);
     }
 
+    /**
+     * 08 TASK-053、06 §53/§122：每次 logs.search 至多 5 个模式进入 AI（按提取顺序即出现次数），被本轮 Evidence 引用的第 7 个仍进入；
+     * 另一次调用的模式按各自调用计数；其他类型的观测不受影响。
+     */
+    @Test
+    void eachLogSearchContributesAtMostTheTopPatterns() {
+        long incident = fixture.incidentId();
+        long investigation = fixture.investigationId();
+        List<Long> first = logPatterns(incident, investigation, "logs-a", 7);
+        List<Long> second = logPatterns(incident, investigation, "logs-b", 2);
+        long referenced = evidence(investigation, first.get(6), h1, "SUPPORTS", "第 7 个模式", NOW.minusSeconds(20));
+
+        InvestigationStepContext context = builder.build(incident, 2).orElseThrow();
+
+        List<Long> expected = new java.util.ArrayList<>(List.of(o1Frozen, o3Current));
+        expected.addAll(first.subList(0, 5));
+        expected.add(first.get(6));
+        expected.addAll(second);
+        assertThat(context.observations())
+                .extracting(InvestigationStepRequest.Observation::id)
+                .containsExactlyElementsOf(expected.stream().sorted().toList());
+        assertThat(context.evidence())
+                .extracting(InvestigationStepRequest.Evidence::id)
+                .contains(referenced);
+    }
+
     @Test
     void staleRunOrInactiveIncidentYieldsNoContext() {
         assertThat(builder.build(fixture.incidentId(), 1)).isEmpty();
@@ -270,6 +296,44 @@ class InvestigationContextIntegrationTest {
                 utc(at));
         return jdbc.queryForObject(
                 "SELECT id FROM observation WHERE capability_invocation_id = ?", Long.class, invocation);
+    }
+
+    /** 本轮一次 logs.search 调用及其按提取顺序插入的 {@code count} 条 LOG_PATTERN 观测。 */
+    private List<Long> logPatterns(long incident, long investigation, String name, int count) {
+        Instant at = NOW.minusSeconds(40);
+        jdbc.update(
+                "INSERT INTO capability_invocation (incident_id, investigation_id, run_no, capability_key,"
+                        + " managed_resource_id, status, request_schema_name, request_schema_version, request_payload,"
+                        + " response_schema_name, response_schema_version, response_payload, started_at, finished_at,"
+                        + " duration_ms, correlation_id, created_at, updated_at) VALUES (?, ?, 2, 'logs.search', ?,"
+                        + " 'SUCCEEDED', 'logs.search.request', 1, '{}', 'logs.search.result', 1, '{}', ?, ?, 5, ?, ?, ?)",
+                incident,
+                investigation,
+                consumer,
+                utc(at),
+                utc(at),
+                name,
+                utc(at),
+                utc(at));
+        long invocation =
+                jdbc.queryForObject("SELECT id FROM capability_invocation WHERE correlation_id = ?", Long.class, name);
+        List<Long> ids = new java.util.ArrayList<>();
+        for (int i = 1; i <= count; i++) {
+            jdbc.update(
+                    "INSERT INTO observation (incident_id, investigation_id, capability_invocation_id,"
+                            + " managed_resource_id, observation_kind, schema_name, schema_version, payload, summary,"
+                            + " observed_at, created_at) VALUES (?, ?, ?, ?, 'LOG_PATTERN', 'log-pattern.observation', 1,"
+                            + " '{}', ?, ?, ?)",
+                    incident,
+                    investigation,
+                    invocation,
+                    consumer,
+                    name + " 模式 " + i,
+                    utc(at),
+                    utc(at));
+            ids.add(jdbc.queryForObject("SELECT MAX(id) FROM observation", Long.class));
+        }
+        return ids;
     }
 
     private long evidence(

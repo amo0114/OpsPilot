@@ -118,18 +118,23 @@
     </select>
 
     <!-- 来源调用属于本轮，或被上下文 Evidence 引用；run 取自来源调用（04 §22） -->
+    <!-- 同一调用的 LOG_PATTERN 按 id（提取顺序，即出现次数降序）编号，只取前 maxLogPatterns 条进入 AI（06 §122）；被引用的除外 -->
     <select id="selectContextObservations" resultMap="observationRow">
-        SELECT o.id, ci.run_no, r.resource_key, o.observation_kind, o.summary, o.observed_at
-        FROM observation o
-        JOIN capability_invocation ci ON ci.id = o.capability_invocation_id
-        JOIN managed_resource r ON r.id = o.managed_resource_id
-        WHERE o.investigation_id = #{investigationId}
-          AND (ci.run_no = #{runNo}
-               <if test="!referenced.isEmpty()">
-                   OR o.id IN
-                   <foreach collection="referenced" item="id" open="(" separator="," close=")">#{id}</foreach>
-               </if>)
-        ORDER BY o.id
+        SELECT ranked.id, ranked.run_no, ranked.resource_key, ranked.observation_kind, ranked.summary, ranked.observed_at
+        FROM (SELECT o.id, ci.run_no, r.resource_key, o.observation_kind, o.summary, o.observed_at,
+                     ROW_NUMBER() OVER (PARTITION BY o.capability_invocation_id, o.observation_kind ORDER BY o.id)
+                         AS kind_rank
+              FROM observation o
+              JOIN capability_invocation ci ON ci.id = o.capability_invocation_id
+              JOIN managed_resource r ON r.id = o.managed_resource_id
+              WHERE o.investigation_id = #{investigationId}) ranked
+        WHERE (ranked.run_no = #{runNo}
+               AND (ranked.observation_kind &lt;&gt; 'LOG_PATTERN' OR ranked.kind_rank &lt;= #{maxLogPatterns}))
+              <if test="!referenced.isEmpty()">
+                  OR ranked.id IN
+                  <foreach collection="referenced" item="id" open="(" separator="," close=")">#{id}</foreach>
+              </if>
+        ORDER BY ranked.id
     </select>
 
     <select id="selectLatestDiagnosis" resultMap="diagnosisRow">

@@ -2,20 +2,20 @@
 
 更新时间：2026-09-29（本地）
 仓库/分支：/root/projects/OpsPilot-V0.1-IMPLEMENTATION，main；无 remote
-当前批次/状态：B15 DONE（代码 3ec7aea，B15-R3 PASS）；B16 未开始
-成员 Task 及顺序：B15 = TASK-049 → 050 → 051（均 DONE）；下一批 B16 = TASK-052 → 053
-固定 Base SHA：B15 为 0c0871dfcbb07001c4c8ad1730c53b9471da4e17；B16 开工时读取当时 HEAD
-批外前置核实：B16 开工时按 08 核对其成员的批外前置
-允许目录 / 明确不做 / 关键不变量：B16 开工时按 BATCH-PLAN 与 08 固定
-本批规格章节及 PROGRESS 记录：PROGRESS「B15」
-当前成员及位置：无进行中批次
-已实现并针对性验证的成员：B01～B15 全部，及 B13 前的独立修复
-未完成 / 未执行验证：Metrics/Logs Provider（TASK-052～053，下一批；须构造 *ResultV1 并经 ObserveResultPipeline、使用 AdmittedInvocation.window、自行约束超时、原始结果按行存放）；其余真实 Provider 与 Invoker（TASK-054～057）；执行服务接入调查循环与孤立 Invocation 补完（TASK-058）；AI Context 的日志模式条数裁剪（TASK-053/058）；恢复采样准入（TASK-078）；AgentStep 输出信封读取方（TASK-100 等）；真实 LLM 接入归属（TASK-058 前）；B15 真实进程冒烟 NOT RUN（无生产 Invoker）；观察项：surefire 退出等待、Hikari 连接已关闭告警、Fake runtime 偶发 AI_RUNTIME_UNAVAILABLE；其余见 PROGRESS 待处理问题；MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
-未提交文件（含既有无关修改）：无（本交接卡与 PROGRESS 回填随 docs(progress) 提交）
-共同验证及独立 Review 证据编号：B15-V1、B15-V2、B15-V3、B15-R1、B15-R2、B15-R3
+当前批次/状态：B16 REVIEW（B16-R2 PASS，待用户授权提交；未提交）
+成员 Task 及顺序：B16 = TASK-052 → 053
+固定 Base SHA：8535b08d781b62f1e369ef57afb8fa9fc34380dd
+批外前置核实：TASK-051 DONE（3ec7aea，B15-R3 PASS）
+允许目录 / 明确不做 / 关键不变量：见 PROGRESS「B16」（application capability/provider、investigation context；domain ErrorCode；infrastructure Prometheus/Loki Provider、配置、上下文查询；测试；docs/dev；不做 ShortLink 靶场、其余 Provider、调查循环接入、Migration）
+本批规格章节及 PROGRESS 记录：PROGRESS「B16」
+当前成员及位置：TASK-052～053 实现、修复与 B16-R2 独立复审完成，无提交前阻塞项；待授权提交
+已实现并针对性验证的成员：B01～B15 全部，及 B13 前的独立修复；B16 的 TASK-052～053（B16-R2 PASS，未提交，仍 REVIEW）
+未完成 / 未执行验证：B16 用户提交授权、提交及 SHA 回填；B16 真实进程冒烟 NOT RUN（调查循环未接入）；其余真实 Provider（TASK-054～057）；执行服务接入调查循环与孤立 Invocation 补完（TASK-058）；恢复采样准入（TASK-078）；AgentStep 输出信封读取方（TASK-100 等）；真实 LLM 接入归属（TASK-058 前）；ShortLink 真实导出校准（TASK-105/106）；观察项：surefire 退出等待、Hikari 连接已关闭告警、Fake runtime 偶发 AI_RUNTIME_UNAVAILABLE；其余见 PROGRESS 待处理问题；MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
+未提交文件（含既有无关修改）：开工时工作树干净；本批修改见 git status 与 PROGRESS「B16」修改文件
+共同验证及独立 Review 证据编号：B16-V1；B16-R1 NEEDS CHANGES（已修复）；B16-V2（clean verify exit 0）；B16-R2 PASS（独立专项 verify 92/92，含真实 Prometheus/Loki/MySQL）
 下一步具体动作：
-1. 等待用户指示开始 B16（TASK-052 → 053，Metrics / Logs Provider）
-2. 不推送
+1. 等待用户授权提交 B16（B16-R2 PASS，Base 仍为 8535b08）；不再修改已审源码
+2. 获授权后提交，回填真实 SHA 并将 B16 与两项成员一起标 DONE；不推送，不提前开始 B17
 
 本地启动 Demo 配置：在 OPSPILOT_DB_* 环境变量基础上加 --spring.profiles.active=demo
 

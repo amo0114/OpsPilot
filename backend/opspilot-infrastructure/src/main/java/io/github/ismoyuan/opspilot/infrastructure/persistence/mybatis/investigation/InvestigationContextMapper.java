@@ -29,7 +29,8 @@ interface InvestigationContextMapper {
     List<ObservationRow> selectContextObservations(
             @Param("investigationId") long investigationId,
             @Param("runNo") int runNo,
-            @Param("referenced") Collection<Long> referenced);
+            @Param("referenced") Collection<Long> referenced,
+            @Param("maxLogPatterns") int maxLogPatterns);
 
     DiagnosisRow selectLatestDiagnosis(@Param("investigationId") long investigationId);
 

@@ -81,8 +81,14 @@ class MyBatisInvestigationContextQuery implements InvestigationContextQuery {
 
     @Override
     public List<InvestigationStepRequest.Observation> findContextObservations(
-            long investigationId, int runNo, Collection<Long> referencedObservationIds) {
-        return mapper.selectContextObservations(investigationId, runNo, referencedObservationIds).stream()
+            long investigationId,
+            int runNo,
+            Collection<Long> referencedObservationIds,
+            int maxLogPatternsPerInvocation) {
+        return mapper
+                .selectContextObservations(
+                        investigationId, runNo, referencedObservationIds, maxLogPatternsPerInvocation)
+                .stream()
                 .map(o -> new InvestigationStepRequest.Observation(
                         o.id(),
                         o.runNo(),
