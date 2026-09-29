@@ -1,21 +1,22 @@
 # 当前工作
 
-更新时间：2026-09-28（本地）
+更新时间：2026-09-29（本地）
 仓库/分支：/root/projects/OpsPilot-V0.1-IMPLEMENTATION，main；无 remote
-当前批次/状态：B14 DONE（代码 d97c442，B14-R2 PASS）；B15 未开始
-成员 Task 及顺序：B14 = TASK-047 → 048（均 DONE）；下一批 B15 = TASK-049 → 051
-固定 Base SHA：B14 为 711c6db0384ce41206f02f871e3284034ccf0fa3；B15 开工时读取当时 HEAD
-批外前置核实：B15 开工时按 08 核对其成员的批外前置
-允许目录 / 明确不做 / 关键不变量：B15 开工时按 BATCH-PLAN 与 08 固定
-本批规格章节及 PROGRESS 记录：PROGRESS「B14」
-当前成员及位置：无进行中批次
-已实现并针对性验证的成员：B01～B14 全部，及 B13 前的独立修复
-未完成 / 未执行验证：Sanitizer/RawResultStore/Extractor（TASK-049～051，下一批）；真实 Provider 与 Invoker（TASK-052～057，须使用 AdmittedInvocation.window 并自行约束超时）；执行服务接入调查循环与孤立 Invocation 补完（TASK-058）；恢复采样准入（TASK-078）；AgentStep 输出信封读取方（TASK-100 等）；真实 LLM 接入归属（TASK-058 前）；观察项：surefire 退出等待、Hikari 连接已关闭告警、Fake runtime 偶发 AI_RUNTIME_UNAVAILABLE；其余见 PROGRESS 待处理问题；MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
-未提交文件（含既有无关修改）：无（本交接卡与 PROGRESS 回填随 docs(progress) 提交）
-共同验证及独立 Review 证据编号：B14-V1、B14-V2、B14-R1、B14-R2
+当前批次/状态：B15 REVIEW（B15-R3 PASS，待用户授权提交；未提交）
+成员 Task 及顺序：B15 = TASK-049 → 050 → 051
+固定 Base SHA：0c0871dfcbb07001c4c8ad1730c53b9471da4e17
+批外前置核实：TASK-048 DONE（d97c442，B14-R2 PASS）
+允许目录 / 明确不做 / 关键不变量：见 PROGRESS「B15」（application capability/observation/schema、infrastructure raw 存储/配置/Codec、boot 配置、测试、docs/dev；不做真实 Provider、Invoker 生产实现、调查循环接入、Migration）
+本批规格章节及 PROGRESS 记录：PROGRESS「B15」
+当前成员及位置：TASK-049～051 实现、修复与 B15-R3 独立复审完成，无提交前阻塞项；待授权提交
+已实现并针对性验证的成员：B01～B14 全部，及 B13 前的独立修复；B15 的 TASK-049～051（B15-R3 PASS，未提交，仍 REVIEW）
+未完成 / 未执行验证：B15 用户提交授权、提交及 SHA 回填；B15 真实进程冒烟 NOT RUN（无生产 Invoker）；真实 Provider 与 Invoker（TASK-052～057，须使用 AdmittedInvocation.window 并自行约束超时）；执行服务接入调查循环与孤立 Invocation 补完（TASK-058）；恢复采样准入（TASK-078）；AgentStep 输出信封读取方（TASK-100 等）；真实 LLM 接入归属（TASK-058 前）；观察项：surefire 退出等待、Hikari 连接已关闭告警、Fake runtime 偶发 AI_RUNTIME_UNAVAILABLE；其余见 PROGRESS 待处理问题；MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
+未提交文件（含既有无关修改）：开工时工作树干净；本批修改见 git status 与 PROGRESS「B15」修改文件
+共同验证及独立 Review 证据编号：B15-V1；B15-R1、B15-R2（均 NEEDS CHANGES，已修复）；B15-V2、B15-V3（clean verify exit 0）；B15-R3 PASS（独立专项 verify 103/103，含真实 MySQL）
 下一步具体动作：
-1. 等待用户指示开始 B15（TASK-049 → 051，脱敏、原始结果保存与确定性提取）
-2. 不推送
+1. 等待用户授权提交 B15（B15-R3 PASS，Base 仍为 0c0871d）；不再修改已审源码
+2. 获授权后提交，回填真实 SHA 并将 B15 与三项成员一起标 DONE；不推送，不提前开始 B16
+
 本地启动 Demo 配置：在 OPSPILOT_DB_* 环境变量基础上加 --spring.profiles.active=demo
 
 后续 UI 约定（TASK-096/099 实施）：

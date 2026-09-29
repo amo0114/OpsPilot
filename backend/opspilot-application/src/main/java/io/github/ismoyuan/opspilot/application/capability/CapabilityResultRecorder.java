@@ -1,5 +1,6 @@
 package io.github.ismoyuan.opspilot.application.capability;
 
+import io.github.ismoyuan.opspilot.application.capability.sanitize.Sanitizer;
 import io.github.ismoyuan.opspilot.application.observation.ObservationRepository;
 import io.github.ismoyuan.opspilot.domain.error.ErrorCode;
 import io.github.ismoyuan.opspilot.domain.observation.NewObservation;
@@ -18,6 +19,9 @@ import org.springframework.transaction.support.TransactionTemplate;
  * Invocation 结果短事务（08 TASK-048、04 §18、06 §33）：锁定该 Invocation，只从 RUNNING 条件更新；成功才写入响应并以其上下文产生
  * Observation（调用失败不产生 Observation，CAP-INV-006），失败只记错误。不再改预算，也不看当前 run——旧 run 在途调用的真实结果照常写回
  * 原 Invocation，Observation 归属原调用，不改变新 run 的控制与计数（01 §11）。已不是 RUNNING（如已被中断标记）时不覆盖。
+ *
+ * <p>失败文案是 error_message 的唯一写入口，落账前再经 {@link Sanitizer}（06 §33 保存脱敏错误），Provider 带出的片段也不会留下凭据。
+ * 成功结果在交给本类之前已由结果管线脱敏（TASK-049～051）。
  */
 @Service
 public class CapabilityResultRecorder {
@@ -27,16 +31,19 @@ public class CapabilityResultRecorder {
 
     private final CapabilityInvocationRepository invocations;
     private final ObservationRepository observations;
+    private final Sanitizer sanitizer;
     private final TransactionTemplate transaction;
     private final Clock clock;
 
     public CapabilityResultRecorder(
             CapabilityInvocationRepository invocations,
             ObservationRepository observations,
+            Sanitizer sanitizer,
             PlatformTransactionManager transactionManager,
             Clock clock) {
         this.invocations = invocations;
         this.observations = observations;
+        this.sanitizer = sanitizer;
         this.transaction = new TransactionTemplate(transactionManager);
         this.clock = clock;
     }
@@ -84,9 +91,10 @@ public class CapabilityResultRecorder {
 
     /** @return 是否由本次记为 FAILED；已不是 RUNNING 时不写 */
     public boolean recordFailed(long invocationId, ErrorCode errorCode, String safeMessage) {
-        String message = safeMessage.codePointCount(0, safeMessage.length()) > MESSAGE_MAX
-                ? safeMessage.substring(0, safeMessage.offsetByCodePoints(0, MESSAGE_MAX))
-                : safeMessage;
+        String sanitized = sanitizer.sanitize(safeMessage);
+        String message = sanitized.codePointCount(0, sanitized.length()) > MESSAGE_MAX
+                ? sanitized.substring(0, sanitized.offsetByCodePoints(0, MESSAGE_MAX))
+                : sanitized;
         return transaction.execute(status -> {
             Optional<InvocationRecord> running = lockRunning(invocationId);
             if (running.isEmpty()) {

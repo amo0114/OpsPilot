@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.ismoyuan.opspilot.application.ClockConfiguration;
 import io.github.ismoyuan.opspilot.application.ai.protocol.v1.CacheInspectArgumentsV1;
+import io.github.ismoyuan.opspilot.application.ai.protocol.v1.LogSeverity;
+import io.github.ismoyuan.opspilot.application.ai.protocol.v1.LogsSearchArgumentsV1;
 import io.github.ismoyuan.opspilot.application.ai.protocol.v1.MetricsQueryArgumentsV1;
 import io.github.ismoyuan.opspilot.application.ai.protocol.v1.QueueInspectArgumentsV1;
 import io.github.ismoyuan.opspilot.application.ai.protocol.v1.RequestCapability;
@@ -21,11 +23,23 @@ import io.github.ismoyuan.opspilot.application.capability.CapabilityResultRecord
 import io.github.ismoyuan.opspilot.application.capability.DuplicateGuard;
 import io.github.ismoyuan.opspilot.application.capability.InvocationOutcome;
 import io.github.ismoyuan.opspilot.application.capability.ObservationDraft;
+import io.github.ismoyuan.opspilot.application.capability.ObserveResultPipeline;
+import io.github.ismoyuan.opspilot.application.capability.extract.ObservationExtractor;
+import io.github.ismoyuan.opspilot.application.capability.raw.RawResultStore;
+import io.github.ismoyuan.opspilot.application.capability.result.LogsSearchResultV1;
+import io.github.ismoyuan.opspilot.application.capability.sanitize.Sanitizer;
 import io.github.ismoyuan.opspilot.application.investigation.recovery.InvestigationInterruptionRecorder;
+import io.github.ismoyuan.opspilot.application.schema.SchemaCodecRegistry;
 import io.github.ismoyuan.opspilot.domain.capability.CapabilitySchema;
 import io.github.ismoyuan.opspilot.domain.error.ErrorCode;
 import io.github.ismoyuan.opspilot.domain.investigation.StepAdmissionRejection;
 import io.github.ismoyuan.opspilot.domain.observation.ObservationKind;
+import io.github.ismoyuan.opspilot.infrastructure.capability.CapabilityResultSamples;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -33,6 +47,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,13 +60,15 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.util.FileSystemUtils;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mysql.MySQLContainer;
 
 /**
- * 真实 MySQL 上的调查 OBSERVE 调用：唯一规范 JSON 与 Duplicate Guard（08 TASK-047）、原子准入与结果落账骨架（08 TASK-048）。
- * CapabilityInvoker 为测试替身（真实 Provider 链路属 TASK-049～057）；它被调用时断言不在任何数据库事务内。
+ * 真实 MySQL 上的调查 OBSERVE 调用：唯一规范 JSON 与 Duplicate Guard（08 TASK-047）、原子准入与结果落账骨架（08 TASK-048）、
+ * 结果管线 Sanitizer → RawResultStore → ObservationExtractor（08 TASK-049～051）。CapabilityInvoker 为测试替身（真实 Provider 属
+ * TASK-052～057）；它被调用时断言不在任何数据库事务内。
  */
 @SpringBootTest
 @Testcontainers
@@ -62,6 +79,9 @@ import org.testcontainers.mysql.MySQLContainer;
     DuplicateGuard.class,
     CapabilityResultRecorder.class,
     CapabilityExecutionService.class,
+    Sanitizer.class,
+    ObservationExtractor.class,
+    ObserveResultPipeline.class,
     InvestigationInterruptionRecorder.class,
     ClockConfiguration.class,
     CapabilityExecutionIntegrationTest.ScriptedInvoker.class
@@ -71,11 +91,19 @@ class CapabilityExecutionIntegrationTest {
     @Container
     static final MySQLContainer MYSQL = new MySQLContainer("mysql:8.4.11");
 
+    static final Path RAW_RESULTS = createTempDirectory();
+
+    @AfterAll
+    static void removeRawResults() throws IOException {
+        FileSystemUtils.deleteRecursively(RAW_RESULTS);
+    }
+
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry registry) {
         registry.add("spring.datasource.url", MYSQL::getJdbcUrl);
         registry.add("spring.datasource.username", MYSQL::getUsername);
         registry.add("spring.datasource.password", MYSQL::getPassword);
+        registry.add("opspilot.capability.raw-result-directory", RAW_RESULTS::toString);
     }
 
     static final AtomicReference<Function<AdmittedInvocation, InvocationOutcome>> BEHAVIOR = new AtomicReference<>();
@@ -103,6 +131,15 @@ class CapabilityExecutionIntegrationTest {
 
     @Autowired
     InvestigationInterruptionRecorder interruptions;
+
+    @Autowired
+    ObserveResultPipeline pipeline;
+
+    @Autowired
+    RawResultStore rawResults;
+
+    @Autowired
+    SchemaCodecRegistry codecs;
 
     @Autowired
     JdbcTemplate jdbc;
@@ -442,6 +479,116 @@ class CapabilityExecutionIntegrationTest {
                 .isZero();
     }
 
+    // ---------------------------------------------------------------- TASK-049～051 结果管线
+
+    /**
+     * 含凭据的 Provider 结果经管线与结果事务落账：response_payload、原始结果文件、Observation 都没有凭据；每个日志模式一条 Observation，
+     * 均继承来源调用的 Incident、调查与资源；原始结果引用满足 V003 CHECK 并可读回。
+     */
+    @Test
+    void providerResultsAreSanitizedStoredAndExtractedBeforePersistence() {
+        bind(
+                service,
+                connection("loki-local", "LOKI"),
+                "loki.resource.binding",
+                "{\"labels\": {\"app\": \"shortlink\"}}");
+        capability(service, "logs.search");
+        // 按行存放的原始 JSON；头部规则遮盖到行尾，嵌套 JSON 中的密码放在单独一行以验证转义处理
+        String raw = "{\"lines\": [\n\"Redis command timed out after 2000 ms password=hunter2\",\n"
+                + "\"{\\\"password\\\":\\\"nested-pw\\\"}\",\n"
+                + "\"GET /s/Ab3x Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.e30.sig\"\n]}";
+        BEHAVIOR.set(invocation -> pipeline.succeeded(
+                invocation.definition(),
+                invocation.incidentId(),
+                invocation.invocationId(),
+                CapabilityResultSamples.logs(),
+                raw,
+                invocation.startedAt()));
+
+        CapabilityExecutionResult result = execution.execute(
+                incident,
+                1,
+                new RequestCapability.LogsSearch(
+                        service,
+                        new LogsSearchArgumentsV1(
+                                WindowKey.LAST_15_MIN, List.of(LogSeverity.ERROR), List.of("timeout")),
+                        "确认 Redis 超时日志"));
+
+        assertThat(result).isInstanceOf(CapabilityExecutionResult.Succeeded.class);
+        CapabilityExecutionResult.Succeeded succeeded = (CapabilityExecutionResult.Succeeded) result;
+        long id = succeeded.invocationId();
+        assertThat(succeeded.observationIds()).hasSize(2);
+        Map<String, Object> call = jdbc.queryForMap(
+                "SELECT status, response_schema_name, CAST(response_payload AS CHAR) AS payload, raw_result_ref"
+                        + " FROM capability_invocation WHERE id = ?",
+                id);
+        assertThat(call)
+                .containsEntry("status", "SUCCEEDED")
+                .containsEntry("response_schema_name", "logs.search.result");
+        String payload = (String) call.get("payload");
+        assertThat(payload).contains("[REDACTED]").doesNotContain("hunter2").doesNotContain("eyJ");
+        assertThat(codecs.decode("logs.search.result", 1, payload, LogsSearchResultV1.class)
+                        .patterns()
+                        .getFirst()
+                        .samples())
+                .containsExactly(
+                        "Redis command timed out after 2000 ms password=[REDACTED]",
+                        "GET /s/Ab3x Authorization: [REDACTED]");
+        String ref = (String) call.get("raw_result_ref");
+        assertThat(Path.of(URI.create(ref))).startsWith(RAW_RESULTS);
+        assertThat(rawResults.read(ref))
+                .contains("password=[REDACTED]", "Authorization: [REDACTED]", "{\\\"password\\\":\\\"[REDACTED]\\\"}")
+                .doesNotContain("nested-pw")
+                .doesNotContain("hunter2")
+                .doesNotContain("eyJ");
+        List<Map<String, Object>> observations = jdbc.queryForList(
+                "SELECT CAST(incident_id AS SIGNED) AS incident, CAST(investigation_id AS SIGNED) AS investigation,"
+                        + " CAST(managed_resource_id AS SIGNED) AS resource, observation_kind, schema_name, summary,"
+                        + " CAST(payload AS CHAR) AS payload FROM observation WHERE capability_invocation_id = ? ORDER BY id",
+                id);
+        assertThat(observations).hasSize(2).allSatisfy(row -> {
+            assertThat(row)
+                    .containsEntry("incident", incident)
+                    .containsEntry("investigation", fixture.investigationId())
+                    .containsEntry("resource", service)
+                    .containsEntry("observation_kind", "LOG_PATTERN")
+                    .containsEntry("schema_name", "log-pattern.observation");
+            assertThat(row.get("summary") + " " + row.get("payload"))
+                    .doesNotContain("hunter2")
+                    .doesNotContain("eyJ");
+        });
+        assertThat((String) observations.getFirst().get("summary")).contains("出现 147 次");
+    }
+
+    /** Provider 失败文案落账前脱敏；结果与能力不符时整次调用失败，不产生 Observation，也不留下原始结果文件。 */
+    @Test
+    void failureMessagesAreSanitizedAndMismatchedResultsFailTheCall() {
+        BEHAVIOR.set(invocation -> new InvocationOutcome.Failed(
+                ErrorCode.CAPABILITY_INVOCATION_FAILED,
+                "connect jdbc:mysql://ro:db-pass@mysql:3306/x failed, Authorization: Bearer abc"));
+        execution.execute(incident, 1, metrics("http.request.latency.p99", WindowKey.LAST_15_MIN, false));
+        BEHAVIOR.set(invocation -> pipeline.succeeded(
+                invocation.definition(),
+                invocation.incidentId(),
+                invocation.invocationId(),
+                CapabilityResultSamples.cache(),
+                "raw password=x",
+                invocation.startedAt()));
+        CapabilityExecutionResult mismatched =
+                execution.execute(incident, 1, metrics("http.request.rate", WindowKey.LAST_15_MIN, false));
+
+        assertThat(mismatched).isInstanceOf(CapabilityExecutionResult.Failed.class);
+        assertThat(jdbc.queryForList(
+                        "SELECT CONCAT(status, '/', error_message) FROM capability_invocation ORDER BY id",
+                        String.class))
+                .containsExactly(
+                        "FAILED/connect jdbc:mysql://ro:[REDACTED]@mysql:3306/x failed, Authorization: [REDACTED]",
+                        "FAILED/Capability invocation failed unexpectedly");
+        assertThat(count("observation WHERE capability_invocation_id IN (SELECT id FROM capability_invocation)"))
+                .isZero();
+        assertThat(RAW_RESULTS.resolve("incident-" + incident)).doesNotExist();
+    }
+
     /** 没有 CapabilityInvoker 时拒绝执行且不做准入：不建调用、不扣预算（真实 Invoker 属 TASK-049～057）。 */
     @Test
     void withoutAnInvokerNothingIsAdmitted() {
@@ -456,6 +603,14 @@ class CapabilityExecutionIntegrationTest {
     }
 
     // ---------------------------------------------------------------- helpers
+
+    private static Path createTempDirectory() {
+        try {
+            return Files.createTempDirectory("opspilot-raw-results").toRealPath();
+        } catch (IOException ex) {
+            throw new UncheckedIOException(ex);
+        }
+    }
 
     private RequestCapability metrics(String metricKey, WindowKey window, boolean compare) {
         return new RequestCapability.MetricsQuery(
