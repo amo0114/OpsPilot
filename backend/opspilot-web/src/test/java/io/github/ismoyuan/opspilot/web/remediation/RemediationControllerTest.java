@@ -199,6 +199,7 @@ class RemediationControllerTest {
     @ParameterizedTest
     @CsvSource({
         "approve, RECOVERY_POLICY_NOT_FOUND, 422",
+        "approve, RECOVERY_POLICY_AMBIGUOUS, 422",
         "approve, REMEDIATION_PLAN_SUPERSEDED, 409",
         "cancel, APPROVAL_ALREADY_DECIDED, 409",
         "reject, APPROVAL_VERSION_CONFLICT, 409",

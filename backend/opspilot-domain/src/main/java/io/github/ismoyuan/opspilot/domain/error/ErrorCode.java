@@ -71,6 +71,8 @@ public enum ErrorCode {
     REMEDIATION_ACTION_NOT_EXECUTABLE(ErrorCategory.RULE_VIOLATION, "该处理动作当前不可执行。"),
     /** 目标资源没有唯一合法的 ACTIVE RecoveryPolicy，写操作前拒绝准入（01 §24、05 §38）。 */
     RECOVERY_POLICY_NOT_FOUND(ErrorCategory.RULE_VIOLATION, "目标组件没有可用的恢复验证策略。"),
+    /** 目标资源存在多条 ACTIVE RecoveryPolicy，不猜测选择，写操作前拒绝准入（04 §49、05 Recovery 错误码）。 */
+    RECOVERY_POLICY_AMBIGUOUS(ErrorCategory.RULE_VIOLATION, "目标组件的恢复验证策略不唯一，无法确定使用哪一个。"),
     /** 调查阶段 AI 请求了不允许的意图（06 §103），如写能力。 */
     AI_INTENT_NOT_ALLOWED(ErrorCategory.RULE_VIOLATION, "当前阶段不允许该操作。"),
     /**

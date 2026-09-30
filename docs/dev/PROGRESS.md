@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-30（B23 DONE，commit e9d32c6；B24 未开始）
+> 最近更新：2026-09-30（B24 REVIEW，Base bdfbaac；B24-V1 exit 0，B24-R1 PASS，待提交，未提交）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -74,7 +74,7 @@
 | TASK-064 | B20 | Remediation Proposal 校验 | DONE | commit a25d1b9（B20，Base 1175caa） | B20-V1 verify exit 0＋RemediationDraftIntegrationTest（校验与 Java 策略）；真实模型建议经 Java 校验得 MEDIUM/true；B20-R1 PASS，待提交 |
 | TASK-065 | B21 | request-remediation | DONE | commit ef115c8（B21，Base 0edfb87） | B21-V1 verify exit 0＋RemediationApprovalIntegrationTest（创建与回滚）、RemediationControllerTest；B21-R1 PASS，待提交 |
 | TASK-066 | B21 | Approval API | DONE | commit ef115c8（B21，Base 0edfb87） | B21-V1 verify exit 0＋RemediationApprovalIntegrationTest（查询/拒绝/撤回/批准复核/并发）、RemediationControllerTest；批准成功路径属 TASK-069；B21-R1 PASS，待提交 |
-| TASK-067 | B24 | Approval 并发与历史方案保护 | TODO | — | NOT RUN |
+| TASK-067 | B24 | Approval 并发与历史方案保护 | REVIEW | 未提交（B24，Base bdfbaac）：策略选择、批准锁前快照修复与策略复核、RECOVERY_POLICY_AMBIGUOUS | B24-V1 verify exit 0＋RemediationApprovalIntegrationTest 13/13（真实 MySQL，含锁等待交错与并发）、RemediationControllerTest 16/16＋变异 3 项；B24-R1 PASS，待提交 |
 | TASK-068 | B22 | ActionExecution 数据结构 | DONE | commit 1a655fd（B22，Base 423baf7） | B22-V1 verify exit 0＋ActionExecutionSchemaTest 33/33（真实 MySQL）＋变异 2 项；B22-R1 PASS |
 | TASK-069 | B25 | Approve → Execution | TODO | — | NOT RUN |
 | TASK-070 | B26 | Docker service.restart Executor | TODO | — | NOT RUN |
@@ -870,6 +870,31 @@
 - 修改文件：新增 application/recovery/{CriterionResult,RecoveryChecks,RecoveryCriterionV1,RecoveryField,RecoveryPolicyActivationService,RecoveryPolicyCriteriaV1,RecoveryPolicyRecord,RecoveryPolicyRepository,RecoveryPolicyValidator,RecoveryPredicateV1,RecoverySamplingV1}、application/system/query/ActiveRecoveryPolicyProjection、infrastructure/persistence/mybatis/recovery/{MyBatisRecoveryPolicies,RecoveryPolicyMapper}＋RecoveryPolicyMapper.xml、测试 infrastructure/recovery/RecoveryPolicyActivationIntegrationTest、infrastructure/schema/RecoveryPolicyCriteriaCodecTest；修改 application/system/query/{ResourceCapabilityProjection,ResourceDetailView,SystemQueryService}、infrastructure/persistence/mybatis/system/{MyBatisSystemQueryRepository,SystemQueryMapper}＋SystemQueryMapper.xml、infrastructure/schema/JacksonSchemaCodecRegistry、db/demo/R__shortlink_demo_seed.sql，测试 ShortLinkDemoSeedTest、MyBatisSystemQueryRepositoryTest、web SystemControllerTest；docs/dev。Migration：无（沿用 V006）；新增依赖：无；新增错误码：无
 - 提交：代码提交 e9d32c62fbbdadff4d3f9ab1e37ab0f00e779f48（feat(recovery): recovery policy criteria codec, activation and S3 seed (TASK-075–076)）；SHA 回填为后续 docs 提交；未推送；范围外问题：无新增
 
+### B24 — 审批并发、过期计划与策略准入
+
+- 状态：REVIEW（实现与针对性验证完成，B24-V1 exit 0；B24-R1 PASS，未提交）
+- 成员及顺序：TASK-067；批外前置：TASK-066 DONE（ef115c8）、TASK-068/074 DONE（1a655fd）、TASK-075/076 DONE（e9d32c6）
+- Base SHA：bdfbaac0d8a57bd40e454b4a9f338b91eb8957f0
+- 范围：domain ErrorCode 增加 05 已列的 RECOVERY_POLICY_AMBIGUOUS；application/recovery 选择目标资源唯一合法 ACTIVE 策略（0 条 NOT_FOUND、多条 AMBIGUOUS、1 条则按正式 Codec 解码并以 RecoveryPolicyValidator 复核类型/目标/采样与当前绑定，不合法视为没有可用策略）；ApprovalApplicationService：B21-R1 提示的一致性读快照问题（Approval 所属 Incident 的无锁查询移到事务之外，事务内首先取 Incident → Approval 行锁，之后的复核读取锁后的最新数据）、批准复核加入策略选择；审批并发（批准与拒绝/撤回并发只有一个决定生效）与经真实 request-remediation 产生方案的取消联动端到端断言（回填 TASK-019/026 相关待处理行）；测试；docs/dev。明确不做：批准成功路径——PENDING → APPROVED、冻结快照写入、创建 ActionExecution、→ EXECUTING、幂等键、202 响应（TASK-069）；执行 Worker（070～）；API 结构变化；新迁移、新依赖
+- 本批决定（TASK-069 前的过渡行为）：批准全部复核（含唯一合法策略）通过后仍不写入任何数据，以 REMEDIATION_ACTION_NOT_EXECUTABLE（reason=EXECUTION_NOT_AVAILABLE）拒绝——策略存在时继续返回 RECOVERY_POLICY_NOT_FOUND 不再真实；TASK-069 接通成功路径时删除该分支
+- 规格：08 TASK-067（及 TASK-066/069 分阶段边界）；04 §44、§49、§52、§78；05 §37～§43、Recovery 错误码；01 §22～§25、§30；03 §50
+- 关键不变量：锁序 Incident → Approval；复核读取锁后数据；Approval 只从 PENDING 前进且并发只有一个决定生效；旧 Diagnosis 的方案不可执行；无策略或多策略在任何外部副作用前拒绝、Approval 保持 PENDING、Incident 保持 AWAITING_APPROVAL；不以半套 APPROVED 冒充成功；取消等待审批的 Incident 同事务撤回 Approval 与 Plan
+- 验证要求：真实 MySQL 集成（策略 0/多/不合法/合法四种批准复核不写入；锁前快照的确定性交错用例；批准与拒绝并发；真实请求产生方案后取消 Incident 联动）；批尾 backend `./mvnw -B clean verify`
+- 开工已有修改：无（工作树干净）
+- 成员进度：
+  - TASK-067：ErrorCode 增加 RECOVERY_POLICY_AMBIGUOUS（RULE_VIOLATION → 422，05 已列）。RecoveryPolicySelector.select(target)：目标资源 ACTIVE 策略 0 条 → RECOVERY_POLICY_NOT_FOUND（reason=NO_ACTIVE_POLICY）；多条 → RECOVERY_POLICY_AMBIGUOUS（activeCount）；1 条 → 正式 Codec 解码（类型/谓词字段/采样结构）并以 RecoveryPolicyValidator 按此刻配置复核目标与绑定，不合格 → RECOVERY_POLICY_NOT_FOUND（reason=POLICY_NOT_EXECUTABLE，policyId、check=校验拒绝码、checkReason、criterionKey）；返回策略行与已解码 Criteria 供 TASK-069 冻结快照。ApprovalApplicationService：Approval 所属 Incident 的无锁查询移到决定事务之外，事务内首先取 Incident → Approval 行锁，之后 Diagnosis/资源/绑定/策略复核读取锁后的数据（关闭 B21-R1 提示）；批准在方案与动作复核之后选择策略；全部通过时仍不写入，以 REMEDIATION_ACTION_NOT_EXECUTABLE（reason=EXECUTION_NOT_AVAILABLE）拒绝（本批过渡决定，TASK-069 删除）。拒绝/撤回沿用同一锁序修复
+  - 已有并复核的部分（B20/B21 实现，本批不改）：Incident/Approval 版本、最新 Diagnosis 与 ACTIVE Plan、资源归属与 CHANGE 绑定、取消等待审批的 Incident 同事务撤回 Approval 与 Plan
+- 针对性验证（backend/，真实 MySQL mysql:8.4.11）：`./mvnw -B test -pl opspilot-infrastructure,opspilot-web -am -Dtest='RemediationApprovalIntegrationTest,RemediationControllerTest' -Dsurefire.failIfNoSpecifiedTests=false` → exit 0，infrastructure 13＋web 16，0 失败。新增：approvalSelectsTheSingleLegalRecoveryPolicyBeforeAnyWrite（无策略 NO_ACTIVE_POLICY；激活合法策略后 EXECUTION_NOT_AVAILABLE；停用判据所需 service.inspect 绑定 → POLICY_NOT_EXECUTABLE/CAPABILITY_NOT_BOUND/consumer-running；第二条 ACTIVE → AMBIGUOUS；全程 Approval PENDING、Plan ACTIVE、Incident AWAITING_APPROVAL v8、无 action_execution）；approvalRechecksDataCommittedWhileWaitingForTheIncidentLock（另一连接持 Incident 行锁，root 连接查 information_schema.innodb_trx 确认批准处于 LOCK WAIT 后停用绑定并提交、再释放锁 → 批准读到停用得 RECOVERY_POLICY_NOT_FOUND）；concurrentApproveAndRejectDecideExactlyOnce（拒绝落账一次，批准为 EXECUTION_NOT_AVAILABLE/已决定/版本冲突之一，无 Execution）；cancellingAnIncidentAwaitingApprovalWithdrawsTheRealPlan。Web 增加 AMBIGUOUS → 422。实施中发现并修正：Selector 合并校验 details 时覆盖了 reason，改为 check/checkReason 独立字段（由上述用例发现）
+- 变异检查（均已还原，cmp 确认）：把 Incident 查询移回事务内（恢复锁前快照）→ approvalRechecksDataCommitted… 失败（确认 B21-R1 所述问题真实存在且已修复）；去掉策略选择 → 3 个用例失败；多条 ACTIVE 时取第一条 → approvalSelects… 失败
+- B24-V1（最终代码树，本机实测）：backend/；`./mvnw -B clean verify`；2026-09-30 08:55:12～09:06:23 UTC，JDK 21＋Docker（Testcontainers mysql:8.4.11 等）；exit 0；Enforcer 与 Spotless check 各模块通过；domain 41、infrastructure 778（B23-V2 774＋4）、web 38（＋1）、boot 6，均 0 失败 0 跳过；`git diff --check` 通过。日志（会话临时目录）b24-v1.log
+- 专项证据/NOT RUN：批准成功路径、快照冻结、Execution 创建与派发 NOT RUN（TASK-069）；ai-runtime、真实 LLM、S1～S3 NOT RUN；CCG 门禁 NOT RUN（工具缺失）
+- B24-R1 独立 Review：PASS（2026-09-30）。范围：固定 Base `bdfbaac0d8a57bd40e454b4a9f338b91eb8957f0` 至当前工作树全部变化，包括未跟踪的 `RecoveryPolicySelector.java`；主审直接完成审查，未发现阻断问题。
+  - 核对：Approval→Incident 不可变关系在决定事务外读取，事务内先锁 Incident 再锁 Approval，首次一致性读发生在两者之后；版本、最新 Diagnosis、ACTIVE Plan 与 CHANGE 可执行性检查保留。Selector 先判 ACTIVE 数量，再以严格 Codec 与现有 Validator 校验唯一策略；NO_ACTIVE_POLICY / POLICY_NOT_EXECUTABLE / AMBIGUOUS 区分正确，checkReason 不覆盖顶层 reason。合法策略下仍抛 EXECUTION_NOT_AVAILABLE 且无写入，符合 TASK-066/069 分阶段边界；本次 PASS 不代表批准成功路径或执行快照已交付。
+  - 本轮实际运行：backend/ `./mvnw -B test -pl opspilot-infrastructure,opspilot-web -am -Dtest=RemediationApprovalIntegrationTest,RemediationControllerTest -Dsurefire.failIfNoSpecifiedTests=false`，exit 0；真实 MySQL 集成 13、Web 16，共 29 tests，0 失败/错误/跳过。包含锁等待期间配置提交、策略准入各分支、批准与拒绝并发、真实方案的 Incident 取消联动；日志 `/tmp/b24-r1-tests.log`。`git diff --check` 通过。
+  - 完整 clean verify 本轮 NOT RUN，沿用实施方 B24-V1；批准成功路径/快照冻结/Execution 创建、ai-runtime、真实 LLM、S1～S3、CCG NOT RUN。未修改实现代码、未提交、未推送；保持 REVIEW，提交并回填真实 SHA 后再 DONE。
+- 修改文件：新增 application/recovery/RecoveryPolicySelector；修改 domain/error/ErrorCode、application/approval/ApprovalApplicationService，测试 infrastructure investigation/RemediationApprovalIntegrationTest、web remediation/RemediationControllerTest；docs/dev。Migration：无；新增依赖：无
+- 提交：未提交（B24-R1 PASS，待用户提交）；范围外问题：无新增
+
 ### TASK-039 修复 — 准入 step_no 分配并发死锁（B12-R1/R2 约定）
 
 - 状态：DONE（Review PASS，已提交 30aea1f）
@@ -1028,7 +1053,7 @@
 | resumeInvestigation 为私有，只服务 Start/Continue；VerificationFailed → INVESTIGATING（新 run）尚未接入 | InvestigationApplicationService | 在同一方法增加 VERIFICATION_FAILED 来源，由验证结果事务调用；不开放给启动恢复 | TASK-082 |
 | Start/Continue 的派发用 afterCommit 同步注册：外层事务存在时派发推迟到外层提交；派发异常只记录（事实已提交，由补派发恢复） | InvestigationApplicationService.dispatchAfterCommit | TASK-035 补派发与启动扫描覆盖“已提交但未唤醒”的 run | TASK-035/043 |
 | INVESTIGATION_STARTED 同时用于 Start 与 Continue，以载荷 source（START_INVESTIGATION/CONTINUE_INVESTIGATION）、previousRunNo、runNo、本轮额度区分；发起方均为 USER | domain/timeline/InvestigationStartedPayloadV1 | 01 §35 只列 INVESTIGATION_STARTED；TASK-082 的 VerificationFailed 来源用同一事件、发起方 SYSTEM | TASK-082 |
-| （实现已替换，B20/TASK-062：MyBatisRemediationRecords 同事务撤回 PENDING Approval 与 ACTIVE Plan，以播种数据集成验证；经真实 request-remediation 产生的方案的端到端验证仍属 TASK-067）取消 AWAITING_APPROVAL 的 Incident 目前经 UnavailablePendingApprovalCanceller 故意失败并回滚（审批/方案表未建，当前无用例能进入该状态） | infrastructure/approval/UnavailablePendingApprovalCanceller | TASK-062/066 建表后以真实实现替换：同一事务把 PENDING Approval 与未执行 Plan 置 CANCELLED；TASK-067 补真实 Plan/Approval 集成验证 | TASK-062/066/067 |
+| （已关闭，B24/TASK-067：cancellingAnIncidentAwaitingApprovalWithdrawsTheRealPlan 以真实 request-remediation 产生的方案验证取消 Incident 同事务撤回 Approval 与 Plan，之后不能再作决定。原记录：实现已替换，B20/TASK-062：MyBatisRemediationRecords 同事务撤回 PENDING Approval 与 ACTIVE Plan，以播种数据集成验证；经真实 request-remediation 产生的方案的端到端验证仍属 TASK-067）取消 AWAITING_APPROVAL 的 Incident 目前经 UnavailablePendingApprovalCanceller 故意失败并回滚（审批/方案表未建，当前无用例能进入该状态） | infrastructure/approval/UnavailablePendingApprovalCanceller | TASK-062/066 建表后以真实实现替换：同一事务把 PENDING Approval 与未执行 Plan 置 CANCELLED；TASK-067 补真实 Plan/Approval 集成验证 | TASK-062/066/067 |
 | Stop 只落账停止意图，不唤醒 Worker；取消 INVESTIGATING 后旧 run 的迟到结果尚无准入拒绝（尚无调查循环） | InvestigationApplicationService.stopInvestigation、IncidentApplicationService.cancelIncident | Stop 后收束、补派发可达与按 run/状态拒绝迟到结果由 TASK-039～043 实现 | TASK-039～043 |
 | 详情 API 为阶段版本：无 currentAssessment、remediation、recovery、availableActions；创建响应也不含 availableActions | web/incident/IncidentResponses | TASK-085 IncidentDetailView、TASK-086 availableActions 按 05 §23 补齐 | TASK-085/086 |
 | Cancel reason 可空、上限 500 字符（本批自定），写入时间线载荷与摘要 | IncidentApplicationService、CancelIncidentCommand | 05 §33 未给上限 | — |
@@ -1043,7 +1068,7 @@
 | 重复关系以锁内 FOR SHARE 预查判定；数据库唯一键冲突（理论上仅在绕过服务写入时）会以数据访问异常失败而非 EVIDENCE_LINK_ALREADY_EXISTS | application/evidence/EvidenceApplicationService | 所有 Evidence 写入须经 createEvidenceLink（持 Incident 行锁）；不得新增旁路写入 | — |
 | 附带状态更新无 reason（05 §82 示例无该字段），HYPOTHESIS_STATUS_CHANGED 载荷 reason 为空、evidenceId 指向该 Evidence；附带状态等于当前时不产生状态事件 | EvidenceApplicationService | TASK-030 协议定义 hypothesisUpdate 字段时保持一致 | TASK-030/040 |
 | 05 §57～§58 Invocation 技术详情 API（/technical/capability-invocations）在 08 中无明确归属 Task，TASK-027 列表不含 | web/investigation | B06-R1：须在 TASK-103 前明确承接其后端实现的批次（TASK-103 只含前端，不直接承接后端）；实现时不得返回 credential/secret/token | 待确认（TASK-103 前） |
-| （实现已替换，B20/TASK-062：ACTIVE→SUPERSEDED 并有集成断言；真实方案端到端仍属 TASK-067）RemediationPlanSuperseder 为占位 no-op（Plan 表不存在，无可失效方案） | infrastructure/remediation/NoRemediationPlanSuperseder | TASK-062 建表后以真实 supersede 替换并删除本类，TASK-067 补真实 Plan 的集成断言（08 TASK-026 不得把 no-op 留到 Release） | TASK-062/067 |
+| （已关闭，B24/TASK-067：经公开用例，ACTIVE Plan 只在 AWAITING_APPROVAL 期间存在——此时继续调查被拒、不会产生新 Diagnosis，审批一经决定或撤回方案即 CANCELLED——因此真实流程中 Superseder 不会遇到 ACTIVE Plan，是防御性保护；其对 ACTIVE Plan 的行为由 DiagnosisIntegrationTest（B20）断言，旧 Diagnosis 方案不可批准由 approvalIsRechecked… 断言。原记录：实现已替换，B20/TASK-062：ACTIVE→SUPERSEDED 并有集成断言；真实方案端到端仍属 TASK-067）RemediationPlanSuperseder 为占位 no-op（Plan 表不存在，无可失效方案） | infrastructure/remediation/NoRemediationPlanSuperseder | TASK-062 建表后以真实 supersede 替换并删除本类，TASK-067 补真实 Plan 的集成断言（08 TASK-026 不得把 no-op 留到 Release） | TASK-062/067 |
 | Diagnosis 创建一律要求 TerminationReason（库列可空）；DIAGNOSIS_CREATED 发起方 AGENT_COMPLETED 为 AI_RUNTIME、其余为 SYSTEM；主假设当前状态（如 REFUTED）不作限制（规格未要求） | application/diagnosis | TASK-040/042 调用时按实际收束原因传入；如规格要求主假设状态约束再加入 DiagnosisDraft.checkReferences | TASK-040/042 |
 | createDiagnosis 只核对 INVESTIGATING 与 run 号，不核对 Stop/deadline（01 §11 允许同轮 Stop 与到期收束）；旧 run 用 STALE_RUN_RESULT（内部处置，CONFLICT）拒绝 | DiagnosisApplicationService | TASK-039～042 决定何时允许收束、何时生成 UNDETERMINED，并把 STALE_RUN_RESULT 记入 AgentStep 审计（独立事务） | TASK-039～042 |
 | DiagnosisDraft.evidenceIds 数量未设上限 | domain/diagnosis/DiagnosisDraft | TASK-030 协议 Schema 为 COMPLETE_INVESTIGATION.evidenceIds 设定上限 | TASK-030 |
@@ -1120,5 +1145,5 @@
 | （已关闭，B21/TASK-066：拒绝与撤回同事务把方案置为 CANCELLED）拒绝或撤回审批后该 Plan 仍为 ACTIVE（04 §38 状态集未规定）：Incident 回到 DIAGNOSED，其 Action 的 Approval 已终态、不能再批准；此时取消 Incident（非 AWAITING_APPROVAL）不经取消器，Plan 保持 ACTIVE；继续调查产生新 Diagnosis 时会被置为 SUPERSEDED | application/approval、infrastructure/persistence/mybatis/remediation | TASK-066 实现拒绝/撤回时确定 Plan 的去向（如同事务置 CANCELLED），并据此调整 Incident 取消的联动 | TASK-066 |
 | remediation_plan 与所属 Incident / 当前 Diagnosis 的一致性只在 Java 创建事务中保证（库内没有 plan.incident_id 与 diagnosis 所属 Incident 的复合外键） | V004、TASK-065 创建事务 | TASK-065 在同一 Incident 行锁下以当前最新 Diagnosis 创建；如需库内保护，另加 investigation_id 列与复合外键 | TASK-065 |
 | 处理建议的相关资源规则（用户决定）依赖证据与受影响资源：若 S3 的诊断既未引用消费者的观测、Incident 也未把消费者登记为受影响资源，则会返回 NO_APPLICABLE_ACTION | application/remediation/RemediationActions | TASK-092/106 为 S3 登记受影响资源（statistics-consumer），或确保调查引用消费者观测；验收在 TASK-109 | TASK-092/106/109 |
-| 批准在执行与恢复合同接通前固定返回 RECOVERY_POLICY_NOT_FOUND（复核全部通过后）；成功路径（选择唯一 ACTIVE RecoveryPolicy、冻结快照、PENDING → APPROVED、创建 ActionExecution、AWAITING_APPROVAL → EXECUTING、202 与 05 §39 响应体含 execution）与 APPROVED 的幂等返回尚未实现 | application/approval/ApprovalApplicationService#approve、web RemediationController | TASK-067～069、074～076 接通；接通时把控制器的批准响应改为 05 §39 结构并补幂等 | TASK-069 |
+| 批准成功路径尚未接通（B24/TASK-067 后）：全部复核通过（含唯一合法 ACTIVE 策略）时仍不写入，以 REMEDIATION_ACTION_NOT_EXECUTABLE（reason=EXECUTION_NOT_AVAILABLE）拒绝；冻结快照、PENDING → APPROVED、创建 ActionExecution（幂等键 action-execution:<actionId>）、AWAITING_APPROVAL → EXECUTING、202 与 05 §39 响应体、APPROVED 的幂等返回尚未实现 | application/approval/ApprovalApplicationService#approve、web RemediationController | TASK-069 以 RecoveryPolicySelector 的返回值冻结快照并删除该过渡分支；接通时把控制器批准响应改为 05 §39 结构并补幂等 | TASK-069 |
 | request-remediation 的 AI 调用元数据（模型、Prompt 版本、Token）未持久化：AiDecisionPort.draftRemediation 只返回建议 | application/remediation、infrastructure/ai | 如需审计处理建议的模型信息，在 Action 或时间线载荷中加入（规格未要求） | 需要时单独确认 |

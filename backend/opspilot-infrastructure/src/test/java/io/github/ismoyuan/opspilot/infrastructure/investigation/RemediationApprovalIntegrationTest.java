@@ -10,6 +10,7 @@ import io.github.ismoyuan.opspilot.application.ClockConfiguration;
 import io.github.ismoyuan.opspilot.application.ai.AiDecisionPort;
 import io.github.ismoyuan.opspilot.application.ai.protocol.v1.RemediationDraftRequest;
 import io.github.ismoyuan.opspilot.application.ai.protocol.v1.RemediationDraftResponse;
+import io.github.ismoyuan.opspilot.application.ai.protocol.v1.ServiceInspectArgumentsV1;
 import io.github.ismoyuan.opspilot.application.ai.protocol.v1.ServiceRestartParametersV1;
 import io.github.ismoyuan.opspilot.application.approval.ApprovalApplicationService;
 import io.github.ismoyuan.opspilot.application.approval.ApprovalDecisionCommand;
@@ -18,8 +19,17 @@ import io.github.ismoyuan.opspilot.application.capability.CapabilityAccess;
 import io.github.ismoyuan.opspilot.application.capability.CapabilityProviderResolver;
 import io.github.ismoyuan.opspilot.application.dispatch.WorkDispatcher;
 import io.github.ismoyuan.opspilot.application.error.ApplicationException;
+import io.github.ismoyuan.opspilot.application.incident.CancelIncidentCommand;
+import io.github.ismoyuan.opspilot.application.incident.IncidentApplicationService;
 import io.github.ismoyuan.opspilot.application.investigation.ContinueInvestigationCommand;
 import io.github.ismoyuan.opspilot.application.investigation.InvestigationApplicationService;
+import io.github.ismoyuan.opspilot.application.recovery.RecoveryCriterionV1;
+import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicyActivationService;
+import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicyCriteriaV1;
+import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicySelector;
+import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicyValidator;
+import io.github.ismoyuan.opspilot.application.recovery.RecoveryPredicateV1;
+import io.github.ismoyuan.opspilot.application.recovery.RecoverySamplingV1;
 import io.github.ismoyuan.opspilot.application.remediation.RemediationActions;
 import io.github.ismoyuan.opspilot.application.remediation.RemediationApplicationService;
 import io.github.ismoyuan.opspilot.application.remediation.RemediationDraftContextBuilder;
@@ -31,6 +41,8 @@ import io.github.ismoyuan.opspilot.domain.error.ErrorCode;
 import io.github.ismoyuan.opspilot.domain.error.OpsPilotException;
 import io.github.ismoyuan.opspilot.domain.incident.IncidentStatus;
 import io.github.ismoyuan.opspilot.domain.remediation.ApprovalStatus;
+import java.sql.Connection;
+import java.sql.DriverManager;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -38,6 +50,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import javax.sql.DataSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -54,7 +67,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mysql.MySQLContainer;
 
 /**
- * 08 TASK-065～066：真实 MySQL 上的请求处理建议与审批决定。AI 为脚本替身（在无事务的线程状态下被调用，可在“AI 运行中”改变数据
+ * 08 TASK-065～067：真实 MySQL 上的请求处理建议与审批决定。AI 为脚本替身（在无事务的线程状态下被调用，可在“AI 运行中”改变数据
  * 以制造复核失败）；其余为生产用例、仓储与约束。
  */
 @SpringBootTest
@@ -66,6 +79,10 @@ import org.testcontainers.mysql.MySQLContainer;
     RemediationProposalValidator.class,
     ApprovalApplicationService.class,
     InvestigationApplicationService.class,
+    IncidentApplicationService.class,
+    RecoveryPolicySelector.class,
+    RecoveryPolicyValidator.class,
+    RecoveryPolicyActivationService.class,
     CapabilityAccess.class,
     CapabilityProviderResolver.class,
     ClockConfiguration.class
@@ -92,7 +109,16 @@ class RemediationApprovalIntegrationTest {
     InvestigationApplicationService investigations;
 
     @Autowired
+    IncidentApplicationService incidentService;
+
+    @Autowired
+    RecoveryPolicyActivationService recoveryPolicies;
+
+    @Autowired
     JdbcTemplate jdbc;
+
+    @Autowired
+    DataSource dataSource;
 
     @MockitoBean
     AiDecisionPort ai;
@@ -339,7 +365,219 @@ class RemediationApprovalIntegrationTest {
         assertThat(events("APPROVAL_REJECTED") + events("APPROVAL_CANCELLED")).isOne();
     }
 
+    // ---------------------------------------------------------------- TASK-067
+
+    /**
+     * 04 §52、§78、08 TASK-067：批准在任何写入前选择目标资源唯一合法的 ACTIVE RecoveryPolicy——没有、按此刻绑定不合法、多条
+     * 各有其码；合法时复核全部通过，但执行尚未接通（TASK-069），仍不写入任何数据。
+     */
+    @Test
+    void approvalSelectsTheSingleLegalRecoveryPolicyBeforeAnyWrite() {
+        long approvalId = request().approvalId();
+
+        assertRejectedWith(
+                () -> approvals.approve(decision(approvalId, 0, 8, null)),
+                ErrorCode.RECOVERY_POLICY_NOT_FOUND,
+                Map.of("reason", "NO_ACTIVE_POLICY"));
+
+        activateConsumerPolicy("consumer-recovery");
+        assertRejectedWith(
+                () -> approvals.approve(decision(approvalId, 0, 8, "批准执行")),
+                ErrorCode.REMEDIATION_ACTION_NOT_EXECUTABLE,
+                Map.of("reason", "EXECUTION_NOT_AVAILABLE"));
+
+        jdbc.update(
+                "UPDATE capability_binding SET enabled = FALSE WHERE managed_resource_id = ?"
+                        + " AND capability_key = 'service.inspect'",
+                seeded.consumer());
+        assertRejectedWith(
+                () -> approvals.approve(decision(approvalId, 0, 8, null)),
+                ErrorCode.RECOVERY_POLICY_NOT_FOUND,
+                Map.of(
+                        "reason", "POLICY_NOT_EXECUTABLE",
+                        "check", "CAPABILITY_NOT_BOUND",
+                        "checkReason", "BINDING_MISSING_OR_DISABLED",
+                        "criterionKey", "consumer-running"));
+        jdbc.update(
+                "UPDATE capability_binding SET enabled = TRUE WHERE managed_resource_id = ?"
+                        + " AND capability_key = 'service.inspect'",
+                seeded.consumer());
+
+        // 绕过激活服务制造的第二条 ACTIVE：不猜测选择（04 §49）
+        jdbc.update(
+                "INSERT INTO recovery_policy (managed_resource_id, policy_key, name, version_no, criteria_schema_name,"
+                        + " criteria_schema_version, criteria_payload, status, created_at, activated_at)"
+                        + " SELECT managed_resource_id, 'duplicate', name, 1, criteria_schema_name,"
+                        + " criteria_schema_version, criteria_payload, 'ACTIVE', created_at, activated_at"
+                        + " FROM recovery_policy WHERE status = 'ACTIVE'");
+        assertRejectedWith(
+                () -> approvals.approve(decision(approvalId, 0, 8, null)),
+                ErrorCode.RECOVERY_POLICY_AMBIGUOUS,
+                Map.of("activeCount", 2));
+
+        assertNothingDecided(approvalId);
+    }
+
+    /**
+     * B21-R1：批准在等待 Incident 行锁期间提交的配置变化必须被复核看到。另一连接持有 Incident 行锁；批准开始并阻塞后，停用策略判据
+     * 所需的 service.inspect 绑定并提交，再释放锁——复核必须读到停用（锁前建立的快照会误判策略仍合法）。
+     */
+    @Test
+    void approvalRechecksDataCommittedWhileWaitingForTheIncidentLock() throws Exception {
+        long approvalId = request().approvalId();
+        activateConsumerPolicy("consumer-recovery");
+
+        CompletableFuture<Object> approval;
+        try (Connection holder = dataSource.getConnection()) {
+            holder.setAutoCommit(false);
+            try (var lock = holder.prepareStatement("SELECT id FROM incident WHERE id = ? FOR UPDATE")) {
+                lock.setLong(1, seeded.investigation().incidentId());
+                lock.executeQuery().close();
+            }
+            approval = CompletableFuture.supplyAsync(
+                    () -> outcome(() -> approvals.approve(decision(approvalId, 0, 8, null))));
+            awaitLockWait();
+            jdbc.update(
+                    "UPDATE capability_binding SET enabled = FALSE WHERE managed_resource_id = ?"
+                            + " AND capability_key = 'service.inspect'",
+                    seeded.consumer());
+            holder.commit();
+        }
+
+        assertThat(approval.get(30, TimeUnit.SECONDS)).isEqualTo(ErrorCode.RECOVERY_POLICY_NOT_FOUND);
+        assertNothingDecided(approvalId);
+    }
+
+    /** 批准与拒绝并发：锁序 Incident → Approval 使它们串行，只有拒绝落账；批准要么先执行且不写入，要么看到已决定。 */
+    @Test
+    void concurrentApproveAndRejectDecideExactlyOnce() throws Exception {
+        long approvalId = request().approvalId();
+        activateConsumerPolicy("consumer-recovery");
+        CountDownLatch start = new CountDownLatch(1);
+        CompletableFuture<Object> approve = CompletableFuture.supplyAsync(() -> {
+            await(start);
+            return outcome(() -> approvals.approve(decision(approvalId, 0, 8, null)));
+        });
+        CompletableFuture<Object> reject = CompletableFuture.supplyAsync(() -> {
+            await(start);
+            return outcome(() -> approvals.reject(decision(approvalId, 0, 8, null)));
+        });
+        start.countDown();
+
+        assertThat(reject.get(30, TimeUnit.SECONDS)).isEqualTo("OK");
+        assertThat(approve.get(30, TimeUnit.SECONDS))
+                .isIn(
+                        ErrorCode.REMEDIATION_ACTION_NOT_EXECUTABLE,
+                        ErrorCode.APPROVAL_ALREADY_DECIDED,
+                        ErrorCode.APPROVAL_VERSION_CONFLICT);
+        assertThat(state(approvalId)).isEqualTo("REJECTED/demo-user/-/CANCELLED");
+        assertThat(events("APPROVAL_REJECTED")).isOne();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM action_execution", Integer.class))
+                .isZero();
+    }
+
+    /**
+     * 01 §25、05 §33（回填 TASK-019）：真实 request-remediation 产生的方案在等待审批时取消 Incident，同事务撤回 PENDING Approval 与
+     * ACTIVE Plan，之后该 Approval 不能再作出任何决定。
+     */
+    @Test
+    void cancellingAnIncidentAwaitingApprovalWithdrawsTheRealPlan() {
+        long approvalId = request().approvalId();
+
+        incidentService.cancelIncident(new CancelIncidentCommand(seeded.incidentKey(), 8, "确认误报。", "demo-user"));
+
+        assertThat(state(approvalId)).isEqualTo("CANCELLED/demo-user/-/CANCELLED");
+        assertThat(jdbc.queryForObject(
+                        "SELECT status FROM incident WHERE id = ?",
+                        String.class,
+                        seeded.investigation().incidentId()))
+                .isEqualTo("CANCELLED");
+        for (Runnable decisionCall : List.<Runnable>of(
+                () -> approvals.approve(decision(approvalId, 1, 9, null)),
+                () -> approvals.reject(decision(approvalId, 1, 9, null)))) {
+            assertDecisionRejected(decisionCall, ErrorCode.APPROVAL_ALREADY_DECIDED);
+        }
+    }
+
     // ---------------------------------------------------------------- helpers
+
+    /** 统计消费者上的 ACTIVE 策略：service.inspect 检查其运行状态（先启用 service.inspect 绑定）。 */
+    private void activateConsumerPolicy(String policyKey) {
+        jdbc.update(
+                "INSERT INTO capability_binding (managed_resource_id, capability_key, enabled, created_at, updated_at)"
+                        + " VALUES (?, 'service.inspect', TRUE, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))"
+                        + " ON DUPLICATE KEY UPDATE enabled = TRUE",
+                seeded.consumer());
+        recoveryPolicies.activate(new RecoveryPolicyActivationService.ActivateCommand(
+                seeded.consumer(),
+                policyKey,
+                "统计消费者恢复标准",
+                RecoveryPolicyCriteriaV1.of(
+                        60,
+                        60,
+                        List.of(new RecoveryCriterionV1.ServiceInspect(
+                                "consumer-running",
+                                "消费者持续运行",
+                                "statistics-consumer",
+                                new ServiceInspectArgumentsV1(),
+                                new RecoverySamplingV1(2, 5, 10),
+                                new RecoveryPredicateV1.FieldEquals("runtimeState", "RUNNING"),
+                                true)))));
+    }
+
+    /** 以 root 查询 InnoDB 事务，直到有事务处于锁等待。 */
+    private static void awaitLockWait() throws Exception {
+        try (Connection root = DriverManager.getConnection(MYSQL.getJdbcUrl(), "root", MYSQL.getPassword());
+                var query = root.prepareStatement(
+                        "SELECT COUNT(*) FROM information_schema.innodb_trx WHERE trx_state = 'LOCK WAIT'")) {
+            for (int i = 0; i < 200; i++) {
+                try (var rs = query.executeQuery()) {
+                    rs.next();
+                    if (rs.getInt(1) > 0) {
+                        return;
+                    }
+                }
+                Thread.sleep(50);
+            }
+        }
+        throw new AssertionError("approval never waited for the incident lock");
+    }
+
+    private static Object outcome(Runnable call) {
+        try {
+            call.run();
+            return "OK";
+        } catch (OpsPilotException ex) {
+            return ex.errorCode();
+        }
+    }
+
+    private static void await(CountDownLatch latch) {
+        try {
+            latch.await();
+        } catch (InterruptedException ex) {
+            throw new IllegalStateException(ex);
+        }
+    }
+
+    private static void assertRejectedWith(Runnable call, ErrorCode code, Map<String, Object> details) {
+        assertThatThrownBy(call::run).isInstanceOfSatisfying(OpsPilotException.class, ex -> {
+            assertThat(ex.errorCode()).isEqualTo(code);
+            assertThat(ex.details()).containsAllEntriesOf(details);
+        });
+    }
+
+    /** Approval 仍 PENDING、方案仍 ACTIVE、Incident 仍 AWAITING_APPROVAL（版本 8），没有 Execution。 */
+    private void assertNothingDecided(long approvalId) {
+        assertThat(state(approvalId)).isEqualTo("PENDING/-/-/ACTIVE");
+        assertThat(jdbc.queryForMap(
+                        "SELECT status, CAST(lock_version AS SIGNED) AS version FROM incident WHERE id = ?",
+                        seeded.investigation().incidentId()))
+                .containsEntry("status", "AWAITING_APPROVAL")
+                .containsEntry("version", 8L);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM action_execution", Integer.class))
+                .isZero();
+    }
 
     private RequestRemediationResult request() {
         return remediations.requestRemediation(new RequestRemediationCommand(seeded.incidentKey(), 7, "demo-user"));

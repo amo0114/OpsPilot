@@ -4,6 +4,7 @@ import io.github.ismoyuan.opspilot.application.capability.CapabilityAccess;
 import io.github.ismoyuan.opspilot.application.correlation.Correlation;
 import io.github.ismoyuan.opspilot.application.error.ApplicationException;
 import io.github.ismoyuan.opspilot.application.incident.IncidentRepository;
+import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicySelector;
 import io.github.ismoyuan.opspilot.application.remediation.RemediationContextQuery;
 import io.github.ismoyuan.opspilot.application.system.ManagedResourceRepository;
 import io.github.ismoyuan.opspilot.application.timeline.TimelineRepository;
@@ -33,10 +34,14 @@ import org.springframework.transaction.support.TransactionTemplate;
  * 不能再审批，不留下看似可执行的方案）、Incident AWAITING_APPROVAL → DIAGNOSED 并写时间线。同一操作者重复提交相同决定与原说明
  * 返回原结果，这一判定先于版本校验（05 §43）；其他已决定情况 APPROVAL_ALREADY_DECIDED。
  *
- * <p>批准：同事务按 05 §38 复核 PENDING、版本、AWAITING_APPROVAL、Plan ACTIVE 且基于最新 Diagnosis、目标资源与 service.restart 绑定
- * 仍可执行；随后必须选择唯一 ACTIVE RecoveryPolicy 并冻结快照、创建 ActionExecution——RecoveryPolicy 与 Execution 由 TASK-067～069、
- * 074～076 建立，在此之前不存在任何可用策略，因此如实以 RECOVERY_POLICY_NOT_FOUND 拒绝，Approval 保持 PENDING、Incident 保持
- * AWAITING_APPROVAL，不以半套 APPROVED 冒充成功（08 TASK-066 分阶段边界）。
+ * <p>批准：同事务按 05 §38、04 §78 复核 PENDING、版本、AWAITING_APPROVAL、Plan ACTIVE 且基于最新 Diagnosis、目标资源与
+ * service.restart 绑定仍可执行，并选择目标资源唯一合法的 ACTIVE RecoveryPolicy（{@link RecoveryPolicySelector}：没有、多条或按
+ * 此刻配置不合法都在任何写入与外部副作用前拒绝，08 TASK-067）。成功路径——冻结快照、PENDING → APPROVED、创建 ActionExecution、
+ * → EXECUTING——属 TASK-069；在此之前全部复核通过也不写入任何数据，以 REMEDIATION_ACTION_NOT_EXECUTABLE
+ * （reason=EXECUTION_NOT_AVAILABLE）拒绝，不以半套 APPROVED 冒充成功（08 TASK-066 分阶段边界）。
+ *
+ * <p>一致性读：Approval 所属 Incident 创建后不变，在事务之外查出；事务内的第一条语句就是 Incident → Approval 行锁，之后的
+ * Diagnosis、资源、绑定与策略复核都读取取锁之后的数据，不使用等锁之前建立的 REPEATABLE READ 快照（B21-R1）。
  */
 @Service
 public class ApprovalApplicationService {
@@ -46,6 +51,7 @@ public class ApprovalApplicationService {
     private final RemediationContextQuery diagnoses;
     private final ManagedResourceRepository resources;
     private final CapabilityAccess access;
+    private final RecoveryPolicySelector recoveryPolicies;
     private final TimelineRepository timeline;
     private final TransactionTemplate transaction;
     private final Clock clock;
@@ -56,6 +62,7 @@ public class ApprovalApplicationService {
             RemediationContextQuery diagnoses,
             ManagedResourceRepository resources,
             CapabilityAccess access,
+            RecoveryPolicySelector recoveryPolicies,
             TimelineRepository timeline,
             PlatformTransactionManager transactionManager,
             Clock clock) {
@@ -64,6 +71,7 @@ public class ApprovalApplicationService {
         this.diagnoses = diagnoses;
         this.resources = resources;
         this.access = access;
+        this.recoveryPolicies = recoveryPolicies;
         this.timeline = timeline;
         this.transaction = new TransactionTemplate(transactionManager);
         this.clock = clock;
@@ -83,12 +91,14 @@ public class ApprovalApplicationService {
     }
 
     /**
-     * @throws ApplicationException 复核失败时的状态/版本/方案/动作错误；复核全部通过时 RECOVERY_POLICY_NOT_FOUND（见类说明）
+     * @throws ApplicationException 复核失败时的状态/版本/方案/动作/恢复策略错误；复核全部通过时 REMEDIATION_ACTION_NOT_EXECUTABLE
+     *     （reason=EXECUTION_NOT_AVAILABLE，TASK-069 前的过渡，见类说明）
      */
     public ApprovalDecisionResult approve(ApprovalDecisionCommand command) {
         comment(command.comment()); // 与拒绝/撤回同样校验说明的格式
+        long incidentId = incidentOf(command.approvalId());
         return transaction.execute(status -> {
-            Locked locked = lock(command.approvalId());
+            Locked locked = lock(incidentId, command.approvalId());
             ApprovalRequest approval = locked.approved().approval();
             if (approval.status().isDecided()) {
                 throw approval.alreadyDecided();
@@ -114,25 +124,27 @@ public class ApprovalApplicationService {
                             locked.incident().managedSystemId(),
                             resources.findById(target.targetResourceId()),
                             target.capabilityKey())
-                    instanceof CapabilityAccess.Allowed)) {
+                    instanceof CapabilityAccess.Allowed allowed)) {
                 throw new ApplicationException(
                         ErrorCode.REMEDIATION_ACTION_NOT_EXECUTABLE,
                         "Action is no longer executable",
                         Map.of("approvalId", approval.id(), "capabilityKey", target.capabilityKey()));
             }
-            // TASK-069：此处选择唯一 ACTIVE RecoveryPolicy、冻结快照、PENDING → APPROVED、创建 ActionExecution、→ EXECUTING
+            recoveryPolicies.select(allowed.resource());
+            // TASK-069：以所选策略冻结快照、PENDING → APPROVED、创建 ActionExecution、→ EXECUTING；接通前不写入
             throw new ApplicationException(
-                    ErrorCode.RECOVERY_POLICY_NOT_FOUND,
-                    "No recovery policy is available for the target",
-                    Map.of("approvalId", approval.id(), "targetResourceId", target.targetResourceId()));
+                    ErrorCode.REMEDIATION_ACTION_NOT_EXECUTABLE,
+                    "Execution is not available yet",
+                    Map.of("approvalId", approval.id(), "reason", "EXECUTION_NOT_AVAILABLE"));
         });
     }
 
     private ApprovalDecisionResult decide(
             ApprovalDecisionCommand command, ApprovalStatus target, IncidentTrigger trigger) {
         String comment = comment(command.comment());
+        long incidentId = incidentOf(command.approvalId());
         return transaction.execute(status -> {
-            Locked locked = lock(command.approvalId());
+            Locked locked = lock(incidentId, command.approvalId());
             Incident incident = locked.incident();
             ApprovalRequest approval = locked.approved().approval();
             if (approval.isSameDecision(target, command.actor(), comment)) {
@@ -169,9 +181,13 @@ public class ApprovalApplicationService {
 
     private record Locked(Incident incident, ApprovalRepository.LockedApproval approved) {}
 
-    /** Incident → Approval 锁序；Approval 所属 Incident 创建后不变，先无锁读出。 */
-    private Locked lock(long approvalId) {
-        long incidentId = approvals.findIncidentId(approvalId).orElseThrow(() -> notFound(approvalId));
+    /** Approval 所属 Incident 创建后不变；在事务之外读出，不在决定事务中建立等锁之前的一致性读快照。 */
+    private long incidentOf(long approvalId) {
+        return approvals.findIncidentId(approvalId).orElseThrow(() -> notFound(approvalId));
+    }
+
+    /** Incident → Approval 锁序；必须是决定事务中最先执行的语句。 */
+    private Locked lock(long incidentId, long approvalId) {
         Incident incident = incidents
                 .findByIdForUpdate(incidentId)
                 .orElseThrow(() -> new IllegalStateException("Approval without incident: " + approvalId));
