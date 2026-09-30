@@ -196,6 +196,45 @@ class DiagnosisIntegrationTest {
     }
 
     /**
+     * 01 §23、04 §76、08 TASK-062：新 Diagnosis 在同一事务内使本 Incident 的未执行（ACTIVE）Plan 失效；已执行、已取消的 Plan 与其他
+     * Incident 的方案不变。创建事务后续步骤失败时整体回滚，ACTIVE Plan 保持原状。
+     */
+    @Test
+    void aNewDiagnosisSupersedesOnlyThisIncidentsUnexecutedPlans() {
+        Diagnosis v1 = service.createDiagnosis(
+                command(1, DiagnosisConclusionType.UNDETERMINED, null, List.of(), TerminationReason.USER_STOPPED));
+        long active = planOn(fixture.incidentId(), v1.id(), "ACTIVE");
+        long executed = planOn(fixture.incidentId(), v1.id(), "EXECUTED");
+        long cancelled = planOn(fixture.incidentId(), v1.id(), "CANCELLED");
+        jdbc.update(
+                "INSERT INTO diagnosis (investigation_id, run_no, version_no, conclusion_type, summary, impact_summary,"
+                        + " created_at) VALUES (?, 1, 1, 'UNDETERMINED', 'S', 'I', UTC_TIMESTAMP(3))",
+                fixture.otherInvestigationId());
+        long otherIncidents = planOn(
+                fixture.otherIncidentId(),
+                jdbc.queryForObject(
+                        "SELECT id FROM diagnosis WHERE investigation_id = ?",
+                        Long.class,
+                        fixture.otherInvestigationId()),
+                "ACTIVE");
+        jdbc.update("UPDATE incident SET status = 'INVESTIGATING' WHERE id = ?", fixture.incidentId());
+        jdbc.update("UPDATE investigation SET current_run_no = 2 WHERE id = ?", fixture.investigationId());
+
+        doThrow(new IllegalStateException("timeline down")).when(timeline).append(any());
+        assertThatThrownBy(() -> service.createDiagnosis(command(
+                        2, DiagnosisConclusionType.UNDETERMINED, null, List.of(), TerminationReason.USER_STOPPED)))
+                .isInstanceOf(IllegalStateException.class);
+        doCallRealMethod().when(timeline).append(any());
+        assertThat(planStatus(active)).isEqualTo("ACTIVE");
+
+        service.createDiagnosis(
+                command(2, DiagnosisConclusionType.UNDETERMINED, null, List.of(), TerminationReason.USER_STOPPED));
+
+        assertThat(List.of(planStatus(active), planStatus(executed), planStatus(cancelled), planStatus(otherIncidents)))
+                .containsExactly("SUPERSEDED", "EXECUTED", "CANCELLED", "ACTIVE");
+    }
+
+    /**
      * 不同调查的 Diagnosis 创建互不阻塞（TASK-026 修复，TASK-016 修复冒烟发现的死锁）：A 的创建已写入但未提交时，B 调查的创建不必
      * 等它提交即可完成，两者各得 v1。原 INSERT … SELECT MAX 在 uk_diagnosis_investigation_version 上留下间隙锁，另一调查的插入须等待
      * 其提交，两者并发时互相等待成死锁。
@@ -401,5 +440,20 @@ class DiagnosisIntegrationTest {
 
     private long incidentVersion() {
         return (Long) incident().get("lock_version");
+    }
+
+    private long planOn(long incidentId, long diagnosisId, String status) {
+        jdbc.update(
+                "INSERT INTO remediation_plan (incident_id, diagnosis_id, title, summary, status, created_at,"
+                        + " updated_at) VALUES (?, ?, '恢复统计消费', '重新启动统计消费者', ?, UTC_TIMESTAMP(3),"
+                        + " UTC_TIMESTAMP(3))",
+                incidentId,
+                diagnosisId,
+                status);
+        return jdbc.queryForObject("SELECT MAX(id) FROM remediation_plan", Long.class);
+    }
+
+    private String planStatus(long planId) {
+        return jdbc.queryForObject("SELECT status FROM remediation_plan WHERE id = ?", String.class, planId);
     }
 }

@@ -1,5 +1,6 @@
 package io.github.ismoyuan.opspilot.application.investigation;
 
+import io.github.ismoyuan.opspilot.application.approval.PendingApprovalQuery;
 import io.github.ismoyuan.opspilot.application.correlation.Correlation;
 import io.github.ismoyuan.opspilot.application.dispatch.WorkDispatcher;
 import io.github.ismoyuan.opspilot.application.error.ApplicationException;
@@ -45,6 +46,7 @@ public class InvestigationApplicationService {
     private final TimelineRepository timeline;
     private final WorkDispatcher dispatcher;
     private final InvestigationLimits limits;
+    private final PendingApprovalQuery pendingApprovals;
     private final TransactionTemplate transaction;
     private final Clock clock;
 
@@ -54,6 +56,7 @@ public class InvestigationApplicationService {
             TimelineRepository timeline,
             WorkDispatcher dispatcher,
             InvestigationLimits limits,
+            PendingApprovalQuery pendingApprovals,
             PlatformTransactionManager transactionManager,
             Clock clock) {
         this.incidents = incidents;
@@ -61,6 +64,7 @@ public class InvestigationApplicationService {
         this.timeline = timeline;
         this.dispatcher = dispatcher;
         this.limits = limits;
+        this.pendingApprovals = pendingApprovals;
         this.transaction = new TransactionTemplate(transactionManager);
         this.clock = clock;
     }
@@ -145,9 +149,11 @@ public class InvestigationApplicationService {
         return transaction.execute(status -> {
             Instant now = clock.instant().truncatedTo(ChronoUnit.MILLIS);
             Incident incident = lockIncident(incidentKey);
-            // 存在 PENDING Approval 即 AWAITING_APPROVAL（01 §3.4），先于版本校验给出专门错误（05 §28）
+            // 存在 PENDING Approval 即 AWAITING_APPROVAL（01 §3.4），先于版本校验给出专门错误（05 §28）；同一行锁下再以真实
+            // Approval 记录核对（TASK-062），两者不一致时同样拒绝，不会在仍可批准的方案之上开启新 run
             if (trigger == IncidentTrigger.CONTINUE_INVESTIGATION
-                    && incident.status() == IncidentStatus.AWAITING_APPROVAL) {
+                    && (incident.status() == IncidentStatus.AWAITING_APPROVAL
+                            || pendingApprovals.existsPending(incident.id()))) {
                 throw new ApplicationException(
                         ErrorCode.PENDING_APPROVAL_EXISTS,
                         "Pending approval blocks continuing the investigation",

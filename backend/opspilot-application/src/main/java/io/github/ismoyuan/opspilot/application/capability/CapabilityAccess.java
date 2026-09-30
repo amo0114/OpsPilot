@@ -12,8 +12,9 @@ import java.util.Optional;
 import org.springframework.stereotype.Service;
 
 /**
- * 调查中某资源能否使用某 Capability 的统一判定（06 §16 ①～⑥、CAP-INV-005/016）：AI 可见的 Descriptor（TASK-045）与调用准入
- * （TASK-048）用同一套规则，避免两处漂移。依次为：Registry 已注册 → mode=OBSERVE → 资源属于本系统 → ACTIVE → 类型受支持 →
+ * 某资源能否使用某 Capability 的统一判定（06 §16 ①～⑥、CAP-INV-005/016）：AI 可见的 Descriptor（TASK-045）与调用准入
+ * （TASK-048）用同一套规则，Remediation 的 allowedActions 与写操作复核（TASK-063～064，06 §104、§107）也用它，避免多处漂移。依次为：
+ * Registry 已注册 → mode 与阶段相符（调查只允许 OBSERVE，处理方案只允许 CHANGE）→ 资源属于本系统 → ACTIVE → 类型受支持 →
  * CapabilityBinding 已启用 → 唯一 Provider。只读、无事务要求；准入时由调用方在其事务内调用。
  */
 @Service
@@ -43,13 +44,27 @@ public class CapabilityAccess {
      * @param resource 目标资源；为空表示按 id 未找到
      */
     public Decision evaluate(long managedSystemId, Optional<ManagedResource> resource, String capabilityKey) {
+        return evaluate(CapabilityMode.OBSERVE, managedSystemId, resource, capabilityKey);
+    }
+
+    /** 处理方案阶段：只允许 CHANGE 能力（06 §103～§104），其余规则与调查相同。 */
+    public Decision evaluateChange(long managedSystemId, Optional<ManagedResource> resource, String capabilityKey) {
+        return evaluate(CapabilityMode.CHANGE, managedSystemId, resource, capabilityKey);
+    }
+
+    private Decision evaluate(
+            CapabilityMode mode, long managedSystemId, Optional<ManagedResource> resource, String capabilityKey) {
         Optional<CapabilityDefinition> found = registry.find(capabilityKey);
         if (found.isEmpty()) {
             return new Denied(ErrorCode.CAPABILITY_NOT_FOUND, "NOT_REGISTERED");
         }
         CapabilityDefinition definition = found.get();
-        if (definition.mode() != CapabilityMode.OBSERVE) {
-            return new Denied(ErrorCode.AI_INTENT_NOT_ALLOWED, "CHANGE_NOT_ALLOWED_IN_INVESTIGATION");
+        if (definition.mode() != mode) {
+            return new Denied(
+                    ErrorCode.AI_INTENT_NOT_ALLOWED,
+                    mode == CapabilityMode.OBSERVE
+                            ? "CHANGE_NOT_ALLOWED_IN_INVESTIGATION"
+                            : "OBSERVE_NOT_A_REMEDIATION_ACTION");
         }
         if (resource.isEmpty() || resource.get().managedSystemId() != managedSystemId) {
             return new Denied(ErrorCode.CAPABILITY_NOT_ALLOWED, "RESOURCE_NOT_IN_SYSTEM");

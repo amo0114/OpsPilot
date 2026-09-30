@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.remediation.RemediationQueryMapper">
+
+    <resultMap id="latestDiagnosisRow"
+               type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.remediation.RemediationQueryMapper$LatestDiagnosisRow">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="version_no" javaType="_int"/>
+            <arg column="conclusion_type" javaType="String"/>
+            <arg column="summary" javaType="String"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="frozenEvidenceRow"
+               type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.remediation.RemediationQueryMapper$FrozenEvidenceRow">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="relation" javaType="String"/>
+            <arg column="observation_summary" javaType="String"/>
+            <arg column="managed_resource_id" javaType="_long"/>
+        </constructor>
+    </resultMap>
+
+    <!-- 最新版本（01 §19） -->
+    <select id="selectLatestDiagnosis" resultMap="latestDiagnosisRow">
+        SELECT d.id, d.version_no, d.conclusion_type, d.summary
+        FROM diagnosis d
+        JOIN investigation i ON i.id = d.investigation_id
+        WHERE i.incident_id = #{incidentId}
+        ORDER BY d.version_no DESC
+        LIMIT 1
+    </select>
+
+    <!-- 只取该 Diagnosis 冻结的引用（05 §56），资源取自证据所依据的 Observation -->
+    <select id="selectFrozenEvidence" resultMap="frozenEvidenceRow">
+        SELECT e.id, e.relation, o.summary AS observation_summary, o.managed_resource_id
+        FROM diagnosis_evidence_ref r
+        JOIN evidence e ON e.id = r.evidence_id
+        JOIN observation o ON o.id = e.observation_id
+        WHERE r.diagnosis_id = #{diagnosisId}
+        ORDER BY e.id
+    </select>
+
+    <select id="selectAffectedResourceIds" resultType="long">
+        SELECT managed_resource_id
+        FROM incident_affected_resource
+        WHERE incident_id = #{incidentId}
+        ORDER BY managed_resource_id
+    </select>
+</mapper>

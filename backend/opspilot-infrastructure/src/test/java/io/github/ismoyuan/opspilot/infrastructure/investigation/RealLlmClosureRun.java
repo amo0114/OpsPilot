@@ -34,6 +34,12 @@ import io.github.ismoyuan.opspilot.application.investigation.orchestration.Inves
 import io.github.ismoyuan.opspilot.application.investigation.recovery.InvestigationInterruptionRecorder;
 import io.github.ismoyuan.opspilot.application.investigation.step.AgentStepRecorder;
 import io.github.ismoyuan.opspilot.application.investigation.step.StepAdmissionService;
+import io.github.ismoyuan.opspilot.application.remediation.RemediationActions;
+import io.github.ismoyuan.opspilot.application.remediation.RemediationDraftContext;
+import io.github.ismoyuan.opspilot.application.remediation.RemediationDraftContextBuilder;
+import io.github.ismoyuan.opspilot.application.remediation.RemediationProposalValidator;
+import io.github.ismoyuan.opspilot.application.remediation.ValidatedRemediationProposal;
+import io.github.ismoyuan.opspilot.domain.capability.RiskLevel;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -106,6 +112,9 @@ import org.testcontainers.mysql.MySQLContainer;
     InvestigationApplicationService.class,
     IncidentApplicationService.class,
     ClockConfiguration.class,
+    RemediationDraftContextBuilder.class,
+    RemediationActions.class,
+    RemediationProposalValidator.class,
     RealLlmClosureRun.RecordingAi.class
 })
 class RealLlmClosureRun {
@@ -194,6 +203,15 @@ class RealLlmClosureRun {
     @Autowired
     JdbcTemplate jdbc;
 
+    @Autowired
+    AiDecisionPort ai;
+
+    @Autowired
+    RemediationDraftContextBuilder remediationContexts;
+
+    @Autowired
+    RemediationProposalValidator proposals;
+
     @MockitoBean
     WorkDispatcher dispatcher;
 
@@ -238,6 +256,34 @@ class RealLlmClosureRun {
                         MODEL))
                 .as("real model requested a capability")
                 .isPositive();
+    }
+
+    /**
+     * 08 TASK-063～064：真实模型用 remediation-v1 为已诊断的 Incident 提出处理建议。上下文由生产 RemediationDraftContextBuilder 构造
+     * （系统中另有一个可重启但与诊断无关的服务，不会进入 allowedActions），经生产 HttpAiRuntimeClient 调用，再由 Java 校验并给出
+     * riskLevel / requiresApproval。运行记录写入 target/real-llm-remediation.txt。
+     */
+    @Test
+    void aRealModelProposesARemediationFromTheAllowedActions() throws IOException {
+        RemediationFixture seeded = RemediationFixture.seed(jdbc);
+        RemediationDraftContext context = remediationContexts.build(seeded.incidentKey(), 7);
+
+        var response = ai.draftRemediation(context.request());
+        ValidatedRemediationProposal proposal =
+                proposals.validate(context.allowedActions(), context.diagnosisId(), response);
+
+        String transcript = "# TASK-063/064 real LLM remediation run\nmodel=" + MODEL + "\nrequest=" + context.request()
+                + "\nresponse=" + response + "\nvalidated=" + proposal + "\n";
+        Files.writeString(Path.of("target", "real-llm-remediation.txt"), transcript, StandardCharsets.UTF_8);
+        System.out.println(transcript);
+        assertThat(context.request().allowedActions())
+                .singleElement()
+                .satisfies(action -> assertThat(action.resourceKey()).isEqualTo("statistics-consumer"));
+        assertThat(proposal.capabilityKey()).isEqualTo("service.restart");
+        assertThat(proposal.target().id()).isEqualTo(seeded.consumer());
+        assertThat(proposal.riskLevel()).isEqualTo(RiskLevel.MEDIUM);
+        assertThat(proposal.requiresApproval()).isTrue();
+        assertThat(proposal.parameterPayload()).isEqualTo("{}");
     }
 
     // ---------------------------------------------------------------- data

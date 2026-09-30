@@ -112,10 +112,18 @@ class InvestigationRunIntegrationTest {
 
     @BeforeEach
     void resetData() {
-        jdbc.update("DELETE FROM incident_timeline_event");
-        jdbc.update("DELETE FROM investigation");
-        jdbc.update("DELETE FROM incident");
-        jdbc.update("DELETE FROM managed_system");
+        for (String table : List.of(
+                "approval_request",
+                "remediation_action",
+                "remediation_plan",
+                "diagnosis",
+                "incident_timeline_event",
+                "investigation",
+                "incident",
+                "managed_resource",
+                "managed_system")) {
+            jdbc.update("DELETE FROM " + table);
+        }
         jdbc.update("INSERT INTO managed_system (system_key, name, environment, status, created_at, updated_at) VALUES"
                 + " ('shortlink-platform', 'ShortLink', 'DEMO', 'ACTIVE', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))");
         jdbc.update(
@@ -474,15 +482,51 @@ class InvestigationRunIntegrationTest {
                 .hasMessage("timeline down");
         org.mockito.Mockito.reset(timeline);
 
+        // 等待审批却没有 PENDING Approval 属数据不一致：取消整体回滚，不留下半套写入（TASK-062）
         jdbc.update("UPDATE incident SET status = 'AWAITING_APPROVAL'");
         assertThatThrownBy(() -> incidentService.cancelIncident(new CancelIncidentCommand(KEY, 6, null, "demo-user")))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("TASK-067");
+                .hasMessageContaining("without a pending approval");
 
         assertThat(jdbc.queryForMap("SELECT status, lock_version FROM incident"))
                 .containsEntry("status", "AWAITING_APPROVAL")
                 .containsEntry("lock_version", java.math.BigInteger.valueOf(6));
         assertThat(count("incident_timeline_event")).isZero();
+    }
+
+    /**
+     * 08 TASK-062、05 §33：取消等待审批的 Incident 在同一事务把 PENDING Approval（记录取消者与时间、版本加一）与未执行 Plan 置为 CANCELLED；
+     * 已执行的 Plan 与其他 Incident 的方案不受影响。
+     */
+    @Test
+    void cancellingWhileAwaitingApprovalWithdrawsThePendingApprovalAndPlans() {
+        service.startInvestigation(new StartInvestigationCommand(KEY, 0, "demo-user"));
+        long pendingPlan = plan(incidentId, "ACTIVE", "PENDING");
+        long executedPlan = plan(incidentId, "EXECUTED", "APPROVED");
+        long otherIncident = otherIncident();
+        long otherPlan = plan(otherIncident, "ACTIVE", "PENDING");
+        jdbc.update("UPDATE incident SET status = 'AWAITING_APPROVAL', lock_version = 6 WHERE id = ?", incidentId);
+
+        incidentService.cancelIncident(new CancelIncidentCommand(KEY, 6, "不再处理", "demo-user"));
+
+        assertThat(jdbc.queryForObject("SELECT status FROM incident WHERE id = ?", String.class, incidentId))
+                .isEqualTo("CANCELLED");
+        assertThat(planState(pendingPlan)).isEqualTo("CANCELLED/CANCELLED/demo-user/1");
+        assertThat(planState(executedPlan)).isEqualTo("EXECUTED/APPROVED/demo-user/0");
+        assertThat(planState(otherPlan)).isEqualTo("ACTIVE/PENDING/-/0");
+    }
+
+    /** 05 §28：同一行锁下以真实 Approval 核对——即使 Incident 标为 DIAGNOSED，仍有 PENDING Approval 时拒绝继续调查，不写入任何数据。 */
+    @Test
+    void continueIsRejectedWhileARealPendingApprovalExists() {
+        service.startInvestigation(new StartInvestigationCommand(KEY, 0, "demo-user"));
+        plan(incidentId, "ACTIVE", "PENDING");
+        jdbc.update("UPDATE incident SET status = 'DIAGNOSED', lock_version = 5 WHERE id = ?", incidentId);
+
+        assertContinueRejected(5, ErrorCode.PENDING_APPROVAL_EXISTS);
+
+        assertThat(jdbc.queryForObject("SELECT current_run_no FROM investigation", Integer.class))
+                .isOne();
     }
 
     /** 同时发起的 Cancel 与 Start 在 Incident 行锁上串行，只有一个成功。 */
@@ -561,5 +605,71 @@ class InvestigationRunIntegrationTest {
 
     int count(String table) {
         return jdbc.queryForObject("SELECT COUNT(*) FROM " + table, Integer.class);
+    }
+
+    /** 为该 Incident 建一个 Plan（附 Action 与给定状态的 Approval）；Diagnosis 与目标资源按需创建。 */
+    private long plan(long incident, String planStatus, String approvalStatus) {
+        jdbc.update("INSERT INTO managed_resource (managed_system_id, resource_key, name, resource_type, status,"
+                + " created_at, updated_at) SELECT id, 'statistics-consumer', 'C', 'CONSUMER', 'ACTIVE',"
+                + " UTC_TIMESTAMP(3), UTC_TIMESTAMP(3) FROM managed_system WHERE NOT EXISTS (SELECT 1 FROM"
+                + " managed_resource WHERE resource_key = 'statistics-consumer')");
+        if (jdbc.queryForObject("SELECT COUNT(*) FROM investigation WHERE incident_id = ?", Integer.class, incident)
+                == 0) {
+            jdbc.update(
+                    "INSERT INTO investigation (incident_id, started_at, last_activity_at, current_run_no,"
+                            + " current_run_started_at, max_capability_calls, max_duration_seconds,"
+                            + " agent_step_timeout_seconds, max_consecutive_ai_failures, created_at, updated_at) VALUES"
+                            + " (?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3), 1, UTC_TIMESTAMP(3), 12, 480, 60, 3,"
+                            + " UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
+                    incident);
+        }
+        jdbc.update(
+                "INSERT INTO diagnosis (investigation_id, run_no, version_no, conclusion_type, summary, impact_summary,"
+                        + " created_at) SELECT id, 1, (SELECT COUNT(*) + 1 FROM diagnosis d WHERE d.investigation_id ="
+                        + " i.id), 'UNDETERMINED', 'S', 'I', UTC_TIMESTAMP(3) FROM investigation i WHERE incident_id = ?",
+                incident);
+        jdbc.update(
+                "INSERT INTO remediation_plan (incident_id, diagnosis_id, title, summary, status, created_at,"
+                        + " updated_at) SELECT ?, MAX(d.id), 'T', 'S', ?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3)"
+                        + " FROM diagnosis d JOIN investigation i ON i.id = d.investigation_id WHERE i.incident_id = ?",
+                incident,
+                planStatus,
+                incident);
+        long plan = jdbc.queryForObject("SELECT MAX(id) FROM remediation_plan", Long.class);
+        jdbc.update(
+                "INSERT INTO remediation_action (remediation_plan_id, capability_key, target_resource_id,"
+                        + " parameter_schema_name, parameter_schema_version, parameter_payload, summary,"
+                        + " expected_impact_summary, risk_level, requires_approval, created_at) SELECT ?,"
+                        + " 'service.restart', id, 'service.restart.request', 1, '{}', 'S', 'E', 'MEDIUM', TRUE,"
+                        + " UTC_TIMESTAMP(3) FROM managed_resource WHERE resource_key = 'statistics-consumer'",
+                plan);
+        boolean pending = approvalStatus.equals("PENDING");
+        jdbc.update(
+                "INSERT INTO approval_request (remediation_action_id, status, requested_at, decided_by, decided_at,"
+                        + " created_at, updated_at) SELECT id, ?, UTC_TIMESTAMP(3), ?, "
+                        + (pending ? "NULL" : "UTC_TIMESTAMP(3)")
+                        + ", UTC_TIMESTAMP(3), UTC_TIMESTAMP(3) FROM remediation_action WHERE remediation_plan_id = ?",
+                approvalStatus,
+                pending ? null : "demo-user",
+                plan);
+        return plan;
+    }
+
+    private long otherIncident() {
+        jdbc.update("INSERT INTO incident (incident_key, managed_system_id, title, impact_summary, status,"
+                + " created_source, created_by, started_at, detected_at, created_at, updated_at, lock_version)"
+                + " SELECT 'INC-20260930-0099', id, 'T', 'I', 'AWAITING_APPROVAL', 'MANUAL', 'demo-user',"
+                + " UTC_TIMESTAMP(3), UTC_TIMESTAMP(3), UTC_TIMESTAMP(3), UTC_TIMESTAMP(3), 0 FROM managed_system");
+        return jdbc.queryForObject("SELECT id FROM incident WHERE incident_key = 'INC-20260930-0099'", Long.class);
+    }
+
+    /** Plan 状态 / Approval 状态 / 决定人（无则 -）/ Approval 版本。 */
+    private String planState(long plan) {
+        return jdbc.queryForObject(
+                "SELECT CONCAT(p.status, '/', a.status, '/', COALESCE(a.decided_by, '-'), '/', a.lock_version)"
+                        + " FROM remediation_plan p JOIN remediation_action ra ON ra.remediation_plan_id = p.id"
+                        + " JOIN approval_request a ON a.remediation_action_id = ra.id WHERE p.id = ?",
+                String.class,
+                plan);
     }
 }

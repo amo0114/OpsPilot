@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.remediation.RemediationMapper">
+
+    <!-- 未执行即 ACTIVE；EXECUTED / CANCELLED / SUPERSEDED 保持原状（04 §39、§76） -->
+    <update id="supersedeActivePlans">
+        UPDATE remediation_plan
+        SET status = 'SUPERSEDED', updated_at = #{at}
+        WHERE incident_id = #{incidentId} AND status = 'ACTIVE'
+    </update>
+
+    <update id="cancelActivePlans">
+        UPDATE remediation_plan
+        SET status = 'CANCELLED', updated_at = #{at}
+        WHERE incident_id = #{incidentId} AND status = 'ACTIVE'
+    </update>
+
+    <!-- 只从 PENDING 出发，决定不可反转（04 §44）；lock_version 随决定递增 -->
+    <update id="cancelPendingApprovals">
+        UPDATE approval_request a
+        JOIN remediation_action ra ON ra.id = a.remediation_action_id
+        JOIN remediation_plan p ON p.id = ra.remediation_plan_id
+        SET a.status = 'CANCELLED', a.decided_by = #{actor}, a.decided_at = #{at}, a.updated_at = #{at},
+            a.lock_version = a.lock_version + 1
+        WHERE p.incident_id = #{incidentId} AND a.status = 'PENDING'
+    </update>
+
+    <select id="existsPendingApproval" resultType="boolean">
+        SELECT EXISTS (SELECT 1
+                       FROM approval_request a
+                       JOIN remediation_action ra ON ra.id = a.remediation_action_id
+                       JOIN remediation_plan p ON p.id = ra.remediation_plan_id
+                       WHERE p.incident_id = #{incidentId} AND a.status = 'PENDING')
+    </select>
+</mapper>

@@ -57,7 +57,7 @@ class OpenAiCompatibleClient:
     def complete(self, prompt: LlmPrompt) -> LlmCompletion:
         system = SYSTEM_PROMPTS.get(prompt.template_version)
         if system is None:
-            # remediation-v1 is written in TASK-063; until then a real model is not asked
+            # only versioned templates are sent to a real model
             raise LlmUnavailableError(f"no prompt for template {prompt.template_version}")
         request: dict[str, Any] = {
             "model": self._model,

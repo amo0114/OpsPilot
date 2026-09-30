@@ -19,9 +19,9 @@ from fastapi.testclient import TestClient
 from opspilot_ai.config import Settings
 from opspilot_ai.errors import AiOutputInvalidError, LlmTimeoutError, LlmUnavailableError
 from opspilot_ai.llm.client import LlmPrompt
-from opspilot_ai.llm.fake import INVESTIGATION_TEMPLATE, REMEDIATION_TEMPLATE
+from opspilot_ai.llm.fake import INVESTIGATION_TEMPLATE
 from opspilot_ai.llm.openai_compatible import MAX_RESPONSE_BYTES, OpenAiCompatibleClient
-from opspilot_ai.llm.prompts import INVESTIGATION_V1
+from opspilot_ai.llm.prompts import INVESTIGATION_V1, REMEDIATION_V1
 from opspilot_ai.main import create_app
 
 CONTRACT = Path(__file__).resolve().parents[2] / "contracts" / "ai-runtime" / "v1"
@@ -291,7 +291,7 @@ def test_answers_without_message_content_are_invalid_output(stub: Stub, body: ob
 
 def test_templates_without_a_prompt_are_not_sent(stub: Stub) -> None:
     with pytest.raises(LlmUnavailableError):
-        _client(stub.base_url).complete(LlmPrompt(REMEDIATION_TEMPLATE, CONTEXT))
+        _client(stub.base_url).complete(LlmPrompt("unknown-v1", CONTEXT))
 
     assert stub.requests == []
 
@@ -382,6 +382,38 @@ def test_model_failures_map_to_fixed_errors(
 
     assert (response.status_code, response.json()["code"]) == (status, code)
     assert API_KEY not in response.text
+
+
+def test_a_real_model_remediation_answer_is_checked_against_the_allowed_actions(stub: Stub) -> None:
+    """08 TASK-063: remediation-v1 with Java's context; the answer must pick an allowed action."""
+    proposal = _fixture("remediation-draft-response", "valid", "propose-service-restart")
+    for echoed in ("protocolVersion", "correlationId", "intentType"):
+        proposal.pop(echoed)
+    request = _fixture("remediation-draft-request", "valid", "service-restart-allowed")
+    stub.answer = lambda h: _json(h, 200, _chat(json.dumps(proposal, ensure_ascii=False)))
+
+    response = _api(stub.base_url).post(
+        "/internal/v1/remediation/draft", json=request, headers={"Authorization": f"Bearer {TOKEN}"}
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert (body["correlationId"], body["intentType"]) == (
+        request["correlationId"],
+        "PROPOSE_REMEDIATION",
+    )
+    assert "riskLevel" not in json.dumps(body)
+    assert response.headers["X-OpsPilot-Prompt-Template-Version"] == "remediation-v1"
+    messages = stub.requests[0]["body"]["messages"]
+    assert messages[0] == {"role": "system", "content": REMEDIATION_V1}
+    assert json.loads(messages[1]["content"]) == request
+
+    proposal["proposal"]["action"]["targetResourceId"] = 999_999
+    stub.answer = lambda h: _json(h, 200, _chat(json.dumps(proposal)))
+    outside = _api(stub.base_url).post(
+        "/internal/v1/remediation/draft", json=request, headers={"Authorization": f"Bearer {TOKEN}"}
+    )
+    assert (outside.status_code, outside.json()["code"]) == (502, "AI_OUTPUT_INVALID")
 
 
 # ---------------------------------------------------------------- settings

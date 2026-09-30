@@ -18,6 +18,11 @@ public enum ErrorCode {
     /** Diagnosis 草稿的主假设、引用证据或支持证据不满足 01 §20 / 04 §34。 */
     DIAGNOSIS_INVARIANT_VIOLATION(ErrorCategory.RULE_VIOLATION, "诊断结论缺少合法的主假设或支持证据。"),
     /**
+     * 当前 Diagnosis 不能据以请求处理建议（05 §29、§93）：结论为 UNDETERMINED，或没有与本次诊断相关、可执行的 CHANGE 动作（TASK-063）；
+     * 两种情况都不调用 AI。
+     */
+    DIAGNOSIS_NOT_ACTIONABLE(ErrorCategory.RULE_VIOLATION, "当前诊断结论不能生成处理建议。"),
+    /**
      * 结果所属 run 已不是当前 run（01 §11、05 §93）：内部审计处置，旧轮结果只保留审计、不产生领域写入；
      * 不是 Incident 状态，也不由公开 API 返回。
      */
