@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-30（B22 REVIEW，Base 423baf7；B22-V1 exit 0，待独立 Review，未提交）
+> 最近更新：2026-09-30（B22 DONE，commit 1a655fd；B23 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -75,13 +75,13 @@
 | TASK-065 | B21 | request-remediation | DONE | commit ef115c8（B21，Base 0edfb87） | B21-V1 verify exit 0＋RemediationApprovalIntegrationTest（创建与回滚）、RemediationControllerTest；B21-R1 PASS，待提交 |
 | TASK-066 | B21 | Approval API | DONE | commit ef115c8（B21，Base 0edfb87） | B21-V1 verify exit 0＋RemediationApprovalIntegrationTest（查询/拒绝/撤回/批准复核/并发）、RemediationControllerTest；批准成功路径属 TASK-069；B21-R1 PASS，待提交 |
 | TASK-067 | B24 | Approval 并发与历史方案保护 | TODO | — | NOT RUN |
-| TASK-068 | B22 | ActionExecution 数据结构 | REVIEW | 未提交（B22，Base 423baf7）：V005、ActionExecutionSchemaTest | B22-V1 verify exit 0＋ActionExecutionSchemaTest 33/33（真实 MySQL）＋变异 2 项；B22-R1 PASS，待提交 |
+| TASK-068 | B22 | ActionExecution 数据结构 | DONE | commit 1a655fd（B22，Base 423baf7） | B22-V1 verify exit 0＋ActionExecutionSchemaTest 33/33（真实 MySQL）＋变异 2 项；B22-R1 PASS |
 | TASK-069 | B25 | Approve → Execution | TODO | — | NOT RUN |
 | TASK-070 | B26 | Docker service.restart Executor | TODO | — | NOT RUN |
 | TASK-071 | B26 | Execution Worker | TODO | — | NOT RUN |
 | TASK-072 | B27 | Execution Reconciliation | TODO | — | NOT RUN |
 | TASK-073 | B27 | Execution Startup Recovery | TODO | — | NOT RUN |
-| TASK-074 | B22 | RecoveryPolicy / Verification 数据结构 | REVIEW | 未提交（B22，Base 423baf7）：V006、RecoverySchemaTest、4 个受影响夹具 | B22-V1 verify exit 0＋RecoverySchemaTest 43/43（真实 MySQL）＋变异 3 项；B22-R1 PASS，待提交 |
+| TASK-074 | B22 | RecoveryPolicy / Verification 数据结构 | DONE | commit 1a655fd（B22，Base 423baf7） | B22-V1 verify exit 0＋RecoverySchemaTest 43/43（真实 MySQL）＋变异 3 项；B22-R1 PASS |
 | TASK-075 | B23 | RecoveryPolicy Criteria V1 | TODO | — | NOT RUN |
 | TASK-076 | B23 | RecoveryPolicy Activation | TODO | — | NOT RUN |
 | TASK-077 | B28 | Recovery Predicate Evaluator | TODO | — | NOT RUN |
@@ -806,7 +806,7 @@
 
 ### B22 — Execution 与 Recovery 存储合同
 
-- 状态：REVIEW（实现与针对性验证完成，B22-V1 exit 0；B22-R1 PASS，未提交）
+- 状态：DONE（B22-R1 PASS，已提交 1a655fd）
 - 成员及顺序：TASK-068 → TASK-074；批外前置：TASK-066 DONE（ef115c8，B21-R1 PASS）、TASK-021 DONE（b927804，B04）
 - Base SHA：423baf741b5645be4f5f7940563890fbd8dc5623
 - 用户确认（2026-09-30，开工时）：迁移按成员拆为 V005（TASK-068）、V006（TASK-074）；幂等键由 Java 按不可变 Action 身份确定性生成、同一 Action 永远同一键并记录格式，本批只完成列与唯一/格式约束，生成与使用接入 TASK-069，不扩大范围
@@ -832,7 +832,7 @@
   - 本轮实际验证：backend/ `./mvnw -B test -pl opspilot-infrastructure,opspilot-boot -am -Dtest=ActionExecutionSchemaTest,RecoverySchemaTest,InvestigationFactSchemaTest,MyBatisObservationRepositoryTest,EvidenceIntegrationTest,InvestigationApiContractTest -Dsurefire.failIfNoSpecifiedTests=false`，exit 0；真实 MySQL 测试 124（33＋43＋36＋4＋6＋2），0 失败/错误/跳过，日志 `/tmp/b22-r1-tests.log`；`git diff --check` 通过。
   - 本轮完整 clean verify NOT RUN，沿用实施方 B22-V1 记录；ai-runtime、真实 LLM、S1～S3、批准到执行端到端 NOT RUN。批准状态、跨表业务一致性、唯一 ACTIVE 策略及 Criteria 完整语义仍由后续指定 Task 的 Java 事务/Codec 实现，本次 PASS 仅覆盖 B22 存储范围。
 - 修改文件：新增 backend/opspilot-infrastructure/src/main/resources/db/migration/{V005__create_action_execution_table.sql,V006__create_recovery_tables.sql}、infrastructure 测试 persistence/{ActionExecutionSchemaTest,RecoverySchemaTest}.java；修改 infrastructure 测试 persistence/InvestigationFactSchemaTest、persistence/mybatis/observation/MyBatisObservationRepositoryTest、investigation/InvestigationFixture，boot 测试 InvestigationApiContractTest；docs/dev/{CURRENT,PROGRESS}.md。Migration：V005、V006；新增依赖：无；生产 Java 代码：无修改
-- 提交：未提交（B22-R1 PASS，待用户提交）；范围外问题：无新增
+- 提交：代码提交 1a655fd82f9ad28cbd25c49df94680f39c6a5aaf（feat(recovery): action execution and recovery policy/verification schema (TASK-068, TASK-074)）；SHA 回填为后续 docs 提交；未推送；范围外问题：无新增
 
 ### TASK-039 修复 — 准入 step_no 分配并发死锁（B12-R1/R2 约定）
 
