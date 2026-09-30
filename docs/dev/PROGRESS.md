@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-30（B28 REVIEW，Base db9e205，B28-R1 两项阻塞已关闭，B28-V2 通过，B28-R2 PASS，待提交）
+> 最近更新：2026-09-30（B28 DONE，commit c9dab5b；B29 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -84,9 +84,9 @@
 | TASK-074 | B22 | RecoveryPolicy / Verification 数据结构 | DONE | commit 1a655fd（B22，Base 423baf7） | B22-V1 verify exit 0＋RecoverySchemaTest 43/43（真实 MySQL）＋变异 3 项；B22-R1 PASS |
 | TASK-075 | B23 | RecoveryPolicy Criteria V1 | DONE | commit e9d32c6（B23，Base 8afeae9） | B23-V2 verify exit 0＋RecoveryPolicyCriteriaCodecTest 63/63、JacksonSchemaCodecRegistryTest 48/48＋变异 4 项；B23-R1 P2（小数截断）已修复，B23-R2 PASS |
 | TASK-076 | B23 | RecoveryPolicy Activation | DONE | commit e9d32c6（B23，Base 8afeae9） | B23-V2 verify exit 0＋RecoveryPolicyActivationIntegrationTest 6/6、ShortLinkDemoSeedTest 8/8（真实 MySQL）、系统查询与 Web 测试＋变异 4 项；B23-R2 PASS |
-| TASK-077 | B28 | Recovery Predicate Evaluator | REVIEW | 未提交（B28，Base db9e205） | B28-V1 verify exit 0＋RecoveryPredicateEvaluatorTest 11/11＋变异 2 项；B28-R1 NEEDS CHANGES → 已修复，B28-V2 verify exit 0，B28-R2 PASS |
-| TASK-078 | B28 | Recovery Sampling Runner | REVIEW | 未提交（B28，Base db9e205） | B28-V1 verify exit 0＋RecoveryVerificationIntegrationTest 10/10（采样身份/时间/间隔/deadline/运行时复核）＋变异 3 项；B28-R1 NEEDS CHANGES → 已修复，B28-V2 verify exit 0，B28-R2 PASS |
-| TASK-079 | B28 | Recovery Verification Runner | REVIEW | 未提交（B28，Base db9e205） | B28-V1 verify exit 0＋RecoveryVerificationIntegrationTest 10/10（短路、矩阵、终态持久化、续采、并发）＋变异 1 项；B28-R1 NEEDS CHANGES → 已修复，B28-V2 verify exit 0，B28-R2 PASS |
+| TASK-077 | B28 | Recovery Predicate Evaluator | DONE | commit c9dab5b（B28，Base db9e205） | B28-V1 verify exit 0＋RecoveryPredicateEvaluatorTest 11/11＋变异 2 项；B28-R1 NEEDS CHANGES → 已修复，B28-V2 verify exit 0，B28-R2 PASS |
+| TASK-078 | B28 | Recovery Sampling Runner | DONE | commit c9dab5b（B28，Base db9e205） | B28-V1 verify exit 0＋RecoveryVerificationIntegrationTest 10/10（采样身份/时间/间隔/deadline/运行时复核）＋变异 3 项；B28-R1 NEEDS CHANGES → 已修复，B28-V2 verify exit 0，B28-R2 PASS |
+| TASK-079 | B28 | Recovery Verification Runner | DONE | commit c9dab5b（B28，Base db9e205） | B28-V1 verify exit 0＋RecoveryVerificationIntegrationTest 10/10（短路、矩阵、终态持久化、续采、并发）＋变异 1 项；B28-R1 NEEDS CHANGES → 已修复，B28-V2 verify exit 0，B28-R2 PASS |
 | TASK-080 | B29 | Execution Success → Verification | TODO | — | NOT RUN |
 | TASK-081 | B29 | Manual Verify Recovery | TODO | — | NOT RUN |
 | TASK-082 | B30 | Verification Outcome Transition | TODO | — | NOT RUN |
@@ -978,7 +978,7 @@
 
 ### B28 — 三值判定、持久化采样与 Verification Runner
 
-- 状态：REVIEW（B28-R1 两项阻塞已关闭，B28-V2 通过，B28-R2 PASS，待提交；成员 TASK-077/078/079 均 REVIEW，基线不变）
+- 状态：DONE（B28-R2 PASS，已提交 c9dab5b）
 - 成员及顺序：TASK-077 → TASK-078 → TASK-079；批外前置：TASK-073 DONE（f8d6122，B27-R1 PASS）；TASK-074～076 DONE（1a655fd、e9d32c6）
 - Base SHA：db9e2052f4155c96b0e4c5299ddea9302b183a33
 - 范围：TASK-077——application/recovery 受控谓词求值（FIELD_EQUALS、NUMERIC_COMPARE、MONOTONIC_TREND，含 S3 健康区间语义）、注册标量投影、样本时效/间隔/完整性判定与 required 三值合取（FAILED > INCONCLUSIVE > PASSED），无表达式引擎；TASK-078——恢复采样：按 verificationId＋criterionKey＋sampleIndex 登记独立 RUNNING Invocation（不经 Duplicate Guard、不扣调查预算、运行时复核能力可用），事务外调用 Provider 并以既有结果事务落账，按上一实际样本完成时间＋interval 在事务外等待，不越过冻结 deadline；TASK-079——Verification Runner（RecoveryVerificationWorker 实现）：PENDING → RUNNING、按快照顺序逐项采样与求值，UNKNOWN 不短路、required 明确 FALSE 可短路（未执行项记 UNKNOWN 与原因），终态事务写 status、recovery.verification.result / 1、result_summary 与时间线；测试；docs/dev。明确不做：Verification 创建（080 执行成功、081 手动入口）、Incident 按结果迁移（082）、Verification 启动恢复/补派发来源与遗留 RUNNING 样本中断标记（083）、UI/SSE、新迁移（沿用 V003/V006）、新依赖
@@ -1017,7 +1017,7 @@
   - 完整 clean verify 本轮 NOT RUN，沿用修复后最终树 B28-V2；真实 Redis/Docker 恢复采样、S3、ai-runtime、真实 LLM、CCG NOT RUN。TASK-080～083 的创建入口、Incident 迁移及启动恢复仍属后续批次，不因本次 PASS 视为完成。
   - Commit Recommendation：可进入本批提交步骤；本轮仅更新审查/交接记录，未修改实现、未提交、未推送。B28 与成员保持 REVIEW，按用户授权提交并回填真实 SHA 后才能 DONE，不提前开始 B29。
 - 修改文件：新增 application/recovery/{CriterionEvaluation,CriterionReason,ProjectedValue,RecoveryOutcome,RecoveryPredicateEvaluator,RecoveryProjection,RecoverySample,RecoverySampler,RecoveryVerificationRepository,RecoveryVerificationResultV1,RecoveryVerificationService}、application/capability/{NewRecoverySampleInvocation,RecoverySampleInvocation}、domain/recovery/RecoveryVerificationStatus、domain/timeline/RecoveryVerificationEventPayloadV1、infrastructure/dispatch/UnwiredRecoveryVerificationWorker、persistence/mybatis/recovery/{RecoveryVerificationMapper,MyBatisRecoveryVerifications}＋XML，测试 RecoveryPredicateEvaluatorTest、RecoveryVerificationIntegrationTest；删除 infrastructure/dispatch/PlaceholderRecoveryVerificationWorker；修改 application/capability/{AdmittedInvocation,CapabilityExecutionService,CapabilityInvocationRepository}、domain TimelineEventType、infrastructure dispatch/DispatchConfiguration、persistence/mybatis/invocation/{CapabilityInvocationMapper,MyBatisCapabilityInvocationRepository}＋XML、schema/JacksonSchemaCodecRegistry，测试 RemediationFixture（策略 Criteria 可由调用方给出）、ProviderInvocations；R1 修复另改 application/capability/{CapabilityAdmissionService,provider/ProviderCapabilityInvoker}、application/recovery/CriterionReason 及测试 ProviderCapabilityInvokerTest；docs/dev。Migration：无（沿用 V003 样本列与唯一键、V006 recovery_verification）；新增依赖：无
-- 提交：未提交；范围外问题：Verification 终态后 Incident 仍 VERIFYING（082）；Verification 尚无创建入口（080/081）与补派发来源（083）
+- 提交：代码提交 c9dab5bee02d41e3f9df06fc4bc74660176facb5（feat(recovery): three-valued predicates, persisted sampling and verification runner (TASK-077–079)）；SHA 回填为后续 docs 提交；未推送；范围外问题：Verification 终态后 Incident 仍 VERIFYING（082）；Verification 尚无创建入口（080/081）与补派发来源/启动恢复（083）
 
 ### TASK-039 修复 — 准入 step_no 分配并发死锁（B12-R1/R2 约定）
 
