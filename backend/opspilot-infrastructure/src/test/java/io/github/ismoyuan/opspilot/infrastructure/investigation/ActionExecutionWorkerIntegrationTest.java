@@ -18,12 +18,15 @@ import io.github.ismoyuan.opspilot.application.approval.ApprovalApplicationServi
 import io.github.ismoyuan.opspilot.application.approval.ApprovalDecisionCommand;
 import io.github.ismoyuan.opspilot.application.capability.CapabilityAccess;
 import io.github.ismoyuan.opspilot.application.capability.CapabilityProviderResolver;
+import io.github.ismoyuan.opspilot.application.capability.result.ServiceInspectResultV1.RuntimeState;
 import io.github.ismoyuan.opspilot.application.dispatch.WorkDispatcher;
+import io.github.ismoyuan.opspilot.application.execution.ActionExecutionRecoveryService;
 import io.github.ismoyuan.opspilot.application.execution.ActionExecutionRepository;
 import io.github.ismoyuan.opspilot.application.execution.ActionExecutionService;
 import io.github.ismoyuan.opspilot.application.execution.ServiceRestartExecutionContextV1;
 import io.github.ismoyuan.opspilot.application.execution.ServiceRestartExecutor;
 import io.github.ismoyuan.opspilot.application.execution.ServiceRestartResultV1;
+import io.github.ismoyuan.opspilot.application.execution.ServiceRuntimeInspector;
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicyActivationService;
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicySelector;
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicyValidator;
@@ -74,6 +77,7 @@ import org.testcontainers.mysql.MySQLContainer;
     RecoveryPolicyValidator.class,
     RecoveryPolicyActivationService.class,
     ActionExecutionService.class,
+    ActionExecutionRecoveryService.class,
     CapabilityAccess.class,
     CapabilityProviderResolver.class,
     ClockConfiguration.class
@@ -121,6 +125,9 @@ class ActionExecutionWorkerIntegrationTest {
 
     @MockitoSpyBean
     ServiceRestartExecutor executor;
+
+    @MockitoSpyBean
+    ServiceRuntimeInspector inspector;
 
     RemediationFixture seeded;
     final List<Boolean> transactionActiveDuringDocker = new ArrayList<>();
@@ -199,20 +206,32 @@ class ActionExecutionWorkerIntegrationTest {
                 .containsExactly("ACTION_EXECUTION_STARTED/-", "ACTION_EXECUTION_FAILED/PROVIDER_UNAVAILABLE");
     }
 
-    /** 04 §82：结果未知保持 RUNNING，不伪造成功或失败；再次唤醒不重发 CHANGE（RUNNING 不是“未发送”）。 */
+    /**
+     * 04 §82：结果未知不伪造成功或失败，同一 Worker 转入有界只读核对（TASK-072，细节见 ActionExecutionReconciliationIntegrationTest），
+     * 核对确认后才 SUCCEEDED；再次唤醒不重发 CHANGE（RUNNING 不是“未发送”）。
+     */
     @Test
-    void anUncertainResultStaysRunningAndIsNeverResent() {
+    void anUncertainResultIsReconciledAndNeverResent() {
         long executionId = approvedExecution();
         restartAnswers(new ServiceRestartExecutor.Uncertain(ErrorCode.TIMEOUT, "timeout"));
+        doReturn(new ServiceRuntimeInspector.Inspected(
+                        CONTAINER_ID, RuntimeState.RUNNING, Instant.now().plusSeconds(3600)))
+                .when(inspector)
+                .inspect(any(), anyString(), any());
 
         worker.runActionExecution(executionId);
         worker.runActionExecution(executionId);
 
-        assertThat(execution(executionId)).containsEntry("status", "RUNNING").containsEntry("error_code", null);
-        assertThat(planStatus()).isEqualTo("ACTIVE");
+        assertThat(execution(executionId)).containsEntry("status", "SUCCEEDED").containsEntry("error_code", null);
+        assertThat(planStatus()).isEqualTo("EXECUTED");
         assertThat(incident()).isEqualTo("EXECUTING/9");
-        assertThat(events()).containsExactly("ACTION_EXECUTION_STARTED/-");
+        assertThat(events())
+                .containsExactly(
+                        "ACTION_EXECUTION_STARTED/-",
+                        "ACTION_EXECUTION_RECONCILIATION_ATTEMPTED/-",
+                        "ACTION_EXECUTION_SUCCEEDED/-");
         verify(executor, times(1)).restart(any(), anyString(), any());
+        verify(inspector, times(1)).inspect(any(), anyString(), any());
     }
 
     /**

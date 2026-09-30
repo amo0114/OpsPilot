@@ -12,8 +12,9 @@ import org.springframework.stereotype.Service;
  * 启动恢复与存活期间补派发（07 §51）：读取数据库中仍需 Worker 的工作并交给同一派发入口。派发器会合并已由本 JVM Worker
  * 拥有的同一工作，因此补派发不会动到正在运行的工作。两条入口都不刷新 run、预算或 deadline，也不调用 resumeInvestigation。
  *
- * <p>派发前先由各 {@link InterruptedWorkRecorder} 把旧进程遗留的 RUNNING 记录标为中断（调查 TASK-043；Execution、Verification
- * 由 TASK-073/083 加入）。中断只针对本进程启动之前开始的记录（构造时刻为界），因此绝不会标记本 JVM Worker 仍拥有的 RUNNING；
+ * <p>派发前先由各 {@link InterruptedWorkRecorder} 把旧进程遗留的 RUNNING 记录标为中断（调查 TASK-043；Verification 由 TASK-083 加入）。
+ * RUNNING Execution 不标中断：CHANGE 可能已经发生，结果只能由有界只读核对判定，它随 PENDING 一起由 Execution 来源派发，Worker 对它
+ * 只恢复剩余核对（TASK-073、04 §82）。中断只针对本进程启动之前开始的记录（构造时刻为界），因此绝不会标记本 JVM Worker 仍拥有的 RUNNING；
  * 这一步全部成功之前不派发任何工作（07 §52：先终结旧进程 RUNNING，再判断并派发）；启动时失败则由之后的补派发以同一界限重试，
  * 成功后才开始派发，此后补派发不再标记（B12-R1）。
  */

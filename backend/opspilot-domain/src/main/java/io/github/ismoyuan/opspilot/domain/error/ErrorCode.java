@@ -92,6 +92,11 @@ public enum ErrorCode {
      * 不计入模型连续失败，不由公开 API 返回。
      */
     PROCESS_INTERRUPTED(ErrorCategory.INTERNAL, "处理进程在该步骤完成前重启，该步骤未完成。"),
+    /**
+     * 运行记录 error_code（04 §82、05 §93、06 §35）：CHANGE 已发出但结果未知，有界只读核对在次数或期限内仍无法确认启动效果；
+     * 表示结果未知，不声称远端一定没有发生，不由公开 API 返回。
+     */
+    EXECUTION_RESULT_UNCERTAIN(ErrorCategory.INTERNAL, "无法确认重启操作是否生效，系统没有再次执行。"),
     /** credentialRef 无法解析为可用凭据（08 TASK-009）；属部署配置错误，不在 05 §93 公开目录。 */
     SECRET_NOT_FOUND(ErrorCategory.INTERNAL, "所需凭据未配置，请检查部署环境。"),
     /** 未预期的程序错误；不属于 05 §93 业务目录，仅作兜底。 */

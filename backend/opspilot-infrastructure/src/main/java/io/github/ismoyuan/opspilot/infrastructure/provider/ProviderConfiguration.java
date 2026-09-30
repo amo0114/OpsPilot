@@ -7,6 +7,7 @@ import io.github.ismoyuan.opspilot.application.capability.provider.ObserveProvid
 import io.github.ismoyuan.opspilot.application.capability.sanitize.Sanitizer;
 import io.github.ismoyuan.opspilot.application.capability.sanitize.SanitizerSettings;
 import io.github.ismoyuan.opspilot.application.execution.ServiceRestartExecutor;
+import io.github.ismoyuan.opspilot.application.execution.ServiceRuntimeInspector;
 import io.github.ismoyuan.opspilot.application.schema.SchemaCodecRegistry;
 import io.github.ismoyuan.opspilot.application.secret.SecretResolver;
 import io.github.ismoyuan.opspilot.infrastructure.config.ProviderProperties;
@@ -117,5 +118,17 @@ class ProviderConfiguration {
                 new DockerEngineClient(clock, properties.responseLimit()),
                 new ProviderAuthentication(codecs, secrets),
                 clock);
+    }
+
+    /** 执行结果的只读核对（08 TASK-072）：同一 Engine API 客户端实现，只读 inspect，不含任何写路径。 */
+    @Bean
+    ServiceRuntimeInspector dockerServiceRuntimeInspector(
+            ProviderProperties properties,
+            SchemaCodecRegistry codecs,
+            SecretResolver secrets,
+            ObjectProvider<Clock> clocks) {
+        return new DockerServiceRuntimeInspector(
+                new DockerEngineClient(clocks.getIfAvailable(Clock::systemUTC), properties.responseLimit()),
+                new ProviderAuthentication(codecs, secrets));
     }
 }

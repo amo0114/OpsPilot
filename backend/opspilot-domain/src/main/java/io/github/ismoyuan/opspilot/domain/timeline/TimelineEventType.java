@@ -33,9 +33,16 @@ public enum TimelineEventType {
     APPROVAL_APPROVED,
     /** Execution 条件更新 PENDING → RUNNING 成功，即将发出唯一一次 CHANGE（04 §79）。 */
     ACTION_EXECUTION_STARTED,
-    /** 重启操作确定成功（只表示操作成功，不表示已恢复，06 §109）。 */
+    /**
+     * 结果未知的 Execution 已登记一次只读核对（04 §82：每次核对计入 Timeline），登记提交后才发出 inspect；01 §35 最低清单之外的补充类型。
+     */
+    ACTION_EXECUTION_RECONCILIATION_ATTEMPTED,
+    /** 重启操作确定成功或经只读核对确认已生效（只表示操作成功，不表示已恢复，06 §109）。 */
     ACTION_EXECUTION_SUCCEEDED,
-    /** Execution 确定失败：准入前（未发出 CHANGE）或执行中明确失败，Incident 回到 DIAGNOSED（04 §79）。 */
+    /**
+     * Execution 失败：准入前（未发出 CHANGE）、执行中明确失败，或核对耗尽/到期仍无法确认（EXECUTION_RESULT_UNCERTAIN），Incident 回到
+     * DIAGNOSED（04 §79、§82）。
+     */
     ACTION_EXECUTION_FAILED,
     /** Approval 被拒绝，Incident 回到 DIAGNOSED（01 §24.2）。 */
     APPROVAL_REJECTED,

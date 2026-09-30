@@ -85,13 +85,7 @@ final class DockerServiceInspectProvider implements ObserveProvider {
             throw invalid();
         }
         String status = state.path("Status").asString();
-        RuntimeState runtime = switch (status) {
-            case "running" -> RuntimeState.RUNNING;
-            case "exited", "dead", "created" -> RuntimeState.STOPPED;
-            case "restarting" -> RuntimeState.RESTARTING;
-            case "paused" -> RuntimeState.PAUSED;
-            default -> RuntimeState.UNKNOWN;
-        };
+        RuntimeState runtime = runtimeState(status);
         HealthStatus healthStatus = health(state.path("Health"));
         boolean ended = status.equals("exited") || status.equals("dead");
         try {
@@ -106,6 +100,17 @@ final class DockerServiceInspectProvider implements ObserveProvider {
         } catch (IllegalArgumentException ex) {
             throw invalid();
         }
+    }
+
+    /** Docker State.Status 的映射；执行结果核对（{@link DockerServiceRuntimeInspector}）沿用同一映射。 */
+    static RuntimeState runtimeState(String status) {
+        return switch (status) {
+            case "running" -> RuntimeState.RUNNING;
+            case "exited", "dead", "created" -> RuntimeState.STOPPED;
+            case "restarting" -> RuntimeState.RESTARTING;
+            case "paused" -> RuntimeState.PAUSED;
+            default -> RuntimeState.UNKNOWN;
+        };
     }
 
     /** 没有 Health（未配置健康检查）为 NOT_CONFIGURED；有 Health 却没有字符串 Status 是非法数据。 */
@@ -155,7 +160,7 @@ final class DockerServiceInspectProvider implements ObserveProvider {
     }
 
     /** 缺失、null、空串或 Docker 的零时间（0001-01-01）为未知；其他非 ISO-8601 字符串或非字符串为非法。 */
-    private static Instant time(JsonNode node) {
+    static Instant time(JsonNode node) {
         if (absent(node)) {
             return null;
         }

@@ -13,6 +13,7 @@ import io.github.ismoyuan.opspilot.application.capability.result.MetricsQueryRes
 import io.github.ismoyuan.opspilot.application.capability.result.QueueInspectResultV1;
 import io.github.ismoyuan.opspilot.application.capability.result.ServiceInspectResultV1;
 import io.github.ismoyuan.opspilot.application.execution.ServiceRestartExecutionContextV1;
+import io.github.ismoyuan.opspilot.application.execution.ServiceRestartReconciliationResultV1;
 import io.github.ismoyuan.opspilot.application.execution.ServiceRestartResultV1;
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicyCriteriaV1;
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicySnapshotV1;
@@ -143,7 +144,12 @@ class JacksonSchemaCodecRegistry implements SchemaCodecRegistry {
             entry(
                     ServiceRestartResultV1.SCHEMA_NAME,
                     ServiceRestartResultV1.SCHEMA_VERSION,
-                    ServiceRestartResultV1.class));
+                    ServiceRestartResultV1.class),
+            // restart 结果未知后经只读核对确认的执行结果（04 §82）
+            entry(
+                    ServiceRestartReconciliationResultV1.SCHEMA_NAME,
+                    ServiceRestartReconciliationResultV1.SCHEMA_VERSION,
+                    ServiceRestartReconciliationResultV1.class));
 
     private final JsonMapper mapper = JsonMapper.builder()
             .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)

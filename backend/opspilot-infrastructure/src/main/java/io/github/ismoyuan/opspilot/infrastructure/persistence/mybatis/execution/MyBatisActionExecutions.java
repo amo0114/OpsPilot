@@ -52,12 +52,22 @@ class MyBatisActionExecutions implements ActionExecutionRepository {
                         row.planId(),
                         row.incidentId(),
                         row.context(),
-                        row.startedAt() == null ? null : row.startedAt().toInstant(ZoneOffset.UTC)));
+                        instant(row.startedAt()),
+                        row.reconciliationAttemptCount(),
+                        row.maxReconciliationAttempts(),
+                        instant(row.lastReconciliationAt()),
+                        instant(row.reconciliationDeadlineAt())));
     }
 
     @Override
     public boolean markRunning(long executionId, long expectedVersion, String contextPayload, Instant startedAt) {
         return mapper.markRunning(executionId, expectedVersion, contextPayload, utc(startedAt)) == 1;
+    }
+
+    @Override
+    public boolean registerReconciliation(
+            long executionId, long expectedVersion, Instant attemptedAt, Instant deadlineIfFirst) {
+        return mapper.registerReconciliation(executionId, expectedVersion, utc(attemptedAt), utc(deadlineIfFirst)) == 1;
     }
 
     @Override
@@ -98,6 +108,10 @@ class MyBatisActionExecutions implements ActionExecutionRepository {
     @Override
     public void markPlanCancelled(long planId, Instant at) {
         mapper.updatePlanFromActive(planId, "CANCELLED", utc(at));
+    }
+
+    private static Instant instant(LocalDateTime at) {
+        return at == null ? null : at.toInstant(ZoneOffset.UTC);
     }
 
     private static LocalDateTime utc(Instant at) {

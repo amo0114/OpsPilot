@@ -85,8 +85,12 @@ final class DockerServiceRestartExecutor implements ServiceRestartExecutor {
         };
     }
 
-    /** 与 service.inspect 相同的连接约束：Docker 配置合法、不带凭据、端点为 unix socket。 */
     private Path socket(DataSourceConnection connection) {
+        return socket(authentication, connection);
+    }
+
+    /** 与 service.inspect 相同的连接约束：Docker 配置合法、不带凭据、端点为 unix socket；执行结果核对沿用。 */
+    static Path socket(ProviderAuthentication authentication, DataSourceConnection connection) {
         authentication.config(connection, DockerConnectionConfigV1.SCHEMA_NAME, DockerConnectionConfigV1.class);
         if (connection.credentialRef() != null) {
             throw new ProviderCallException(

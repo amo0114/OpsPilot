@@ -1,7 +1,6 @@
 package io.github.ismoyuan.opspilot.application.execution;
 
 import io.github.ismoyuan.opspilot.application.capability.CapabilityAccess;
-import io.github.ismoyuan.opspilot.application.correlation.Correlation;
 import io.github.ismoyuan.opspilot.application.dispatch.ActionExecutionWorker;
 import io.github.ismoyuan.opspilot.application.execution.ActionExecutionRepository.ExecutionRecord;
 import io.github.ismoyuan.opspilot.application.execution.ServiceRestartExecutor.RestartOutcome;
@@ -20,8 +19,6 @@ import io.github.ismoyuan.opspilot.domain.incident.IncidentStatus;
 import io.github.ismoyuan.opspilot.domain.incident.IncidentTrigger;
 import io.github.ismoyuan.opspilot.domain.system.DataSourceConnection;
 import io.github.ismoyuan.opspilot.domain.timeline.ActionExecutionEventPayloadV1;
-import io.github.ismoyuan.opspilot.domain.timeline.NewTimelineEvent;
-import io.github.ismoyuan.opspilot.domain.timeline.TimelineActorType;
 import io.github.ismoyuan.opspilot.domain.timeline.TimelineEventType;
 import java.time.Clock;
 import java.time.Instant;
@@ -36,7 +33,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 /**
  * service.restart 的执行 Worker（08 TASK-071、04 §79、§82、06 §106）。外部调用都不在数据库事务内：
  * <ol>
- *   <li>只处理 PENDING；RUNNING 不能当作“还没发送”，由核对与启动恢复处理（TASK-072/073），终态直接返回。
+ *   <li>PENDING 走下面的准入与执行；RUNNING 不能当作“还没发送”，只交给有界只读核对（{@link ActionExecutionRecoveryService}，
+ *       TASK-072/073），绝不重发；终态直接返回。
  *   <li>事务外按执行上下文的 Docker 连接与容器名只读解析真实容器 id。
  *   <li>准入短事务：锁 Incident（须为 EXECUTING），复核 Execution 仍 PENDING、目标的 service.restart 仍可执行且唯一 Provider 与冻结的
  *       绑定/连接/容器名一致，然后条件更新 PENDING → RUNNING（保存容器 id 与 started_at）并写 ACTION_EXECUTION_STARTED。只有这次
@@ -45,7 +43,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  *   <li>事务外发出一次 restart，不重试。
  *   <li>结果短事务：成功 → SUCCEEDED、方案 EXECUTED、ACTION_EXECUTION_SUCCEEDED（Incident 仍 EXECUTING——以冻结快照创建 Verification
  *       并 → VERIFYING 属 TASK-080 的同一成功事务）；明确失败 → FAILED、方案 EXECUTED、Incident → DIAGNOSED、ACTION_EXECUTION_FAILED；
- *       结果未知 → 不改任何数据，保持 RUNNING 交给有界只读核对（TASK-072），绝不重发。
+ *       结果未知 → 不改任何数据，保持 RUNNING，在同一 Worker（仍持有该 Execution 的单飞）内进入有界只读核对，绝不重发。
  * </ol>
  */
 @Service
@@ -62,7 +60,8 @@ public class ActionExecutionService implements ActionExecutionWorker {
     private final CapabilityRegistry registry;
     private final ServiceRestartExecutor executor;
     private final SchemaCodecRegistry codecs;
-    private final TimelineRepository timeline;
+    private final ExecutionEvents events;
+    private final ActionExecutionRecoveryService reconciliation;
     private final TransactionTemplate transaction;
     private final Clock clock;
 
@@ -76,6 +75,7 @@ public class ActionExecutionService implements ActionExecutionWorker {
             ServiceRestartExecutor executor,
             SchemaCodecRegistry codecs,
             TimelineRepository timeline,
+            ActionExecutionRecoveryService reconciliation,
             PlatformTransactionManager transactionManager,
             Clock clock) {
         this.executions = executions;
@@ -86,7 +86,8 @@ public class ActionExecutionService implements ActionExecutionWorker {
         this.registry = registry;
         this.executor = executor;
         this.codecs = codecs;
-        this.timeline = timeline;
+        this.events = new ExecutionEvents(timeline);
+        this.reconciliation = reconciliation;
         this.transaction = new TransactionTemplate(transactionManager);
         this.clock = clock;
     }
@@ -94,6 +95,11 @@ public class ActionExecutionService implements ActionExecutionWorker {
     @Override
     public void runActionExecution(long executionId) {
         Optional<ExecutionRecord> found = executions.findById(executionId);
+        if (found.isPresent() && found.get().status() == ActionExecutionStatus.RUNNING) {
+            // CHANGE 可能已经发出：只恢复有界只读核对（04 §82、07 §51）
+            reconciliation.reconcile(executionId);
+            return;
+        }
         if (found.isEmpty() || found.get().status() != ActionExecutionStatus.PENDING) {
             log.debug("Execution not pending, no CHANGE is sent: executionId={}", executionId);
             return;
@@ -117,9 +123,10 @@ public class ActionExecutionService implements ActionExecutionWorker {
                 deadline(CapabilityKey.SERVICE_RESTART));
         if (outcome instanceof ServiceRestartExecutor.Uncertain uncertain) {
             log.warn(
-                    "Execution result uncertain, left RUNNING for read-only reconciliation: executionId={} code={}",
+                    "Execution result uncertain, starting read-only reconciliation: executionId={} code={}",
                     executionId,
                     uncertain.code());
+            reconciliation.reconcile(executionId);
             return;
         }
         transaction.executeWithoutResult(status -> record(admitted.get(), outcome));
@@ -192,7 +199,11 @@ public class ActionExecutionService implements ActionExecutionWorker {
                 current.planId(),
                 current.incidentId(),
                 encode(running),
-                now);
+                now,
+                current.reconciliationAttemptCount(),
+                current.maxReconciliationAttempts(),
+                current.lastReconciliationAt(),
+                current.reconciliationDeadlineAt());
         return Optional.of(new Admitted(started, running, allowed.provider().connection()));
     }
 
@@ -278,20 +289,7 @@ public class ActionExecutionService implements ActionExecutionWorker {
             String phase,
             String errorCode,
             Instant now) {
-        timeline.append(new NewTimelineEvent(
-                incident.id(),
-                type,
-                now,
-                TimelineActorType.SYSTEM,
-                null,
-                summary,
-                new ActionExecutionEventPayloadV1(
-                        incident.incidentKey().value(),
-                        execution.id(),
-                        execution.remediationActionId(),
-                        phase,
-                        errorCode),
-                Correlation.currentId()));
+        events.append(incident, type, summary, execution, phase, errorCode, now);
     }
 
     private ServiceRestartExecutionContextV1 context(ExecutionRecord execution) {

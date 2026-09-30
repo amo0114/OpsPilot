@@ -6,7 +6,7 @@ import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
-/** ActionExecution 插入与查询（04 §45～§47）；状态推进语句随 Worker 加入（TASK-071 起）。 */
+/** ActionExecution 插入、查询与条件状态推进（04 §45～§47、§82）。 */
 @Mapper
 interface ActionExecutionMapper {
 
@@ -14,7 +14,7 @@ interface ActionExecutionMapper {
 
     ExecutionRow selectByActionId(@Param("actionId") long actionId);
 
-    List<DispatchableWork.ActionExecution> selectPending();
+    List<DispatchableWork.ActionExecution> selectDispatchable();
 
     RecordRow selectRecord(@Param("id") long id);
 
@@ -23,6 +23,12 @@ interface ActionExecutionMapper {
             @Param("expectedVersion") long expectedVersion,
             @Param("context") String context,
             @Param("at") LocalDateTime at);
+
+    int registerReconciliation(
+            @Param("id") long id,
+            @Param("expectedVersion") long expectedVersion,
+            @Param("at") LocalDateTime at,
+            @Param("deadline") LocalDateTime deadline);
 
     int markSucceeded(
             @Param("id") long id,
@@ -51,7 +57,11 @@ interface ActionExecutionMapper {
             long planId,
             long incidentId,
             String context,
-            LocalDateTime startedAt) {}
+            LocalDateTime startedAt,
+            int reconciliationAttemptCount,
+            int maxReconciliationAttempts,
+            LocalDateTime lastReconciliationAt,
+            LocalDateTime reconciliationDeadlineAt) {}
 
     record ExecutionRow(long id, String status) {}
 

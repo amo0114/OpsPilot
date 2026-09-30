@@ -682,7 +682,8 @@ class RemediationApprovalIntegrationTest {
     }
 
     /**
-     * 08 TASK-069：提交后派发失败不影响已提交的批准；PENDING Execution 由补派发来源重新找到（07 §51），RUNNING 不在其中。
+     * 08 TASK-069：提交后派发失败不影响已提交的批准；PENDING Execution 由补派发来源重新找到（07 §51）。TASK-073 起 RUNNING 同样在来源中
+     * （Worker 对它只做有界只读核对），终态不在其中。
      */
     @Test
     void aFailedDispatchIsRecoveredFromThePendingExecutionSource() {
@@ -697,6 +698,11 @@ class RemediationApprovalIntegrationTest {
         assertThat(pendingExecutionWork()).containsExactly(new DispatchableWork.ActionExecution(executionId));
         jdbc.update(
                 "UPDATE action_execution SET status = 'RUNNING', started_at = UTC_TIMESTAMP(3) WHERE id = ?",
+                executionId);
+        assertThat(pendingExecutionWork()).containsExactly(new DispatchableWork.ActionExecution(executionId));
+        jdbc.update(
+                "UPDATE action_execution SET status = 'FAILED', error_code = 'TIMEOUT', finished_at = UTC_TIMESTAMP(3)"
+                        + " WHERE id = ?",
                 executionId);
         assertThat(pendingExecutionWork()).isEmpty();
     }

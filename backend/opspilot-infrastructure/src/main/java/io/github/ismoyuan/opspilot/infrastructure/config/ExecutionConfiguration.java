@@ -9,7 +9,7 @@ import org.springframework.context.annotation.Configuration;
 @EnableConfigurationProperties(ExecutionProperties.class)
 class ExecutionConfiguration {
 
-    /** 启动时校验（上限非正值则启动失败）。 */
+    /** 启动时校验（上限或核对时长非正值则启动失败）。 */
     @Bean
     ExecutionSettings executionSettings(ExecutionProperties properties) {
         return properties.settings();

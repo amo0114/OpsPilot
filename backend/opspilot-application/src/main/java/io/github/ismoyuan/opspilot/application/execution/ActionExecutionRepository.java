@@ -4,7 +4,7 @@ import io.github.ismoyuan.opspilot.domain.execution.ActionExecutionStatus;
 import java.time.Instant;
 import java.util.Optional;
 
-/** ActionExecution 持久化端口（04 §45～§47）；状态推进由 Worker 与完成事务按条件更新完成（TASK-071 起）。 */
+/** ActionExecution 持久化端口（04 §45～§47）；状态推进由 Worker、核对与完成事务按条件更新完成（TASK-071、TASK-072）。 */
 public interface ActionExecutionRepository {
 
     /**
@@ -25,6 +25,15 @@ public interface ActionExecutionRepository {
      * @return 条件更新是否由本次获胜
      */
     boolean markRunning(long executionId, long expectedVersion, String contextPayload, Instant startedAt);
+
+    /**
+     * 登记一次只读核对（04 §82）：仍为 RUNNING、版本未变且次数未达快照上限时，次数加一、写尝试时间，截止时间为空时冻结为
+     * {@code deadlineIfFirst}（已冻结则保持）。调用方须在本事务提交之后才发出 inspect。
+     *
+     * @return 条件更新是否由本次获胜
+     */
+    boolean registerReconciliation(
+            long executionId, long expectedVersion, Instant attemptedAt, Instant deadlineIfFirst);
 
     /** RUNNING → SUCCEEDED 并保存类型化结果。 */
     boolean markSucceeded(
@@ -52,6 +61,8 @@ public interface ActionExecutionRepository {
 
     /**
      * @param startedAt RUNNING 准入时写入；PENDING 为空
+     * @param lastReconciliationAt 最近一次登记的核对时间；未核对为空
+     * @param reconciliationDeadlineAt 首次登记核对时冻结；此前为空
      */
     record ExecutionRecord(
             long id,
@@ -61,7 +72,11 @@ public interface ActionExecutionRepository {
             long planId,
             long incidentId,
             String executionContextPayload,
-            Instant startedAt) {}
+            Instant startedAt,
+            int reconciliationAttemptCount,
+            int maxReconciliationAttempts,
+            Instant lastReconciliationAt,
+            Instant reconciliationDeadlineAt) {}
 
     /** 一次 Execution 的身份与当前状态。 */
     record ExecutionRef(long executionId, ActionExecutionStatus status) {}

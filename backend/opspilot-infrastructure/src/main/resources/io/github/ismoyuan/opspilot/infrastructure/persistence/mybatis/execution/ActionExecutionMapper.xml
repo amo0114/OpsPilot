@@ -9,7 +9,7 @@
         </constructor>
     </resultMap>
 
-    <resultMap id="pendingWork" type="io.github.ismoyuan.opspilot.application.dispatch.DispatchableWork$ActionExecution">
+    <resultMap id="dispatchableWork" type="io.github.ismoyuan.opspilot.application.dispatch.DispatchableWork$ActionExecution">
         <constructor>
             <arg column="id" javaType="_long"/>
         </constructor>
@@ -25,6 +25,10 @@
             <arg column="incident_id" javaType="_long"/>
             <arg column="context" javaType="String"/>
             <arg column="started_at" javaType="java.time.LocalDateTime"/>
+            <arg column="reconciliation_attempt_count" javaType="_int"/>
+            <arg column="max_reconciliation_attempts" javaType="_int"/>
+            <arg column="last_reconciliation_at" javaType="java.time.LocalDateTime"/>
+            <arg column="reconciliation_deadline_at" javaType="java.time.LocalDateTime"/>
         </constructor>
     </resultMap>
 
@@ -45,14 +49,15 @@
         SELECT id, status FROM action_execution WHERE remediation_action_id = #{actionId}
     </select>
 
-    <!-- 只取 PENDING；按状态索引 idx_action_execution_status 扫描 -->
-    <select id="selectPending" resultMap="pendingWork">
-        SELECT id FROM action_execution WHERE status = 'PENDING' ORDER BY id
+    <!-- PENDING 与 RUNNING（07 §51）；终态不派发。按状态索引 idx_action_execution_status 扫描 -->
+    <select id="selectDispatchable" resultMap="dispatchableWork">
+        SELECT id FROM action_execution WHERE status IN ('PENDING', 'RUNNING') ORDER BY id
     </select>
 
     <select id="selectRecord" resultMap="recordRow">
         SELECT e.id, e.status, e.lock_version, e.remediation_action_id, p.id AS plan_id, p.incident_id,
-               CAST(e.execution_context_payload AS CHAR) AS context, e.started_at
+               CAST(e.execution_context_payload AS CHAR) AS context, e.started_at, e.reconciliation_attempt_count,
+               e.max_reconciliation_attempts, e.last_reconciliation_at, e.reconciliation_deadline_at
         FROM action_execution e
         JOIN remediation_action a ON a.id = e.remediation_action_id
         JOIN remediation_plan p ON p.id = a.remediation_plan_id
@@ -65,6 +70,16 @@
         SET status = 'RUNNING', execution_context_payload = #{context}, started_at = #{at}, updated_at = #{at},
             lock_version = lock_version + 1
         WHERE id = #{id} AND status = 'PENDING' AND lock_version = #{expectedVersion}
+    </update>
+
+    <!-- 有界只读核对的登记（04 §82）：提交后才发出 inspect；截止时间首次冻结后不再改变，次数不超过快照上限 -->
+    <update id="registerReconciliation">
+        UPDATE action_execution
+        SET reconciliation_attempt_count = reconciliation_attempt_count + 1, last_reconciliation_at = #{at},
+            reconciliation_deadline_at = COALESCE(reconciliation_deadline_at, #{deadline}), updated_at = #{at},
+            lock_version = lock_version + 1
+        WHERE id = #{id} AND status = 'RUNNING' AND lock_version = #{expectedVersion}
+          AND reconciliation_attempt_count &lt; max_reconciliation_attempts
     </update>
 
     <update id="markSucceeded">
