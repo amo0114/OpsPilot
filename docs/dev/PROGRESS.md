@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-30（B21 REVIEW：B21-R1 PASS，待提交，Base 0edfb87）
+> 最近更新：2026-09-30（B21 DONE，commit ef115c8；B22 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -72,8 +72,8 @@
 | TASK-062 | B20 | Remediation 数据结构 | DONE | commit a25d1b9（B20，Base 1175caa） | B20-V1 verify exit 0＋RemediationSchemaTest 16/16、Plan 失效/取消/继续调查核对集成测试；B20-R1 PASS，待提交 |
 | TASK-063 | B20 | Remediation Draft Context | DONE | commit a25d1b9（B20，Base 1175caa） | B20-V1 verify exit 0＋RemediationDraftIntegrationTest 5/5、ai-runtime 178 passed；真实模型 remediation-v1 2 次通过；B20-R1 PASS，待提交 |
 | TASK-064 | B20 | Remediation Proposal 校验 | DONE | commit a25d1b9（B20，Base 1175caa） | B20-V1 verify exit 0＋RemediationDraftIntegrationTest（校验与 Java 策略）；真实模型建议经 Java 校验得 MEDIUM/true；B20-R1 PASS，待提交 |
-| TASK-065 | B21 | request-remediation | REVIEW | 未提交（B21 工作树） | B21-V1 verify exit 0＋RemediationApprovalIntegrationTest（创建与回滚）、RemediationControllerTest；B21-R1 PASS，待提交 |
-| TASK-066 | B21 | Approval API | REVIEW | 未提交（B21 工作树） | B21-V1 verify exit 0＋RemediationApprovalIntegrationTest（查询/拒绝/撤回/批准复核/并发）、RemediationControllerTest；批准成功路径属 TASK-069；B21-R1 PASS，待提交 |
+| TASK-065 | B21 | request-remediation | DONE | commit ef115c8（B21，Base 0edfb87） | B21-V1 verify exit 0＋RemediationApprovalIntegrationTest（创建与回滚）、RemediationControllerTest；B21-R1 PASS，待提交 |
+| TASK-066 | B21 | Approval API | DONE | commit ef115c8（B21，Base 0edfb87） | B21-V1 verify exit 0＋RemediationApprovalIntegrationTest（查询/拒绝/撤回/批准复核/并发）、RemediationControllerTest；批准成功路径属 TASK-069；B21-R1 PASS，待提交 |
 | TASK-067 | B24 | Approval 并发与历史方案保护 | TODO | — | NOT RUN |
 | TASK-068 | B22 | ActionExecution 数据结构 | TODO | — | NOT RUN |
 | TASK-069 | B25 | Approve → Execution | TODO | — | NOT RUN |
@@ -782,7 +782,7 @@
 
 ### B21 — 请求修复、审批查询、拒绝与取消
 
-- 状态：REVIEW（B21-R1 PASS；未提交、未推送）
+- 状态：DONE（B21-R1 PASS，已提交 ef115c8）
 - 成员及顺序：TASK-065 → TASK-066；批外前置：TASK-064 DONE（a25d1b9，B20-R1 PASS）
 - Base SHA：0edfb87da5a940819b47a253e0ef62c6d7ac4103
 - 范围：domain（Approval 状态与决定规则、错误码、时间线事件与载荷）；application（request-remediation 用例：只读上下文 → 事务外 AI → 短事务复核并创建 Plan/Action/PENDING Approval、DIAGNOSED→AWAITING_APPROVAL、时间线；Approval 查询、拒绝、撤回与批准复核）；infrastructure（方案/审批写入与查询的 MyBatis 实现）；web（POST request-remediation、GET/approve/reject/cancel Approval）；测试；docs/dev。明确不做：ActionExecution、RecoveryPolicy 选择与快照、批准成功路径（TASK-067～069、074～076）、SSE、UI、新迁移
@@ -802,6 +802,7 @@
   - 本次实际运行：backend/ `./mvnw -B test -pl opspilot-infrastructure,opspilot-web -am -Dtest=RemediationApprovalIntegrationTest,RemediationControllerTest -Dsurefire.failIfNoSpecifiedTests=false`，exit 0；真实 MySQL 集成 9、Web 15，合计 24，0 失败/错误/跳过；`git diff --check` 通过。日志 `/tmp/b21-r1-tests.log`。完整 clean verify 本轮 NOT RUN，沿用实施方 B21-V1 记录；ai-runtime、真实 LLM、S1～S3 NOT RUN。
   - 后续接通批准成功路径时注意：`ApprovalApplicationService.lock` 在 Incident 行锁之前的一致性读会建立 MySQL REPEATABLE READ 快照；TASK-067/069 应确保随后 Diagnosis/资源/Binding 的复核不使用等待行锁前的旧快照。本批批准始终无写入拒绝，故不是本批阻断项。
 - 修改文件：domain/remediation/{ApprovalRequest,ApprovalStatus,RemediationPlanStatus}（新）、domain/timeline/{RemediationProposedPayloadV1,ApprovalRequestedPayloadV1,ApprovalDecidedPayloadV1}（新）、TimelineEventType、domain/error/ErrorCode；application/remediation/{RemediationApplicationService,RemediationRepository,RequestRemediationCommand,RequestRemediationResult}（新）、RemediationActions、RemediationDraftContextBuilder；application/approval/{ApprovalApplicationService,ApprovalRepository,ApprovalDecisionCommand,ApprovalDecisionResult}（新）；infrastructure/persistence/mybatis/remediation/{ApprovalMapper,MyBatisApprovals,GeneratedKey}（新）及 ApprovalMapper.xml；web/remediation/{RemediationController,RemediationResponses,ApprovalDecisionRequest}（新）；测试 infrastructure investigation/RemediationApprovalIntegrationTest、web remediation/RemediationControllerTest（新）；docs/dev。无 Migration、无新依赖
+- 提交：代码提交 ef115c82ca123d5def3d363fb1ab22ecdc855d07（feat(remediation): request-remediation and approval API (TASK-065–066)）；SHA 回填为后续 docs 提交；未推送
 
 ### TASK-039 修复 — 准入 step_no 分配并发死锁（B12-R1/R2 约定）
 
