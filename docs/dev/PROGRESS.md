@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-30（B27 REVIEW，Base 3c335fe，B27-V1 通过，B27-R1 PASS，待提交）
+> 最近更新：2026-09-30（B27 DONE，commit f8d6122；B28 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -79,8 +79,8 @@
 | TASK-069 | B25 | Approve → Execution | DONE | commit 90d80a2（B25，Base 050aa1a） | B25-V1 verify exit 0＋RemediationApprovalIntegrationTest 18/18（真实 MySQL）、RemediationControllerTest 17/17＋变异 3 项；B25-R1 PASS；真实 Worker 前 Execution 保持 PENDING（TASK-071） |
 | TASK-070 | B26 | Docker service.restart Executor | DONE | commit 96dc7cd（B26，Base 59b015b） | B26-V1 verify exit 0＋DockerServiceRestartExecutorIntegrationTest 6/6（含真实 Docker 重启）＋变异 1 项；B26-R1 PASS |
 | TASK-071 | B26 | Execution Worker | DONE | commit 96dc7cd（B26，Base 59b015b） | B26-V1 verify exit 0＋ActionExecutionWorkerIntegrationTest 8/8（真实 MySQL，含真实 Docker 端到端）＋变异 3 项；B26-R1 PASS；成功后 Verification 属 TASK-080，未知结果核对属 TASK-072 |
-| TASK-072 | B27 | Execution Reconciliation | REVIEW | 未提交（B27，Base 3c335fe） | B27-V1 verify exit 0＋ActionExecutionReconciliationIntegrationTest 7/7、DockerServiceRestartExecutorIntegrationTest 8/8（含真实 Docker 核对）＋变异 3 项；B27-R1 PASS |
-| TASK-073 | B27 | Execution Startup Recovery | REVIEW | 未提交（B27，Base 3c335fe） | B27-V1 verify exit 0＋ExecutionStartupRecoveryIntegrationTest 5/5、RemediationApprovalIntegrationTest 18/18＋变异 2 项；B27-R1 PASS |
+| TASK-072 | B27 | Execution Reconciliation | DONE | commit f8d6122（B27，Base 3c335fe） | B27-V1 verify exit 0＋ActionExecutionReconciliationIntegrationTest 7/7、DockerServiceRestartExecutorIntegrationTest 8/8（含真实 Docker 核对）＋变异 3 项；B27-R1 PASS |
+| TASK-073 | B27 | Execution Startup Recovery | DONE | commit f8d6122（B27，Base 3c335fe） | B27-V1 verify exit 0＋ExecutionStartupRecoveryIntegrationTest 5/5、RemediationApprovalIntegrationTest 18/18＋变异 2 项；B27-R1 PASS |
 | TASK-074 | B22 | RecoveryPolicy / Verification 数据结构 | DONE | commit 1a655fd（B22，Base 423baf7） | B22-V1 verify exit 0＋RecoverySchemaTest 43/43（真实 MySQL）＋变异 3 项；B22-R1 PASS |
 | TASK-075 | B23 | RecoveryPolicy Criteria V1 | DONE | commit e9d32c6（B23，Base 8afeae9） | B23-V2 verify exit 0＋RecoveryPolicyCriteriaCodecTest 63/63、JacksonSchemaCodecRegistryTest 48/48＋变异 4 项；B23-R1 P2（小数截断）已修复，B23-R2 PASS |
 | TASK-076 | B23 | RecoveryPolicy Activation | DONE | commit e9d32c6（B23，Base 8afeae9） | B23-V2 verify exit 0＋RecoveryPolicyActivationIntegrationTest 6/6、ShortLinkDemoSeedTest 8/8（真实 MySQL）、系统查询与 Web 测试＋变异 4 项；B23-R2 PASS |
@@ -947,7 +947,7 @@
 
 ### B27 — 有界只读核对与执行启动恢复
 
-- 状态：REVIEW（实现、针对性验证与 B27-V1 完成，B27-R1 PASS，待提交；成员 TASK-072/073 均 REVIEW）
+- 状态：DONE（B27-R1 PASS，已提交 f8d6122）
 - 成员及顺序：TASK-072 → TASK-073；批外前置：TASK-071 DONE（96dc7cd，B26-R1 PASS）、TASK-069 DONE（90d80a2，B25-R1 PASS）、TASK-035 DONE（B09）
 - Base SHA：3c335fec5c15d234d12500433e6f238c8792b738
 - 范围：TASK-072——application 执行核对服务 ActionExecutionRecoveryService（07 §67）：只依赖只读 ServiceRuntimeInspector 端口，不持有 restart 端口；每次尝试先在短事务内（Incident 行锁→Execution 状态/版本）检查 RUNNING、次数与截止时间，原子增加 reconciliation_attempt_count、写 last_reconciliation_at、首次冻结 reconciliation_deadline_at 并提交，再在事务外 inspect；同一冻结容器 id、RUNNING 且 startedAt 晚于 execution.started_at 才确认 → SUCCEEDED；耗尽/到期 → FAILED/EXECUTION_RESULT_UNCERTAIN、Plan EXECUTED、Incident → DIAGNOSED；受信配置 interval/timeout/maxDuration（默认 5/5/60 秒）；infrastructure Docker 只读核对实现（复用 Engine API inspect 与 service.inspect 的状态映射）；Worker 在结果未知后及遇到 RUNNING 时进入核对。TASK-073——Execution 补派发来源加入 RUNNING（PENDING 重派发、RUNNING 只恢复核对、终态不派发），启动扫描不刷新快照/上限/deadline；测试；docs/dev。明确不做：Verification 创建与 Incident → VERIFYING（080）、谓词/采样（077～079）、Verification 启动恢复（083）、UI/SSE、新迁移（沿用 V005 已有核对列）、新依赖
@@ -974,7 +974,7 @@
   - 完整 clean verify 本轮 NOT RUN，沿用实施方 B27-V1；ShortLink/S3、ai-runtime、真实 LLM、CCG NOT RUN。成功后仍为 EXECUTING 属 TASK-080 分工，届时须接入直接成功及核对成功两条事务路径。
   - Commit Recommendation：可提交本批代码与进度记录；本轮只更新审查/交接记录，未修改实现、未提交、未推送。B27 与成员保持 REVIEW，提交并回填真实 SHA 后才能 DONE。
 - 修改文件：新增 application/execution/{ActionExecutionRecoveryService,ExecutionEvents,ServiceRuntimeInspector,ServiceRestartReconciliationResultV1}、domain/timeline/ActionExecutionReconciliationPayloadV1、infrastructure/provider/DockerServiceRuntimeInspector，测试 ActionExecutionReconciliationIntegrationTest、ExecutionStartupRecoveryIntegrationTest；重命名 MyBatisPendingExecutionWorkSource → MyBatisExecutionWorkSource；修改 application/dispatch/{ActionExecutionWorker,DispatchableWorkSource,StartupRecoveryCoordinator}（注释）、application/execution/{ActionExecutionRepository,ActionExecutionService,ExecutionSettings}、domain ErrorCode、TimelineEventType、infrastructure config/{ExecutionConfiguration,ExecutionProperties}、persistence/mybatis/execution/{ActionExecutionMapper,MyBatisActionExecutions}＋XML、provider/{DockerServiceInspectProvider,DockerServiceRestartExecutor,ProviderConfiguration}、schema/JacksonSchemaCodecRegistry，测试 ActionExecutionWorkerIntegrationTest、RemediationApprovalIntegrationTest、DockerServiceRestartExecutorIntegrationTest；docs/dev。Migration：无（沿用 V005 核对列与约束）；新增依赖：无
-- 提交：未提交；范围外问题：执行成功后 Incident 仍停在 EXECUTING（TASK-080）
+- 提交：代码提交 f8d61226ee98ace71761e3babd13bc3aa5c016fb（feat(execution): bounded read-only reconciliation and execution startup recovery (TASK-072–073)）；SHA 回填为后续 docs 提交；未推送；范围外问题：执行成功后 Incident 仍停在 EXECUTING（TASK-080）
 
 ### TASK-039 修复 — 准入 step_no 分配并发死锁（B12-R1/R2 约定）
 
@@ -1168,7 +1168,7 @@
 | HttpAiRuntimeClient 采用 JDK java.net.http，而非 07 §5 基线的 RestClient | infrastructure/ai | 原因：infrastructure 无 spring-web，JDK 客户端原生支持单请求超时（05 §89 调用方上限）且不重放 POST；如统一改 RestClient 需每次按上限构造请求工厂 | — |
 | AI Runtime 默认地址 http://localhost:8000、Token 默认空（空时调用即 AI_RUNTIME_UNAVAILABLE，不发请求） | opspilot-boot application.yml、AiRuntimeProperties | TASK-105 Compose 注入 OPSPILOT_AI_RUNTIME_URL/OPSPILOT_AI_RUNTIME_TOKEN（.env，不入库），AI Runtime 只监听内部网络 | TASK-105 |
 | （Execution 部分已处理，B27/TASK-073：RUNNING Execution 不标中断，结果未知只由有界只读核对判定，随 PENDING 由 Execution 来源派发）残留 RUNNING 的中断标记只允许在启动路径（StartupRecoveryCoordinator.recoverAfterStartup）进行，目前两条入口都只派发 | application/dispatch/StartupRecoveryCoordinator | TASK-043（AgentStep/只读 Invocation）、TASK-083（Verification）在启动入口加入中断处理；周期补派发永远不做中断标记 | TASK-043/083 |
-| （执行部分已关闭，B26/TASK-071：真实执行 Worker ActionExecutionService 替换占位；B27/TASK-072～073：结果未知的有界只读核对与 RUNNING 启动恢复/补派发，待 B27 Review）Verification 的 Worker/来源仍未实现 | infrastructure/dispatch、application/execution | TASK-079/083 提供 Verification Worker 与来源 | TASK-079/083 |
+| （执行部分已关闭，B26/TASK-071：真实执行 Worker ActionExecutionService 替换占位；B27/TASK-072～073：结果未知的有界只读核对与 RUNNING 启动恢复/补派发，f8d6122）Verification 的 Worker/来源仍未实现 | infrastructure/dispatch、application/execution | TASK-079/083 提供 Verification Worker 与来源 | TASK-079/083 |
 | 线程池拒绝时连同延后唤醒一起放弃，依赖周期补派发（默认 5 秒）从数据库重新唤醒；queue-capacity=16 为本批取值 | infrastructure/dispatch/InProcessWorkDispatcher、WorkerProperties | 如需更快恢复可缩短扫描间隔；数值调整须记录依据（07 §88） | — |
 | opspilot-infrastructure 集成测试默认 opspilot.dispatcher.recovery-enabled=false（测试替身替换派发器/Worker 时避免扫描产生测试外唤醒）；生产与 boot 测试默认开启 | opspilot-infrastructure/src/test/resources/application.yml | 需要验证扫描的测试显式开启或直接调用 StartupRecoveryCoordinator | — |
 | SingleFlightRegistry 延后唤醒保留最后到达者而非最大 runNo（B09-R1 实测 run 3 后到 run 2 时交回 run 2）；类说明中“只保留最新一个”应理解为“最后到达” | infrastructure/dispatch/SingleFlightRegistry | 真实调查 Worker 必须以期望 run 做准入校验（旧 run 直接退出），被覆盖的更高 run 由数据库扫描恢复；下次触及该类时修正说明或改为按 runNo 取大 | TASK-039～041 |
