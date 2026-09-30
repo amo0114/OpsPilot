@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-30（B25 DONE，commit 90d80a2；B26 未开始）
+> 最近更新：2026-09-30（B26 REVIEW，Base 59b015b；B26-V1 exit 0，B26-R1 PASS，未提交）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -77,8 +77,8 @@
 | TASK-067 | B24 | Approval 并发与历史方案保护 | DONE | commit 0b934ed（B24，Base bdfbaac） | B24-V1 verify exit 0＋RemediationApprovalIntegrationTest 13/13（真实 MySQL，含锁等待交错与并发）、RemediationControllerTest 16/16＋变异 3 项；B24-R1 PASS；批准成功路径属 TASK-069 |
 | TASK-068 | B22 | ActionExecution 数据结构 | DONE | commit 1a655fd（B22，Base 423baf7） | B22-V1 verify exit 0＋ActionExecutionSchemaTest 33/33（真实 MySQL）＋变异 2 项；B22-R1 PASS |
 | TASK-069 | B25 | Approve → Execution | DONE | commit 90d80a2（B25，Base 050aa1a） | B25-V1 verify exit 0＋RemediationApprovalIntegrationTest 18/18（真实 MySQL）、RemediationControllerTest 17/17＋变异 3 项；B25-R1 PASS；真实 Worker 前 Execution 保持 PENDING（TASK-071） |
-| TASK-070 | B26 | Docker service.restart Executor | TODO | — | NOT RUN |
-| TASK-071 | B26 | Execution Worker | TODO | — | NOT RUN |
+| TASK-070 | B26 | Docker service.restart Executor | REVIEW | 未提交（B26，Base 59b015b）：Engine API restart 写路径与 DockerServiceRestartExecutor | B26-V1 verify exit 0＋DockerServiceRestartExecutorIntegrationTest 6/6（含真实 Docker 重启）＋变异 1 项；B26-R1 PASS，待提交 |
+| TASK-071 | B26 | Execution Worker | REVIEW | 未提交（B26，Base 59b015b）：ActionExecutionService、条件更新与结果落账、真实 Worker 替换占位 | B26-V1 verify exit 0＋ActionExecutionWorkerIntegrationTest 8/8（真实 MySQL，含真实 Docker 端到端）＋变异 3 项；B26-R1 PASS，待提交 |
 | TASK-072 | B27 | Execution Reconciliation | TODO | — | NOT RUN |
 | TASK-073 | B27 | Execution Startup Recovery | TODO | — | NOT RUN |
 | TASK-074 | B22 | RecoveryPolicy / Verification 数据结构 | DONE | commit 1a655fd（B22，Base 423baf7） | B22-V1 verify exit 0＋RecoverySchemaTest 43/43（真实 MySQL）＋变异 3 项；B22-R1 PASS |
@@ -920,6 +920,31 @@
 - 修改文件：新增 domain/execution/{ActionExecutionStatus,ActionExecutionIdentity}、domain/timeline/ApprovalApprovedPayloadV1、application/execution/{ActionExecutionRepository,ExecutionSettings,ServiceRestartExecutionContextV1}、application/recovery/RecoveryPolicySnapshotV1、infrastructure/config/{ExecutionProperties,ExecutionConfiguration}、infrastructure/persistence/mybatis/execution/{ActionExecutionMapper,MyBatisActionExecutions,MyBatisPendingExecutionWorkSource}＋ActionExecutionMapper.xml；修改 domain TimelineEventType、application/approval/{ApprovalApplicationService,ApprovalDecisionResult}、application/recovery/{RecoveryPolicySelector,RecoveryPolicyValidator}、infrastructure/dispatch/PlaceholderActionExecutionWorker、infrastructure/schema/JacksonSchemaCodecRegistry、web/remediation/{RemediationController,RemediationResponses}，测试 InvestigationFixture（清理 action_execution）、RemediationApprovalIntegrationTest、RemediationControllerTest；docs/dev。Migration：无；新增依赖：无
 - 提交：代码提交 90d80a2d48399248632219d656aaa88a74073898（feat(approval): approve creates the pending execution with a frozen recovery contract (TASK-069)）；SHA 回填为后续 docs 提交；未推送；范围外问题：无新增
 
+### B26 — Docker Restart 与执行 Worker
+
+- 状态：REVIEW（实现与针对性验证完成，B26-V1 exit 0；B26-R1 PASS，未提交）
+- 成员及顺序：TASK-070 → TASK-071；批外前置：TASK-069 DONE（90d80a2，B25-R1 PASS）
+- Base SHA：59b015b1f7f9a8338e783ba078a4651bfe716ac5
+- 范围：TASK-070——infrastructure Docker Engine API 客户端增加唯一写路径 `POST /containers/{id}/restart`（沿用 TASK-057 的 unix socket Engine API 客户端，无新依赖；禁止 Runtime.exec/ProcessBuilder/CLI/shell），DockerServiceRestartExecutor 区分“确定未生效/失败”“成功”与“结果未知”（请求写出后的超时或断连为未知），结果 service.restart.result / 1；TASK-071——application 执行 Worker：PENDING 时在事务外按执行上下文的连接与容器名解析真实容器 id → 短事务锁 Incident、复核 Execution 仍 PENDING 与 CHANGE 绑定/目标未变、条件更新 PENDING → RUNNING（保存容器 id 与 started_at）＋ACTION_EXECUTION_STARTED → 事务外发出一次 restart → 结果事务：成功 SUCCEEDED＋Plan EXECUTED＋ACTION_EXECUTION_SUCCEEDED；明确失败 FAILED＋Plan EXECUTED＋Incident → DIAGNOSED＋ACTION_EXECUTION_FAILED；未知保持 RUNNING（核对属 TASK-072）；非 PENDING 不派发 CHANGE。以真实 Worker 替换占位；测试；docs/dev。明确不做：有界只读核对（072）、RUNNING 启动恢复（073）、Verification 创建与 Incident → VERIFYING（080）、UI/SSE、新迁移、新依赖
+- 本批设计取值（记录供 Review）：① 成功事务按 08 TASK-071/080 分工暂不创建 Verification，Incident 保持 EXECUTING，TASK-080 在同一成功事务内补 Verification 与 → VERIFYING；② RUNNING 准入前的失败（绑定/目标已变、容器解析失败）未发出 CHANGE：Execution FAILED（无 started_at）、Plan CANCELLED（EXECUTED 只表示已发生执行尝试，04 §38）、Incident → DIAGNOSED、ACTION_EXECUTION_FAILED（phase=ADMISSION）；③ restart 以准入时解析的容器 id 发出，Docker 停止宽限 t=10 秒（小于 service.restart 超时 30 秒）
+- 规格：08 TASK-070～071（及 TASK-080 分工）；04 §45～§47、§79、§82；06 §101～§112、§125；07 §64～§67；01 §26、§35
+- 关键不变量：外部调用不在数据库事务内；只有 PENDING → RUNNING 条件更新成功者发出一次 CHANGE、客户端不重试；RUNNING 不等于“未发送”，恢复与重派发绝不重发；目标身份为准入时受信解析的容器；结果不确定不伪造成功或失败；成功只表示重启操作成功，不表示恢复
+- 验证要求：Docker 客户端写路径与结果分类测试（本地 unix socket 替身）；真实 MySQL 的 Worker 集成（准入胜者唯一、各结果分支落账、准入前失败不发 CHANGE、非 PENDING 不执行）；批尾 backend `./mvnw -B clean verify`；真实 Docker 重启 NOT RUN 视环境而定
+- 开工已有修改：无（工作树干净）
+- 成员进度：
+  - TASK-070：DockerEngineClient 增加唯一写路径 restart(socket, containerId, t, deadline)：只接受 64 位十六进制容器 id、`POST /containers/{id}/restart?t=10`、Content-Length: 0、一次一个连接、不重试；inspect 与 restart 共用 exchange，连接成功后写出请求之前的失败为未发送，开始写出之后的超时/断连/响应不可读带 requestSent（ProviderCallException 增加该标记）。application 端口 ServiceRestartExecutor（resolveTarget → Resolved/Unresolved；restart → Succeeded/Failed/Uncertain）与 ServiceRestartResultV1（service.restart.result / 1：provider=DOCKER、containerId、restartRequestedAt、completedAt；只表示操作成功）；infrastructure DockerServiceRestartExecutor（与 service.inspect 相同的连接约束：Docker 配置、无凭据、unix 端点；解析 inspect 的 Id；204 成功，404 RESOURCE_NOT_FOUND，5xx PROVIDER_UNAVAILABLE，其他 QUERY_REJECTED，均为确定失败；requestSent 的异常为 Uncertain），ProviderConfiguration 注册 Bean，Codec 注册结果 Schema。无 Runtime.exec/ProcessBuilder/CLI/shell，无新依赖
+  - TASK-071：ActionExecutionService implements ActionExecutionWorker（取代占位；DispatchConfiguration 改为 ObjectProvider，缺省为只用于切片测试的 UnwiredActionExecutionWorker）。流程：非 PENDING 直接返回（RUNNING 不重发）→ 事务外按执行上下文的连接与容器名解析容器 id（service.inspect 超时）→ 准入事务：锁 Incident（须 EXECUTING）、重读 Execution 仍为同版本 PENDING、evaluateChange 仍 Allowed 且唯一 Provider 生成的上下文与冻结上下文完全一致，否则/解析失败 → FAILED（无 started_at，error_code 为判定码）＋方案 CANCELLED＋Incident → DIAGNOSED＋ACTION_EXECUTION_FAILED（phase=ADMISSION）；通过则条件更新 PENDING → RUNNING（写入带容器 id 的上下文与 started_at）＋ACTION_EXECUTION_STARTED → 事务外以准入确认的连接发出一次 restart（service.restart 超时）→ 结果事务：Succeeded → SUCCEEDED（结果载荷）＋方案 EXECUTED＋ACTION_EXECUTION_SUCCEEDED，Incident 保持 EXECUTING；Failed → FAILED（错误码与固定文案）＋方案 EXECUTED＋Incident → DIAGNOSED＋ACTION_EXECUTION_FAILED（phase=EXECUTION）；Uncertain → 不写入、保持 RUNNING（TASK-072）。ActionExecutionRepository 增加 findById（联 Plan 与 Incident）、markRunning/markSucceeded/markFailed（均带期望状态与版本的条件更新）、markPlanExecuted/markPlanCancelled（只从 ACTIVE）；TimelineEventType 增加 ACTION_EXECUTION_STARTED/SUCCEEDED/FAILED，载荷 timeline.action-execution / 1
+- 针对性验证（backend/）：`./mvnw -B test -pl opspilot-infrastructure -am -Dtest='DockerServiceRestartExecutorIntegrationTest,DockerServiceInspectProviderIntegrationTest,JacksonSchemaCodecRegistryTest' …` → 6＋5＋48 通过（真实 Docker：解析 Id、以 Id 重启后 StartedAt 变化；替身 socket：请求行与头、非法 id/端点、500/409、连不上与期限已到为确定失败、写出后不应答与断开为未知）；`-Dtest=ActionExecutionWorkerIntegrationTest` → 8/8（真实 MySQL；成功、明确失败、未知保持 RUNNING 且再次唤醒不重发、准入前三种失败不调用 restart、4 个并发 Worker 只重启 1 次、真实 Docker 端到端、终态忽略、条件更新的状态/版本防线；解析与重启调用时无事务）。受影响：JacksonSchemaCodecRegistryTest 的“未注册 Schema”示例 service.restart.result/1 已被本批注册，改为 /2；RemediationFixture 承接原审批测试中的策略激活辅助方法
+- 变异检查（均已还原，cmp 确认）：去掉准入时目标一致性复核 → failuresBeforeAdmission… 失败；RUNNING 条件更新去掉 status='PENDING' → 起初 Worker 用例未发现（Incident 行锁与锁内重读已串行化），补充 stateChangesAreConditionalOnStatusAndVersion 后失败；执行器把写出后的失败当作确定失败 → failuresAfterTheRequestIsWrittenAreUncertain 失败
+- B26-V1（最终代码树，本机实测）：backend/；`./mvnw -B clean verify`；2026-09-30 10:35:48～10:47:09 UTC，JDK 21＋Docker（Testcontainers mysql:8.4.11、本机 docker.sock）；exit 0；Enforcer 与 Spotless check 各模块通过；domain 41、infrastructure 797（B25 783＋14）、web 39、boot 6，均 0 失败 0 跳过；`git diff --check` 通过。日志（会话临时目录）b26-v1.log
+- 专项证据/NOT RUN：真实 ShortLink 靶场容器重启与 S3 端到端 NOT RUN（TASK-105 起）；核对/启动恢复/Verification 创建未实现（072/073/080）；ai-runtime、真实 LLM NOT RUN；CCG 门禁 NOT RUN（工具缺失）
+- B26-R1 独立 Review：PASS（2026-09-30）。范围：固定 Base `59b015b1f7f9a8338e783ba078a4651bfe716ac5` 至工作树全部变化，含 8 个未跟踪文件及 PlaceholderActionExecutionWorker 删除；主审直接完成核对，未发现本批阻断问题。
+  - 核对：Engine API 写路径只接受完整容器 id，循环写完单次请求但不重试请求；请求开始写出后的超时/断连/解析异常归 Uncertain。Worker 先事务外解析，Incident 锁后重读状态/版本并复核当前 CHANGE 权限及冻结的绑定/连接/名称；只有条件更新 PENDING→RUNNING 的获胜者在提交后发送 restart。结果落账使用 RUNNING/版本条件，明确失败回 DIAGNOSED，未知保持 RUNNING 且再次唤醒不重发。正式上下文接入真实 Worker，切片测试替身不发送 CHANGE。准入前未尝试则 Plan CANCELLED；成功落账不查询新 ACTIVE Policy。
+  - 本轮实际验证：backend/ `./mvnw -B test -pl opspilot-infrastructure -am -Dtest=DockerServiceRestartExecutorIntegrationTest,ActionExecutionWorkerIntegrationTest,RemediationApprovalIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false`，exit 0；32 tests（6＋8＋18），0 失败/错误/跳过。包含真实 Docker 执行器重启、真实 MySQL/Worker/Docker 路径、四 Worker 并发单次派发、状态/版本条件更新及未知结果不重发；日志 `/tmp/b26-r1-tests.log`。测试容器已清理；`git diff --check` 通过。
+  - 完整 clean verify 本轮 NOT RUN，沿用实施方 B26-V1；ShortLink/S3、reconciliation、启动恢复、Verification 创建、ai-runtime、真实 LLM、CCG NOT RUN。08 TASK-071 明确将 Verification 集成留到 TASK-080，因此成功后暂留 EXECUTING 可接受；未知结果待 TASK-072 接入核对，本次 PASS 不表示恢复闭环已完成。未修改实现代码、未提交、未推送；保持 REVIEW，提交与回填真实 SHA 后再 DONE。
+- 修改文件：新增 application/execution/{ActionExecutionService,ServiceRestartExecutor,ServiceRestartResultV1}、domain/timeline/ActionExecutionEventPayloadV1、infrastructure/dispatch/UnwiredActionExecutionWorker、infrastructure/provider/DockerServiceRestartExecutor，测试 DockerServiceRestartExecutorIntegrationTest、ActionExecutionWorkerIntegrationTest；删除 infrastructure/dispatch/PlaceholderActionExecutionWorker；修改 application/execution/ActionExecutionRepository、domain TimelineEventType、infrastructure dispatch/DispatchConfiguration、persistence/mybatis/execution/{ActionExecutionMapper,MyBatisActionExecutions}＋XML、provider/{DockerEngineClient,ProviderCallException,ProviderConfiguration}、schema/JacksonSchemaCodecRegistry，测试 RemediationApprovalIntegrationTest、RemediationFixture、JacksonSchemaCodecRegistryTest；docs/dev。Migration：无；新增依赖：无
+- 提交：未提交（B26-R1 PASS，待用户提交）；范围外问题：见待处理问题新增行（执行成功后 EXECUTING 暂停与未知结果核对，归 072/080）
+
 ### TASK-039 修复 — 准入 step_no 分配并发死锁（B12-R1/R2 约定）
 
 - 状态：DONE（Review PASS，已提交 30aea1f）
@@ -1028,6 +1053,7 @@
 
 | 发现 | 位置 | 影响与建议 | 所属 |
 |---|---|---|---|
+| 执行成功后 Incident 暂停在 EXECUTING：成功事务只落账 Execution SUCCEEDED、方案 EXECUTED 与 ACTION_EXECUTION_SUCCEEDED；结果未知保持 RUNNING、暂无只读核对 | application/execution/ActionExecutionService | TASK-080 在同一成功事务内以冻结快照创建 Verification 并 → VERIFYING；TASK-072 为 RUNNING 未知结果做有界只读核对，耗尽 → FAILED/EXECUTION_RESULT_UNCERTAIN | TASK-072/080 |
 | 用户放入的 Windows 下载元数据文件 | OpsPilot-START-HERE.md:Zone.Identifier | TASK-002 的 .gitignore 已忽略 `*:Zone.Identifier`；文件本身未删，是否删除由用户决定 | 用户 |
 | springdoc 默认开放 /v3/api-docs，启动日志 WARN 提示生产应关闭 | opspilot-web | 单用户 Demo 可接受；是否按 profile 关闭由 TASK-004 配置或 TASK-105 部署决定 | TASK-004/105 |
 | banDynamicVersions 豁免整个 `io.github.ismoyuan.opspilot:*`，范围宽于“仅本工程 SNAPSHOT”（Review 非阻塞意见） | backend/pom.xml | 当前内部依赖版本明确；后续改动父 POM 的 Task 可收窄为仅豁免 SNAPSHOT | 后续触及父 POM 的 Task |
@@ -1111,7 +1137,7 @@
 | HttpAiRuntimeClient 采用 JDK java.net.http，而非 07 §5 基线的 RestClient | infrastructure/ai | 原因：infrastructure 无 spring-web，JDK 客户端原生支持单请求超时（05 §89 调用方上限）且不重放 POST；如统一改 RestClient 需每次按上限构造请求工厂 | — |
 | AI Runtime 默认地址 http://localhost:8000、Token 默认空（空时调用即 AI_RUNTIME_UNAVAILABLE，不发请求） | opspilot-boot application.yml、AiRuntimeProperties | TASK-105 Compose 注入 OPSPILOT_AI_RUNTIME_URL/OPSPILOT_AI_RUNTIME_TOKEN（.env，不入库），AI Runtime 只监听内部网络 | TASK-105 |
 | 残留 RUNNING 的中断标记只允许在启动路径（StartupRecoveryCoordinator.recoverAfterStartup）进行，目前两条入口都只派发 | application/dispatch/StartupRecoveryCoordinator | TASK-043（AgentStep/只读 Invocation）、TASK-073（Execution）、TASK-083（Verification）在启动入口加入中断处理；周期补派发永远不做中断标记 | TASK-043/073/083 |
-| （部分关闭，B25/TASK-069：PENDING Execution 补派发来源 MyBatisPendingExecutionWorkSource 已加入；占位执行 Worker 不再抛出，保持 PENDING 并记 debug）真实执行 Worker、RUNNING Execution 的启动恢复与 Verification 的 Worker/来源仍未实现；批准后的 Execution 在 TASK-071 前一直 PENDING、Incident 停在 EXECUTING | infrastructure/dispatch/Placeholder*Worker、persistence/mybatis/execution | TASK-071 以真实 Worker 替换并删除占位执行 Worker；TASK-073 处理 RUNNING；TASK-079/083 提供 Verification Worker 与来源 | TASK-071/073/079/083 |
+| （执行部分已关闭，B26/TASK-071：真实执行 Worker ActionExecutionService 替换占位；仅在只装配基础设施的切片测试中使用 UnwiredActionExecutionWorker）RUNNING Execution 的启动恢复与结果未知的核对、Verification 的 Worker/来源仍未实现 | infrastructure/dispatch、application/execution | TASK-072 核对、TASK-073 处理 RUNNING；TASK-079/083 提供 Verification Worker 与来源 | TASK-072/073/079/083 |
 | 线程池拒绝时连同延后唤醒一起放弃，依赖周期补派发（默认 5 秒）从数据库重新唤醒；queue-capacity=16 为本批取值 | infrastructure/dispatch/InProcessWorkDispatcher、WorkerProperties | 如需更快恢复可缩短扫描间隔；数值调整须记录依据（07 §88） | — |
 | opspilot-infrastructure 集成测试默认 opspilot.dispatcher.recovery-enabled=false（测试替身替换派发器/Worker 时避免扫描产生测试外唤醒）；生产与 boot 测试默认开启 | opspilot-infrastructure/src/test/resources/application.yml | 需要验证扫描的测试显式开启或直接调用 StartupRecoveryCoordinator | — |
 | SingleFlightRegistry 延后唤醒保留最后到达者而非最大 runNo（B09-R1 实测 run 3 后到 run 2 时交回 run 2）；类说明中“只保留最新一个”应理解为“最后到达” | infrastructure/dispatch/SingleFlightRegistry | 真实调查 Worker 必须以期望 run 做准入校验（旧 run 直接退出），被覆盖的更高 run 由数据库扫描恢复；下次触及该类时修正说明或改为按 runNo 取大 | TASK-039～041 |

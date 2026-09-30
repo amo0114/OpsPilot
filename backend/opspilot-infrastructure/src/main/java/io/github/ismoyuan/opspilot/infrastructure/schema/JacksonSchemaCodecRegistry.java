@@ -13,6 +13,7 @@ import io.github.ismoyuan.opspilot.application.capability.result.MetricsQueryRes
 import io.github.ismoyuan.opspilot.application.capability.result.QueueInspectResultV1;
 import io.github.ismoyuan.opspilot.application.capability.result.ServiceInspectResultV1;
 import io.github.ismoyuan.opspilot.application.execution.ServiceRestartExecutionContextV1;
+import io.github.ismoyuan.opspilot.application.execution.ServiceRestartResultV1;
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicyCriteriaV1;
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicySnapshotV1;
 import io.github.ismoyuan.opspilot.application.schema.SchemaCodecRegistry;
@@ -138,7 +139,11 @@ class JacksonSchemaCodecRegistry implements SchemaCodecRegistry {
             entry(
                     ServiceRestartExecutionContextV1.SCHEMA_NAME,
                     ServiceRestartExecutionContextV1.SCHEMA_VERSION,
-                    ServiceRestartExecutionContextV1.class));
+                    ServiceRestartExecutionContextV1.class),
+            entry(
+                    ServiceRestartResultV1.SCHEMA_NAME,
+                    ServiceRestartResultV1.SCHEMA_VERSION,
+                    ServiceRestartResultV1.class));
 
     private final JsonMapper mapper = JsonMapper.builder()
             .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)

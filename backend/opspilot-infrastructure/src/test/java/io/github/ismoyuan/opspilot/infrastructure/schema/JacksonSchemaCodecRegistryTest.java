@@ -94,7 +94,7 @@ class JacksonSchemaCodecRegistryTest {
         "docker.resource.binding, 0",
         "Docker.Resource.Binding, 1",
         "docker.resource.selector, 1",
-        "service.restart.result, 1"
+        "service.restart.result, 2"
     })
     void rejectsUnregisteredSchema(String schemaName, int schemaVersion) {
         assertRejected(

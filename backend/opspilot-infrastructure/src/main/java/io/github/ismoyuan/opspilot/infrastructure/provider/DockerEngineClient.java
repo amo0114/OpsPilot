@@ -20,14 +20,19 @@ import java.util.Locale;
 import java.util.regex.Pattern;
 
 /**
- * 经本机 unix socket 访问 Docker Engine API 的最小只读客户端（08 TASK-057）：只能发出 {@code GET /containers/{name}/json}——没有创建、
- * 启停、exec 或其他路径；一次调用一个连接（Connection: close）、不重试。unix socket 通道没有读超时，由看门狗在调用期限处关闭通道
- * （记 TIMEOUT）；响应体（分块或定长）超过上限即停止（RESULT_TOO_LARGE）。
+ * 经本机 unix socket 访问 Docker Engine API 的最小客户端（08 TASK-057、TASK-070）：只能发出两种请求——只读的
+ * {@code GET /containers/{name}/json}，以及唯一的写操作 {@code POST /containers/{id}/restart}（只接受准入时解析出的容器 id）；没有创建、
+ * 删除、exec 或其他路径，不经 CLI、shell 或子进程。一次调用一个连接（Connection: close）、不重试。unix socket 通道没有读超时，由看门狗
+ * 在调用期限处关闭通道（记 TIMEOUT）；响应体（分块或定长）超过上限即停止（RESULT_TOO_LARGE）。请求开始写出之后的失败带
+ * requestSent 标记：写操作此时结果未知，不能当作未发送（04 §82）。
  */
 final class DockerEngineClient {
 
     /** 与 DockerResourceBindingV1 一致：只能是容器名，不会形成其他路径。 */
     private static final Pattern CONTAINER_NAME = Pattern.compile("[a-zA-Z0-9][a-zA-Z0-9_.-]{1,127}");
+
+    /** Docker 容器 id：64 位小写十六进制。 */
+    static final Pattern CONTAINER_ID = Pattern.compile("[a-f0-9]{64}");
 
     private static final int MAX_HEADER_LINE = 8 * 1024;
 
@@ -71,8 +76,33 @@ final class DockerEngineClient {
         if (!CONTAINER_NAME.matcher(containerName).matches()) {
             throw new ProviderCallException(ErrorCode.INVALID_BINDING, "Container name is invalid");
         }
-        String request = "GET /containers/" + containerName + "/json HTTP/1.1\r\n"
-                + "Host: docker\r\nAccept: application/json\r\nConnection: close\r\n\r\n";
+        return exchange(
+                socket,
+                "GET /containers/" + containerName + "/json HTTP/1.1\r\n"
+                        + "Host: docker\r\nAccept: application/json\r\nConnection: close\r\n\r\n",
+                deadline);
+    }
+
+    /**
+     * 重启一个容器（Docker 先停止、等待 {@code stopTimeoutSeconds} 后强制结束，再启动）。成功为 204。
+     *
+     * @param containerId 准入时解析出的完整容器 id，不接受名称
+     */
+    Response restart(Path socket, String containerId, int stopTimeoutSeconds, Instant deadline) {
+        if (!CONTAINER_ID.matcher(containerId).matches()) {
+            throw new ProviderCallException(ErrorCode.INVALID_BINDING, "Container id is invalid");
+        }
+        if (stopTimeoutSeconds < 0) {
+            throw new IllegalArgumentException("stopTimeoutSeconds must not be negative");
+        }
+        return exchange(
+                socket,
+                "POST /containers/" + containerId + "/restart?t=" + stopTimeoutSeconds + " HTTP/1.1\r\n"
+                        + "Host: docker\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                deadline);
+    }
+
+    private Response exchange(Path socket, String request, Instant deadline) {
         if (!Duration.between(clock.instant(), deadline).isPositive()) {
             throw timeout();
         }
@@ -91,6 +121,7 @@ final class DockerEngineClient {
                 // 调用已完成或通道已关闭
             }
         });
+        boolean sending = false;
         try (channel) {
             try {
                 channel.connect(UnixDomainSocketAddress.of(socket));
@@ -99,12 +130,23 @@ final class DockerEngineClient {
             } catch (IOException ex) {
                 throw unreachable();
             }
-            channel.write(ByteBuffer.wrap(request.getBytes(StandardCharsets.US_ASCII)));
+            // 从此刻起远端可能已收到（部分）请求
+            sending = true;
+            ByteBuffer buffer = ByteBuffer.wrap(request.getBytes(StandardCharsets.US_ASCII));
+            while (buffer.hasRemaining()) {
+                channel.write(buffer);
+            }
             return read(Channels.newInputStream(channel));
+        } catch (ProviderCallException ex) {
+            throw sending && !ex.requestSent() ? new ProviderCallException(ex.code(), ex.getMessage(), true) : ex;
         } catch (AsynchronousCloseException ex) { // 看门狗到期关闭或线程被中断（ClosedByInterruptException）
-            throw timeout();
+            throw sending
+                    ? new ProviderCallException(
+                            ErrorCode.TIMEOUT, "Provider call exceeded the capability timeout", true)
+                    : timeout();
         } catch (IOException ex) {
-            throw new ProviderCallException(ErrorCode.CONNECTION_FAILED, "Provider connection was interrupted");
+            throw new ProviderCallException(
+                    ErrorCode.CONNECTION_FAILED, "Provider connection was interrupted", sending);
         } finally {
             watchdog.interrupt();
         }

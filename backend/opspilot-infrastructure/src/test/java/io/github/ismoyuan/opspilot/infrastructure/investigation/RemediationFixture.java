@@ -1,5 +1,12 @@
 package io.github.ismoyuan.opspilot.infrastructure.investigation;
 
+import io.github.ismoyuan.opspilot.application.ai.protocol.v1.QueueInspectArgumentsV1;
+import io.github.ismoyuan.opspilot.application.ai.protocol.v1.ServiceInspectArgumentsV1;
+import io.github.ismoyuan.opspilot.application.recovery.RecoveryCriterionV1;
+import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicyActivationService;
+import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicyCriteriaV1;
+import io.github.ismoyuan.opspilot.application.recovery.RecoveryPredicateV1;
+import io.github.ismoyuan.opspilot.application.recovery.RecoverySamplingV1;
 import java.util.List;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -73,6 +80,61 @@ record RemediationFixture(
                     id,
                     evidenceId);
         }
+    }
+
+    /**
+     * 统计消费者上的 ACTIVE 策略：先检查 Stream（经 Redis 绑定，配置选定消费组 stats-consumer-group）的 lag，再检查消费者运行状态；
+     * 启用所需的 queue.inspect / service.inspect 绑定。
+     *
+     * @return 策略 id
+     */
+    long activateRecoveryPolicy(RecoveryPolicyActivationService recoveryPolicies, String policyKey) {
+        long stream = investigation.streamId();
+        jdbc.update("INSERT INTO data_source_connection (connection_key, name, provider_type, endpoint,"
+                + " config_schema_name, config_schema_version, config_payload, status, created_at, updated_at) VALUES"
+                + " ('redis-local', 'R', 'REDIS', 'redis://redis:6379', 'redis.connection.config', 1, '{}', 'ACTIVE',"
+                + " UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))");
+        jdbc.update(
+                "INSERT INTO resource_binding (managed_resource_id, data_source_connection_id, selector_schema_name,"
+                        + " selector_schema_version, selector_payload, created_at, updated_at) SELECT ?, id,"
+                        + " 'redis.resource.binding', 1, '{\"streamKey\": \"shortlink:stats\", \"consumerGroup\":"
+                        + " \"stats-consumer-group\"}', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3) FROM data_source_connection"
+                        + " WHERE connection_key = 'redis-local'",
+                stream);
+        for (Object[] binding :
+                List.of(new Object[] {stream, "queue.inspect"}, new Object[] {consumer, "service.inspect"})) {
+            jdbc.update(
+                    "INSERT INTO capability_binding (managed_resource_id, capability_key, enabled, created_at,"
+                            + " updated_at) VALUES (?, ?, TRUE, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
+                    binding);
+        }
+        return recoveryPolicies
+                .activate(new RecoveryPolicyActivationService.ActivateCommand(
+                        consumer,
+                        policyKey,
+                        "统计消费者恢复标准",
+                        RecoveryPolicyCriteriaV1.of(
+                                60,
+                                60,
+                                List.of(
+                                        new RecoveryCriterionV1.QueueInspect(
+                                                "stream-lag-drained",
+                                                "积压达标",
+                                                "statistics-stream",
+                                                new QueueInspectArgumentsV1(),
+                                                new RecoverySamplingV1(1, 0, null),
+                                                new RecoveryPredicateV1.NumericCompare(
+                                                        "lag", RecoveryPredicateV1.ComparisonOperator.LTE, 20.0),
+                                                true),
+                                        new RecoveryCriterionV1.ServiceInspect(
+                                                "consumer-running",
+                                                "消费者持续运行",
+                                                "statistics-consumer",
+                                                new ServiceInspectArgumentsV1(),
+                                                new RecoverySamplingV1(2, 5, 10),
+                                                new RecoveryPredicateV1.FieldEquals("runtimeState", "RUNNING"),
+                                                true)))))
+                .policyId();
     }
 
     private static long resource(JdbcTemplate jdbc, String key, String name, String type) {

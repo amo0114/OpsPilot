@@ -2,6 +2,7 @@ package io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.execution
 
 import io.github.ismoyuan.opspilot.application.execution.ActionExecutionRepository;
 import io.github.ismoyuan.opspilot.domain.execution.ActionExecutionStatus;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
@@ -38,6 +39,69 @@ class MyBatisActionExecutions implements ActionExecutionRepository {
                         execution.correlationId(),
                         LocalDateTime.ofInstant(execution.createdAt().truncatedTo(ChronoUnit.MILLIS), ZoneOffset.UTC)));
         return key.getId();
+    }
+
+    @Override
+    public Optional<ExecutionRecord> findById(long executionId) {
+        return Optional.ofNullable(mapper.selectRecord(executionId))
+                .map(row -> new ExecutionRecord(
+                        row.id(),
+                        ActionExecutionStatus.valueOf(row.status()),
+                        row.lockVersion(),
+                        row.remediationActionId(),
+                        row.planId(),
+                        row.incidentId(),
+                        row.context(),
+                        row.startedAt() == null ? null : row.startedAt().toInstant(ZoneOffset.UTC)));
+    }
+
+    @Override
+    public boolean markRunning(long executionId, long expectedVersion, String contextPayload, Instant startedAt) {
+        return mapper.markRunning(executionId, expectedVersion, contextPayload, utc(startedAt)) == 1;
+    }
+
+    @Override
+    public boolean markSucceeded(
+            long executionId,
+            long expectedVersion,
+            String resultSchemaName,
+            int resultSchemaVersion,
+            String resultPayload,
+            Instant finishedAt) {
+        return mapper.markSucceeded(
+                        executionId,
+                        expectedVersion,
+                        resultSchemaName,
+                        resultSchemaVersion,
+                        resultPayload,
+                        utc(finishedAt))
+                == 1;
+    }
+
+    @Override
+    public boolean markFailed(
+            long executionId,
+            ActionExecutionStatus from,
+            long expectedVersion,
+            String errorCode,
+            String errorMessage,
+            Instant finishedAt) {
+        return mapper.markFailed(executionId, from.name(), expectedVersion, errorCode, errorMessage, utc(finishedAt))
+                == 1;
+    }
+
+    @Override
+    public void markPlanExecuted(long planId, Instant at) {
+        mapper.updatePlanFromActive(planId, "EXECUTED", utc(at));
+    }
+
+    @Override
+    public void markPlanCancelled(long planId, Instant at) {
+        mapper.updatePlanFromActive(planId, "CANCELLED", utc(at));
+    }
+
+    private static LocalDateTime utc(Instant at) {
+        return LocalDateTime.ofInstant(at.truncatedTo(ChronoUnit.MILLIS), ZoneOffset.UTC);
     }
 
     @Override

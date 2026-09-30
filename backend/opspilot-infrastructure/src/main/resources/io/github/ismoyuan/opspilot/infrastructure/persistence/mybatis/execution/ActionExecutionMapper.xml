@@ -15,6 +15,19 @@
         </constructor>
     </resultMap>
 
+    <resultMap id="recordRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.execution.ActionExecutionMapper$RecordRow">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="status" javaType="String"/>
+            <arg column="lock_version" javaType="_long"/>
+            <arg column="remediation_action_id" javaType="_long"/>
+            <arg column="plan_id" javaType="_long"/>
+            <arg column="incident_id" javaType="_long"/>
+            <arg column="context" javaType="String"/>
+            <arg column="started_at" javaType="java.time.LocalDateTime"/>
+        </constructor>
+    </resultMap>
+
     <insert id="insertPending" useGeneratedKeys="true" keyProperty="key.id" keyColumn="id">
         INSERT INTO action_execution (remediation_action_id, approval_request_id, idempotency_key, status, executor_key,
                                       recovery_policy_id, recovery_policy_version, recovery_policy_snapshot,
@@ -36,4 +49,39 @@
     <select id="selectPending" resultMap="pendingWork">
         SELECT id FROM action_execution WHERE status = 'PENDING' ORDER BY id
     </select>
+
+    <select id="selectRecord" resultMap="recordRow">
+        SELECT e.id, e.status, e.lock_version, e.remediation_action_id, p.id AS plan_id, p.incident_id,
+               CAST(e.execution_context_payload AS CHAR) AS context, e.started_at
+        FROM action_execution e
+        JOIN remediation_action a ON a.id = e.remediation_action_id
+        JOIN remediation_plan p ON p.id = a.remediation_plan_id
+        WHERE e.id = #{id}
+    </select>
+
+    <!-- 唯一的 CHANGE 准入：只有这条条件更新的获胜者可以发出 restart（04 §82） -->
+    <update id="markRunning">
+        UPDATE action_execution
+        SET status = 'RUNNING', execution_context_payload = #{context}, started_at = #{at}, updated_at = #{at},
+            lock_version = lock_version + 1
+        WHERE id = #{id} AND status = 'PENDING' AND lock_version = #{expectedVersion}
+    </update>
+
+    <update id="markSucceeded">
+        UPDATE action_execution
+        SET status = 'SUCCEEDED', result_schema_name = #{schemaName}, result_schema_version = #{schemaVersion},
+            result_payload = #{payload}, finished_at = #{at}, updated_at = #{at}, lock_version = lock_version + 1
+        WHERE id = #{id} AND status = 'RUNNING' AND lock_version = #{expectedVersion}
+    </update>
+
+    <update id="markFailed">
+        UPDATE action_execution
+        SET status = 'FAILED', error_code = #{errorCode}, error_message = #{errorMessage}, finished_at = #{at},
+            updated_at = #{at}, lock_version = lock_version + 1
+        WHERE id = #{id} AND status = #{from} AND lock_version = #{expectedVersion}
+    </update>
+
+    <update id="updatePlanFromActive">
+        UPDATE remediation_plan SET status = #{status}, updated_at = #{at} WHERE id = #{planId} AND status = 'ACTIVE'
+    </update>
 </mapper>

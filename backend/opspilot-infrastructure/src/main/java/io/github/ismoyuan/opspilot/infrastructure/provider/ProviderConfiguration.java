@@ -6,6 +6,7 @@ import io.github.ismoyuan.opspilot.application.capability.metrics.MetricSeriesSu
 import io.github.ismoyuan.opspilot.application.capability.provider.ObserveProvider;
 import io.github.ismoyuan.opspilot.application.capability.sanitize.Sanitizer;
 import io.github.ismoyuan.opspilot.application.capability.sanitize.SanitizerSettings;
+import io.github.ismoyuan.opspilot.application.execution.ServiceRestartExecutor;
 import io.github.ismoyuan.opspilot.application.schema.SchemaCodecRegistry;
 import io.github.ismoyuan.opspilot.application.secret.SecretResolver;
 import io.github.ismoyuan.opspilot.infrastructure.config.ProviderProperties;
@@ -99,6 +100,20 @@ class ProviderConfiguration {
             ObjectProvider<Clock> clocks) {
         Clock clock = clocks.getIfAvailable(Clock::systemUTC);
         return new DockerServiceInspectProvider(
+                new DockerEngineClient(clock, properties.responseLimit()),
+                new ProviderAuthentication(codecs, secrets),
+                clock);
+    }
+
+    /** service.restart 的执行器（08 TASK-070），与 service.inspect 共用同一 Engine API 客户端实现与连接约束。 */
+    @Bean
+    ServiceRestartExecutor dockerServiceRestartExecutor(
+            ProviderProperties properties,
+            SchemaCodecRegistry codecs,
+            SecretResolver secrets,
+            ObjectProvider<Clock> clocks) {
+        Clock clock = clocks.getIfAvailable(Clock::systemUTC);
+        return new DockerServiceRestartExecutor(
                 new DockerEngineClient(clock, properties.responseLimit()),
                 new ProviderAuthentication(codecs, secrets),
                 clock);

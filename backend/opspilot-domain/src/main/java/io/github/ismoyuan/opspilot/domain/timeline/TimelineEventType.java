@@ -31,6 +31,12 @@ public enum TimelineEventType {
     APPROVAL_REQUESTED,
     /** Approval 被批准：同事务创建 PENDING Execution 并冻结恢复合同，Incident AWAITING_APPROVAL → EXECUTING（04 §78）。 */
     APPROVAL_APPROVED,
+    /** Execution 条件更新 PENDING → RUNNING 成功，即将发出唯一一次 CHANGE（04 §79）。 */
+    ACTION_EXECUTION_STARTED,
+    /** 重启操作确定成功（只表示操作成功，不表示已恢复，06 §109）。 */
+    ACTION_EXECUTION_SUCCEEDED,
+    /** Execution 确定失败：准入前（未发出 CHANGE）或执行中明确失败，Incident 回到 DIAGNOSED（04 §79）。 */
+    ACTION_EXECUTION_FAILED,
     /** Approval 被拒绝，Incident 回到 DIAGNOSED（01 §24.2）。 */
     APPROVAL_REJECTED,
     /** Approval 被撤回（05 §42），Incident 回到 DIAGNOSED；01 §35 最低清单之外的补充类型。 */

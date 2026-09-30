@@ -23,13 +23,13 @@ class DispatchConfiguration {
     InProcessWorkDispatcher workDispatcher(
             WorkerProperties properties,
             ObjectProvider<InvestigationWorker> investigations,
-            ActionExecutionWorker executions,
+            ObjectProvider<ActionExecutionWorker> executions,
             RecoveryVerificationWorker verifications) {
         return new InProcessWorkDispatcher(
                 workerPool(properties),
                 new SingleFlightRegistry(),
                 investigations.getIfAvailable(UnwiredInvestigationWorker::new),
-                executions,
+                executions.getIfAvailable(UnwiredActionExecutionWorker::new),
                 verifications);
     }
 
@@ -59,12 +59,7 @@ class DispatchConfiguration {
         return new DispatchRecoveryScheduler(coordinator, properties);
     }
 
-    /** 以下两个占位由各自真实 Worker 所在 Task 删除（见各类说明）。 */
-    @Bean
-    ActionExecutionWorker actionExecutionWorker() {
-        return new PlaceholderActionExecutionWorker();
-    }
-
+    /** 占位由真实 Verification Worker 所在 Task（TASK-079）删除。 */
     @Bean
     RecoveryVerificationWorker recoveryVerificationWorker() {
         return new PlaceholderRecoveryVerificationWorker();

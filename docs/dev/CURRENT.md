@@ -1,21 +1,22 @@
 # 当前工作
 
-更新时间：2026-09-30（本地，B25 DONE）
+更新时间：2026-09-30（本地，B26 REVIEW）
 仓库/分支：/root/projects/OpsPilot-V0.1-IMPLEMENTATION，main；无 remote
-当前批次/状态：B25 DONE（代码 90d80a2，B25-R1 PASS）；B26 未开始
-成员 Task 及顺序：B25 = TASK-069（DONE）；下一批 B26 = TASK-070 → 071
-固定 Base SHA：B25 为 050aa1a6168a028bbd356b15cadf6782cf808fec；B26 开工时读取当时 HEAD
-批外前置核实：B26 开工时按 08 核对其成员的批外前置
-允许目录 / 明确不做 / 关键不变量：B26 开工时按 BATCH-PLAN 与 08 固定
-本批规格章节及 PROGRESS 记录：PROGRESS「B25」
-当前成员及位置：无进行中批次
-已实现并针对性验证的成员：B01～B25 全部，及 B13 前的独立修复
-未完成 / 未执行验证：批准后 Execution 在真实 Worker（TASK-071）前保持 PENDING、Incident 停在 EXECUTING；Docker restart 执行器（070）；核对与启动恢复（072/073）；Verification 创建与恢复求值/采样（077～083）；CCG 门禁工具本机缺失；其余见 PROGRESS 待处理问题；Redis < 7.2、MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
-未提交文件（含既有无关修改）：无（本交接卡与 PROGRESS 回填随 docs(progress) 提交）
-共同验证及独立 Review 证据编号：B25-V1、B25-R1
+当前批次/状态：B26 REVIEW（实现与针对性验证完成，B26-V1 exit 0；B26-R1 PASS，未提交）；B25 DONE（90d80a2）
+成员 Task 及顺序：TASK-070（REVIEW）→ TASK-071（REVIEW）
+固定 Base SHA：59b015b1f7f9a8338e783ba078a4651bfe716ac5
+批外前置核实：TASK-069 DONE（90d80a2）
+允许目录 / 明确不做 / 关键不变量：见 PROGRESS「B26」——Docker restart 写路径与执行器、执行 Worker 与结果落账；不做核对（072）、启动恢复（073）、Verification 创建（080）、新迁移、新依赖
+本批规格章节及 PROGRESS 记录：08 TASK-070～071；04 §45～§47、§79、§82；06 §101～§112；PROGRESS「B26」
+当前成员及位置：两成员实现完成，停在 REVIEW
+已实现并针对性验证的成员：TASK-070（执行器 6/6，含真实 Docker）、TASK-071（Worker 8/8，含真实 Docker 端到端）；变异 4 项
+未完成 / 未执行验证：B26 提交与真实 SHA 回填待完成；执行成功后 Incident 停在 EXECUTING（080）、未知结果保持 RUNNING（072）；CCG 门禁 NOT RUN（工具缺失）；ai-runtime、真实 LLM、S1～S3 NOT RUN；其余见 PROGRESS 待处理问题；Redis < 7.2、MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
+未提交文件（含既有无关修改）：8 个未跟踪文件（application/execution 3、ActionExecutionEventPayloadV1、UnwiredActionExecutionWorker、DockerServiceRestartExecutor、2 个新测试）；删除 PlaceholderActionExecutionWorker；13 个修改的代码/测试文件与 docs/dev/CURRENT.md、PROGRESS.md；无既有无关修改
+共同验证及独立 Review 证据编号：B26-V1（backend clean verify exit 0，2026-09-30 10:35～10:47 UTC）；B26-R1 PASS（本轮 32 项针对性测试通过，含真实 Docker）
 下一步具体动作：
-1. 开始 B26（TASK-070 Docker service.restart Executor → TASK-071 Execution Worker），按 BATCH-PLAN 固定基线；Worker 须以 PENDING → RUNNING 条件更新作为唯一 CHANGE 准入，并在 RUNNING 准入前解析容器 id 写入执行上下文
-2. 不推送
+1. B26-R1 已 PASS；审查覆盖 Base 59b015b 至工作树全部变化（含 8 个未跟踪文件及占位 Worker 删除），证据见 PROGRESS
+2. PASS 且用户授权后提交（建议标题 `feat(execution): docker service.restart executor and execution worker (TASK-070–071)`），回填 SHA，B26 与成员一起 DONE；不推送
+3. 之后才开始 B27（TASK-072～073）
 
 本地启动 Demo 配置：在 OPSPILOT_DB_* 环境变量基础上加 --spring.profiles.active=demo
 
