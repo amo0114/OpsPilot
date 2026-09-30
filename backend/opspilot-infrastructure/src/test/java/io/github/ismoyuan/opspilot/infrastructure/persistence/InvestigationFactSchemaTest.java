@@ -52,7 +52,8 @@ class InvestigationFactSchemaTest {
     /**
      * @system/@resource/@other_resource；Incident A（@incident/@investigation）与 Incident B（@incident_b/@investigation_b）；
      * A 的调查调用 @invocation、调查 Observation @observation、假设 @hypothesis；B 的假设 @hypothesis_b；
-     * A 的恢复调用 @recovery_invocation 与恢复 Observation @recovery_observation（verification 父表待 TASK-074）。
+     * A 的 Verification @verification（@resource 策略 v1）及其恢复调用 @recovery_invocation 与恢复 Observation
+     * @recovery_observation。
      */
     @BeforeEach
     void seed() throws SQLException {
@@ -97,9 +98,20 @@ class InvestigationFactSchemaTest {
         execute("SET @invocation = LAST_INSERT_ID()");
         execute(observation("@invocation", "@incident", "@investigation", "NULL", "@resource"));
         execute("SET @observation = LAST_INSERT_ID()");
+        execute("INSERT INTO recovery_policy (managed_resource_id, policy_key, name, version_no,"
+                + " criteria_schema_name, criteria_schema_version, criteria_payload, status, created_at, activated_at)"
+                + " VALUES (@resource, 'service-recovery', 'R', 1, 'recovery.policy.criteria', 1, '{\"schemaName\":"
+                + " \"recovery.policy.criteria\", \"schemaVersion\": 1, \"criteria\": [{\"criterionKey\":"
+                + " \"stream-lag-drained\"}]}', 'ACTIVE', " + NOW + ", " + NOW + ")");
+        execute("INSERT INTO recovery_verification (incident_id, managed_resource_id, recovery_policy_id,"
+                + " recovery_policy_version, policy_snapshot, verification_no, status, deadline_at, started_at,"
+                + " created_at, updated_at) VALUES (@incident, @resource, LAST_INSERT_ID(), 1, '{\"schemaName\":"
+                + " \"recovery.policy.criteria\", \"schemaVersion\": 1}', 1, 'RUNNING', " + NOW + ", " + NOW + ", "
+                + NOW + ", " + NOW + ")");
+        execute("SET @verification = LAST_INSERT_ID()");
         execute(invocation(
                 "NULL",
-                "9001",
+                "@verification",
                 "NULL",
                 "'stream-lag-drained'",
                 "1",
@@ -111,7 +123,7 @@ class InvestigationFactSchemaTest {
                 "'{\"lag\": 3}'",
                 "NULL"));
         execute("SET @recovery_invocation = LAST_INSERT_ID()");
-        execute(observation("@recovery_invocation", "@incident", "NULL", "9001", "@resource"));
+        execute(observation("@recovery_invocation", "@incident", "NULL", "@verification", "@resource"));
         execute("SET @recovery_observation = LAST_INSERT_ID()");
     }
 
@@ -174,7 +186,7 @@ class InvestigationFactSchemaTest {
             invocation incident differs from its investigation | 1452 | fk_capability_invocation_investigation | INSERT INTO capability_invocation (incident_id, investigation_id, run_no, capability_key, managed_resource_id, status, request_schema_name, request_schema_version, request_payload, started_at, created_at, updated_at) VALUES (@incident_b, @investigation, 1, 'queue.inspect', @resource, 'RUNNING', 'queue.inspect.request', 1, '{}', NOW(3), NOW(3), NOW(3))
             observation resource differs from its invocation | 1452 | fk_observation_invocation | INSERT INTO observation (incident_id, investigation_id, capability_invocation_id, managed_resource_id, observation_kind, schema_name, schema_version, payload, summary, observed_at, created_at) VALUES (@incident, @investigation, @invocation, @other_resource, 'QUEUE_STATUS', 'queue.inspect.result', 1, '{}', 's', NOW(3), NOW(3))
             observation incident differs from its invocation | 1452 | fk_observation | INSERT INTO observation (incident_id, investigation_id, capability_invocation_id, managed_resource_id, observation_kind, schema_name, schema_version, payload, summary, observed_at, created_at) VALUES (@incident_b, @investigation_b, @invocation, @resource, 'QUEUE_STATUS', 'queue.inspect.result', 1, '{}', 's', NOW(3), NOW(3))
-            duplicate recovery sample identity | 1062 | uk_capability_invocation_sample | INSERT INTO capability_invocation (incident_id, recovery_verification_id, criterion_key, sample_index, capability_key, managed_resource_id, status, request_schema_name, request_schema_version, request_payload, started_at, created_at, updated_at) VALUES (@incident, 9001, 'stream-lag-drained', 1, 'queue.inspect', @resource, 'RUNNING', 'queue.inspect.request', 1, '{}', NOW(3), NOW(3), NOW(3))
+            duplicate recovery sample identity | 1062 | uk_capability_invocation_sample | INSERT INTO capability_invocation (incident_id, recovery_verification_id, criterion_key, sample_index, capability_key, managed_resource_id, status, request_schema_name, request_schema_version, request_payload, started_at, created_at, updated_at) VALUES (@incident, @verification, 'stream-lag-drained', 1, 'queue.inspect', @resource, 'RUNNING', 'queue.inspect.request', 1, '{}', NOW(3), NOW(3), NOW(3))
             diagnosis version reused | 1062 | uk_diagnosis_investigation_version | INSERT INTO diagnosis (investigation_id, run_no, version_no, conclusion_type, summary, impact_summary, created_at) VALUES (@investigation, 1, 1, 'UNDETERMINED', 's', 'i', NOW(3)), (@investigation, 1, 1, 'UNDETERMINED', 's', 'i', NOW(3))
             diagnosis primary hypothesis of another investigation | 1452 | fk_diagnosis_primary_hypothesis | INSERT INTO diagnosis (investigation_id, run_no, version_no, conclusion_type, primary_hypothesis_id, summary, impact_summary, created_at) VALUES (@investigation, 1, 1, 'POSSIBLE_CAUSE', @hypothesis_b, 's', 'i', NOW(3))
             agent step number reused across runs | 1062 | uk_agent_step_record_investigation_step | INSERT INTO agent_step_record (incident_id, investigation_id, run_no, step_no, status, started_at, created_at, updated_at) VALUES (@incident, @investigation, 1, 1, 'RUNNING', NOW(3), NOW(3), NOW(3)), (@incident, @investigation, 2, 1, 'RUNNING', NOW(3), NOW(3), NOW(3))
@@ -187,10 +199,10 @@ class InvestigationFactSchemaTest {
 
     @ParameterizedTest(name = "{0}")
     @CsvSource(delimiter = '|', textBlock = """
-            invocation with both contexts | ck_capability_invocation_context | INSERT INTO capability_invocation (incident_id, investigation_id, recovery_verification_id, run_no, capability_key, managed_resource_id, status, request_schema_name, request_schema_version, request_payload, started_at, created_at, updated_at) VALUES (@incident, @investigation, 9001, 1, 'queue.inspect', @resource, 'RUNNING', 'q', 1, '{}', NOW(3), NOW(3), NOW(3))
+            invocation with both contexts | ck_capability_invocation_context | INSERT INTO capability_invocation (incident_id, investigation_id, recovery_verification_id, run_no, capability_key, managed_resource_id, status, request_schema_name, request_schema_version, request_payload, started_at, created_at, updated_at) VALUES (@incident, @investigation, @verification, 1, 'queue.inspect', @resource, 'RUNNING', 'q', 1, '{}', NOW(3), NOW(3), NOW(3))
             investigation invocation without run | ck_capability_invocation_context | INSERT INTO capability_invocation (incident_id, investigation_id, capability_key, managed_resource_id, status, request_schema_name, request_schema_version, request_payload, started_at, created_at, updated_at) VALUES (@incident, @investigation, 'queue.inspect', @resource, 'RUNNING', 'q', 1, '{}', NOW(3), NOW(3), NOW(3))
-            recovery invocation with run | ck_capability_invocation_context | INSERT INTO capability_invocation (incident_id, recovery_verification_id, run_no, criterion_key, sample_index, capability_key, managed_resource_id, status, request_schema_name, request_schema_version, request_payload, started_at, created_at, updated_at) VALUES (@incident, 9001, 1, 'c1', 2, 'queue.inspect', @resource, 'RUNNING', 'q', 1, '{}', NOW(3), NOW(3), NOW(3))
-            recovery sample index 0 | ck_capability_invocation_context | INSERT INTO capability_invocation (incident_id, recovery_verification_id, criterion_key, sample_index, capability_key, managed_resource_id, status, request_schema_name, request_schema_version, request_payload, started_at, created_at, updated_at) VALUES (@incident, 9001, 'c1', 0, 'queue.inspect', @resource, 'RUNNING', 'q', 1, '{}', NOW(3), NOW(3), NOW(3))
+            recovery invocation with run | ck_capability_invocation_context | INSERT INTO capability_invocation (incident_id, recovery_verification_id, run_no, criterion_key, sample_index, capability_key, managed_resource_id, status, request_schema_name, request_schema_version, request_payload, started_at, created_at, updated_at) VALUES (@incident, @verification, 1, 'c1', 2, 'queue.inspect', @resource, 'RUNNING', 'q', 1, '{}', NOW(3), NOW(3), NOW(3))
+            recovery sample index 0 | ck_capability_invocation_context | INSERT INTO capability_invocation (incident_id, recovery_verification_id, criterion_key, sample_index, capability_key, managed_resource_id, status, request_schema_name, request_schema_version, request_payload, started_at, created_at, updated_at) VALUES (@incident, @verification, 'c1', 0, 'queue.inspect', @resource, 'RUNNING', 'q', 1, '{}', NOW(3), NOW(3), NOW(3))
             succeeded without response | ck_capability_invocation_outcome | INSERT INTO capability_invocation (incident_id, investigation_id, run_no, capability_key, managed_resource_id, status, request_schema_name, request_schema_version, request_payload, started_at, finished_at, duration_ms, created_at, updated_at) VALUES (@incident, @investigation, 1, 'queue.inspect', @resource, 'SUCCEEDED', 'q', 1, '{}', NOW(3), NOW(3), 5, NOW(3), NOW(3))
             failed without error code | ck_capability_invocation_outcome | INSERT INTO capability_invocation (incident_id, investigation_id, run_no, capability_key, managed_resource_id, status, request_schema_name, request_schema_version, request_payload, started_at, finished_at, duration_ms, created_at, updated_at) VALUES (@incident, @investigation, 1, 'queue.inspect', @resource, 'FAILED', 'q', 1, '{}', NOW(3), NOW(3), 5, NOW(3), NOW(3))
             running with finish time | ck_capability_invocation_outcome | INSERT INTO capability_invocation (incident_id, investigation_id, run_no, capability_key, managed_resource_id, status, request_schema_name, request_schema_version, request_payload, started_at, finished_at, created_at, updated_at) VALUES (@incident, @investigation, 1, 'queue.inspect', @resource, 'RUNNING', 'q', 1, '{}', NOW(3), NOW(3), NOW(3), NOW(3))
@@ -198,7 +210,7 @@ class InvestigationFactSchemaTest {
             lowercase invocation status | ck_capability_invocation_ | INSERT INTO capability_invocation (incident_id, investigation_id, run_no, capability_key, managed_resource_id, status, request_schema_name, request_schema_version, request_payload, started_at, created_at, updated_at) VALUES (@incident, @investigation, 1, 'queue.inspect', @resource, 'running', 'q', 1, '{}', NOW(3), NOW(3), NOW(3))
             raw result outside file store | ck_capability_invocation_raw_result_ref | INSERT INTO capability_invocation (incident_id, investigation_id, run_no, capability_key, managed_resource_id, status, request_schema_name, request_schema_version, request_payload, raw_result_ref, started_at, created_at, updated_at) VALUES (@incident, @investigation, 1, 'queue.inspect', @resource, 'RUNNING', 'q', 1, '{}', 'http://evil/raw', NOW(3), NOW(3), NOW(3))
             observation without context | ck_observation_context | INSERT INTO observation (incident_id, capability_invocation_id, managed_resource_id, observation_kind, schema_name, schema_version, payload, summary, observed_at, created_at) VALUES (@incident, @invocation, @resource, 'QUEUE_STATUS', 'q', 1, '{}', 's', NOW(3), NOW(3))
-            observation with both contexts | ck_observation_context | INSERT INTO observation (incident_id, investigation_id, recovery_verification_id, capability_invocation_id, managed_resource_id, observation_kind, schema_name, schema_version, payload, summary, observed_at, created_at) VALUES (@incident, @investigation, 9001, @invocation, @resource, 'QUEUE_STATUS', 'q', 1, '{}', 's', NOW(3), NOW(3))
+            observation with both contexts | ck_observation_context | INSERT INTO observation (incident_id, investigation_id, recovery_verification_id, capability_invocation_id, managed_resource_id, observation_kind, schema_name, schema_version, payload, summary, observed_at, created_at) VALUES (@incident, @investigation, @verification, @invocation, @resource, 'QUEUE_STATUS', 'q', 1, '{}', 's', NOW(3), NOW(3))
             unknown observation kind | ck_observation_kind | INSERT INTO observation (incident_id, investigation_id, capability_invocation_id, managed_resource_id, observation_kind, schema_name, schema_version, payload, summary, observed_at, created_at) VALUES (@incident, @investigation, @invocation, @resource, 'GUESS', 'q', 1, '{}', 's', NOW(3), NOW(3))
             observation window reversed | ck_observation_window | INSERT INTO observation (incident_id, investigation_id, capability_invocation_id, managed_resource_id, observation_kind, schema_name, schema_version, payload, summary, observed_at, window_start, window_end, created_at) VALUES (@incident, @investigation, @invocation, @resource, 'METRIC', 'q', 1, '{}', 's', NOW(3), '2026-09-27 01:00:00', '2026-09-27 00:00:00', NOW(3))
             unknown evidence relation | ck_evidence_relation | INSERT INTO evidence (investigation_id, observation_id, hypothesis_id, relation, reason, created_at) VALUES (@investigation, @observation, @hypothesis, 'CONFIRMS', 'r', NOW(3))

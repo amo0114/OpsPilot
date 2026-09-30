@@ -76,6 +76,18 @@ class MyBatisObservationRepositoryTest {
                 + " max_consecutive_ai_failures, created_at, updated_at) SELECT id, UTC_TIMESTAMP(3),"
                 + " UTC_TIMESTAMP(3), 1, UTC_TIMESTAMP(3), 12, 480, 60, 3, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3)"
                 + " FROM incident");
+        jdbc.update("INSERT INTO recovery_policy (managed_resource_id, policy_key, name, version_no,"
+                + " criteria_schema_name, criteria_schema_version, criteria_payload, status, created_at, activated_at)"
+                + " SELECT id, 'stream-recovery', '积压恢复', 1, 'recovery.policy.criteria', 1, '{\"schemaName\":"
+                + " \"recovery.policy.criteria\", \"schemaVersion\": 1, \"criteria\": [{\"criterionKey\":"
+                + " \"stream-lag-drained\"}]}', 'ACTIVE', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3) FROM managed_resource"
+                + " WHERE resource_key = 'statistics-stream'");
+        jdbc.update("INSERT INTO recovery_verification (incident_id, managed_resource_id, recovery_policy_id,"
+                + " recovery_policy_version, policy_snapshot, verification_no, status, deadline_at, started_at,"
+                + " created_at, updated_at) SELECT i.id, p.managed_resource_id, p.id, 1, '{\"schemaName\":"
+                + " \"recovery.policy.criteria\", \"schemaVersion\": 1}', 1, 'RUNNING', UTC_TIMESTAMP(3) +"
+                + " INTERVAL 120 SECOND, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3), UTC_TIMESTAMP(3) FROM incident i,"
+                + " recovery_policy p WHERE i.incident_key = 'INC-20260927-0001'");
         ids = Map.of(
                 "incident", id("SELECT id FROM incident WHERE incident_key = 'INC-20260927-0001'"),
                 "otherIncident", id("SELECT id FROM incident WHERE incident_key = 'INC-20260927-0002'"),
@@ -83,7 +95,8 @@ class MyBatisObservationRepositoryTest {
                         id("SELECT v.id FROM investigation v JOIN incident i ON i.id = v.incident_id"
                                 + " WHERE i.incident_key = 'INC-20260927-0001'"),
                 "stream", id("SELECT id FROM managed_resource WHERE resource_key = 'statistics-stream'"),
-                "redis", id("SELECT id FROM managed_resource WHERE resource_key = 'shortlink-redis'"));
+                "redis", id("SELECT id FROM managed_resource WHERE resource_key = 'shortlink-redis'"),
+                "verification", id("SELECT id FROM recovery_verification"));
         insertInvocation("succeeded", "SUCCEEDED", false);
         insertInvocation("running", "RUNNING", false);
         insertInvocation("failed", "FAILED", false);
@@ -112,7 +125,7 @@ class MyBatisObservationRepositoryTest {
         NewObservation recovery = new NewObservation(
                 ids.get("incident"),
                 null,
-                9001L,
+                ids.get("verification"),
                 invocation("recovery"),
                 ids.get("stream"),
                 ObservationKind.QUEUE_STATUS,
@@ -236,7 +249,7 @@ class MyBatisObservationRepositoryTest {
                         + " ?, ?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
                 ids.get("incident"),
                 recovery ? null : ids.get("investigation"),
-                recovery ? 9001L : null,
+                recovery ? ids.get("verification") : null,
                 recovery ? null : 1,
                 recovery ? "stream-lag-drained" : null,
                 recovery ? 1 : null,

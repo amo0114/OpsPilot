@@ -28,6 +28,8 @@ record InvestigationFixture(
                 "hypothesis",
                 "observation",
                 "capability_invocation",
+                "recovery_verification",
+                "recovery_policy",
                 "incident_timeline_event",
                 "investigation",
                 "incident_affected_resource",
@@ -72,7 +74,8 @@ record InvestigationFixture(
     }
 
     /**
-     * 经一条 SUCCEEDED Invocation 写入真实 Observation。{@code investigationId} 为空时是恢复观测（恢复上下文 9001）。
+     * 经一条 SUCCEEDED Invocation 写入真实 Observation。{@code investigationId} 为空时是恢复观测，属于本 Incident 新建的
+     * 一次 RUNNING Verification。
      *
      * @return Observation id
      */
@@ -83,6 +86,7 @@ record InvestigationFixture(
     /** 同 {@link #observation}，调查观测的来源调用属于 {@code runNo}。 */
     long observationInRun(long incident, Long investigationId, String name, int runNo) {
         boolean recovery = investigationId == null;
+        Long verificationId = recovery ? recoveryVerification(incident) : null;
         jdbc.update(
                 "INSERT INTO capability_invocation (incident_id, investigation_id, recovery_verification_id, run_no,"
                         + " criterion_key, sample_index, capability_key, managed_resource_id, status,"
@@ -93,7 +97,7 @@ record InvestigationFixture(
                         + " UTC_TIMESTAMP(3), UTC_TIMESTAMP(3), 42, ?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
                 incident,
                 investigationId,
-                recovery ? 9001L : null,
+                verificationId,
                 recovery ? null : runNo,
                 recovery ? "stream-lag-drained" : null,
                 recovery ? 1 : null,
@@ -108,10 +112,42 @@ record InvestigationFixture(
                         + " UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
                 incident,
                 investigationId,
-                recovery ? 9001L : null,
+                verificationId,
                 invocationId,
                 streamId());
         return id(jdbc, "SELECT id FROM observation WHERE capability_invocation_id = " + invocationId);
+    }
+
+    /** 为 Incident 新建一次 RUNNING Verification，依据 Stream 上的 ACTIVE 策略 v1（不存在时先建）。 */
+    long recoveryVerification(long incident) {
+        long stream = streamId();
+        if (id(jdbc, "SELECT COUNT(*) FROM recovery_policy WHERE managed_resource_id = " + stream) == 0) {
+            jdbc.update(
+                    "INSERT INTO recovery_policy (managed_resource_id, policy_key, name, version_no,"
+                            + " criteria_schema_name, criteria_schema_version, criteria_payload, status, created_at,"
+                            + " activated_at) VALUES (?, 'stream-recovery', '积压恢复', 1, 'recovery.policy.criteria', 1,"
+                            + " '{\"schemaName\": \"recovery.policy.criteria\", \"schemaVersion\": 1,"
+                            + " \"criteria\": [{\"criterionKey\": \"stream-lag-drained\"}]}', 'ACTIVE',"
+                            + " UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
+                    stream);
+        }
+        long policy = id(jdbc, "SELECT id FROM recovery_policy WHERE managed_resource_id = " + stream);
+        long number = id(jdbc, "SELECT COUNT(*) + 1 FROM recovery_verification WHERE incident_id = " + incident);
+        jdbc.update(
+                "INSERT INTO recovery_verification (incident_id, managed_resource_id, recovery_policy_id,"
+                        + " recovery_policy_version, policy_snapshot, verification_no, status, deadline_at,"
+                        + " started_at, created_at, updated_at) VALUES (?, ?, ?, 1, '{\"schemaName\":"
+                        + " \"recovery.policy.criteria\", \"schemaVersion\": 1}', ?, 'RUNNING',"
+                        + " UTC_TIMESTAMP(3) + INTERVAL 120 SECOND, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3),"
+                        + " UTC_TIMESTAMP(3))",
+                incident,
+                stream,
+                policy,
+                number);
+        return id(
+                jdbc,
+                "SELECT id FROM recovery_verification WHERE incident_id = " + incident + " AND verification_no = "
+                        + number);
     }
 
     Map<String, Object> hypothesisRow(long id) {

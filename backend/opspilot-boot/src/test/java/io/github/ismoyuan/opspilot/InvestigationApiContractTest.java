@@ -94,6 +94,7 @@ class InvestigationApiContractTest {
                 "hypothesis",
                 "observation",
                 "capability_invocation",
+                "recovery_verification",
                 "incident_timeline_event",
                 "investigation",
                 "incident_affected_resource",
@@ -288,12 +289,40 @@ class InvestigationApiContractTest {
         return created.body().path("data").path("incidentKey").asString();
     }
 
+    /** 本 Incident 的第一次 RUNNING Verification，依据资源上的 ACTIVE 策略 v1（首次使用时建立，随资源保留）。 */
+    private long recoveryVerification(long incidentId, long resourceId) {
+        if (jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM recovery_policy WHERE managed_resource_id = ?", Long.class, resourceId)
+                == 0) {
+            jdbc.update(
+                    "INSERT INTO recovery_policy (managed_resource_id, policy_key, name, version_no,"
+                            + " criteria_schema_name, criteria_schema_version, criteria_payload, status, created_at,"
+                            + " activated_at) VALUES (?, 'stream-recovery', '积压恢复', 1, 'recovery.policy.criteria', 1,"
+                            + " '{\"schemaName\": \"recovery.policy.criteria\", \"schemaVersion\": 1,"
+                            + " \"criteria\": [{\"criterionKey\": \"stream-lag-drained\"}]}', 'ACTIVE',"
+                            + " UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
+                    resourceId);
+        }
+        jdbc.update(
+                "INSERT INTO recovery_verification (incident_id, managed_resource_id, recovery_policy_id,"
+                        + " recovery_policy_version, policy_snapshot, verification_no, status, deadline_at,"
+                        + " started_at, created_at, updated_at) SELECT ?, managed_resource_id, id, 1,"
+                        + " '{\"schemaName\": \"recovery.policy.criteria\", \"schemaVersion\": 1}', 1, 'RUNNING',"
+                        + " UTC_TIMESTAMP(3) + INTERVAL 120 SECOND, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3),"
+                        + " UTC_TIMESTAMP(3) FROM recovery_policy WHERE managed_resource_id = ?",
+                incidentId,
+                resourceId);
+        return jdbc.queryForObject(
+                "SELECT id FROM recovery_verification WHERE incident_id = ?", Long.class, incidentId);
+    }
+
     private long observation(
             long incidentId, Long investigationId, String resourceKey, String kind, String summary, boolean window) {
         boolean recovery = investigationId == null;
         long resourceId =
                 jdbc.queryForObject("SELECT id FROM managed_resource WHERE resource_key = ?", Long.class, resourceKey);
         String correlation = "obs-" + summary.hashCode();
+        Long verificationId = recovery ? recoveryVerification(incidentId, resourceId) : null;
         jdbc.update(
                 "INSERT INTO capability_invocation (incident_id, investigation_id, recovery_verification_id, run_no,"
                         + " criterion_key, sample_index, capability_key, managed_resource_id, status,"
@@ -304,7 +333,7 @@ class InvestigationApiContractTest {
                         + " UTC_TIMESTAMP(3), UTC_TIMESTAMP(3), 42, ?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
                 incidentId,
                 investigationId,
-                recovery ? 9001L : null,
+                verificationId,
                 recovery ? null : 1,
                 recovery ? "stream-lag-drained" : null,
                 recovery ? 1 : null,
@@ -321,7 +350,7 @@ class InvestigationApiContractTest {
                         + " ?, ?, ?, UTC_TIMESTAMP(3))",
                 incidentId,
                 investigationId,
-                recovery ? 9001L : null,
+                verificationId,
                 invocationId,
                 resourceId,
                 kind,
