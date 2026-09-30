@@ -58,6 +58,20 @@ public class CapabilityExecutionService {
         };
     }
 
+    /**
+     * 执行一次已由调用方准入并提交的 RUNNING 调用（恢复采样，08 TASK-078）：与调查调用同一 Invoker 与结果事务，事务外调用，不经过
+     * 调查准入、Duplicate Guard 或预算。
+     *
+     * @throws IllegalStateException 尚无 CapabilityInvoker
+     */
+    public CapabilityExecutionResult executeAdmitted(AdmittedInvocation invocation) {
+        CapabilityInvoker invoker = invokers.getIfAvailable();
+        if (invoker == null) {
+            throw new IllegalStateException("No capability invoker is configured");
+        }
+        return run(invoker, invocation);
+    }
+
     private CapabilityExecutionResult run(CapabilityInvoker invoker, AdmittedInvocation invocation) {
         InvocationOutcome outcome;
         try {

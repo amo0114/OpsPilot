@@ -14,6 +14,16 @@ public interface CapabilityInvocationRepository {
     /** @return 新 Invocation 的 id */
     long insertRunningInvestigationCall(NewInvestigationInvocation invocation);
 
+    /**
+     * 登记一个恢复样本槽位的 RUNNING 调用（04 §18～§19、06 §113）。
+     *
+     * @return 新 Invocation 的 id；该 verificationId＋criterionKey＋sampleIndex 已被占用时为空（不在同一槽位重试）
+     */
+    Optional<Long> insertRunningRecoverySample(NewRecoverySampleInvocation invocation);
+
+    /** 不加锁读取一次 Verification 的全部恢复样本调用（按 criterionKey、sampleIndex 升序）。 */
+    List<RecoverySampleInvocation> findRecoverySamples(long recoveryVerificationId);
+
     /** 不加锁读取调用所属 Incident（创建后不变），供结果事务先锁 Incident。 */
     Optional<Long> findIncidentId(long id);
 

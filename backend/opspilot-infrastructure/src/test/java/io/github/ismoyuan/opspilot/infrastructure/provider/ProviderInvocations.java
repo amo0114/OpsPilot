@@ -81,7 +81,7 @@ final class ProviderInvocations {
         return new AdmittedInvocation(
                 81,
                 7,
-                3,
+                3L,
                 1,
                 new ManagedResource(
                         1, 1, "redirect-service", "Redirect", ResourceType.SERVICE, null, ResourceStatus.ACTIVE, 0),
@@ -89,6 +89,7 @@ final class ProviderInvocations {
                 new ProviderBinding(connection, binding, selector),
                 arguments,
                 window,
-                Instant.now());
+                Instant.now(),
+                null);
     }
 }

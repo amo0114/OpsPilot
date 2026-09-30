@@ -1,21 +1,21 @@
 # 当前工作
 
-更新时间：2026-09-30（本地，B27 DONE）
+更新时间：2026-09-30（本地，B28-R2 PASS）
 仓库/分支：/root/projects/OpsPilot-V0.1-IMPLEMENTATION，main；无 remote
-当前批次/状态：B27 DONE（代码 f8d6122，B27-R1 PASS）；B28 未开始
-成员 Task 及顺序：B27 = TASK-072 → 073（均 DONE）；下一批 B28 = TASK-077 → 078 → 079
-固定 Base SHA：B27 为 3c335fec5c15d234d12500433e6f238c8792b738；B28 开工时读取当时 HEAD
-批外前置核实：B28 开工时按 08 核对其成员的批外前置
-允许目录 / 明确不做 / 关键不变量：B28 开工时按 BATCH-PLAN 与 08 固定
-本批规格章节及 PROGRESS 记录：PROGRESS「B27」
-当前成员及位置：无进行中批次
+当前批次/状态：B28 REVIEW（B28-R1 两项 P1 已关闭，B28-V2 通过，B28-R2 PASS，待提交）
+成员 Task 及顺序：TASK-077 → TASK-078 → TASK-079（均 REVIEW）
+固定 Base SHA：db9e2052f4155c96b0e4c5299ddea9302b183a33（不变）
+批外前置核实：TASK-073 DONE（f8d6122）；TASK-074～076 DONE
+允许目录 / 明确不做 / 关键不变量：见 PROGRESS「B28」范围；不做 Verification 创建（080/081）、Incident 结果迁移（082）、启动恢复（083）、UI/SSE、新迁移、新依赖；FALSE 优先、UNKNOWN 不当 0、样本槽位不重试、sleep 不在事务内、调用与样本不越过冻结 deadline、准入事务先锁 Incident
+本批规格章节及 PROGRESS 记录：PROGRESS「B28」（含“B28-R1 修复”）
+当前成员及位置：TASK-077/078/079 实现、R1 修复与针对性验证完成，均 REVIEW
 已实现并针对性验证的成员：B01～B27 全部，及 B13 前的独立修复
-未完成 / 未执行验证：执行成功后 Incident 停在 EXECUTING（080 以冻结快照创建 Verification）；恢复求值/采样/Verification Runner（077～079）；Verification 启动恢复（083）；CCG 门禁工具本机缺失；其余见 PROGRESS 待处理问题；Redis < 7.2、MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
-未提交文件（含既有无关修改）：无（本交接卡与 PROGRESS 回填随 docs(progress) 提交）
-共同验证及独立 Review 证据编号：B27-V1、B27-R1
+未完成 / 未执行验证：B28 提交与 SHA 回填；Verification 终态后 Incident 仍 VERIFYING（082）；Verification 创建（080/081）与补派发/启动恢复（083）；真实 Provider 恢复采样与 S3 端到端、ai-runtime、真实 LLM NOT RUN；CCG 门禁工具本机缺失；Redis < 7.2、MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
+未提交文件（含既有无关修改）：B28 全部改动（见 PROGRESS「B28」修改文件，另含 R1 修复涉及的 ProviderCapabilityInvoker、CapabilityAdmissionService、CriterionReason 及测试 ProviderCapabilityInvokerTest）；无既有无关修改
+共同验证及独立 Review 证据编号：B28-V1（修复前）、B28-R1（NEEDS CHANGES）、B28-V2（修复后 clean verify exit 0）、B28-R2（PASS；独立重跑 48 项全部通过）
 下一步具体动作：
-1. 开始 B28（TASK-077 三值判定 → 078 持久化采样 → 079 Verification Runner），按 BATCH-PLAN 固定基线；B28 须分别证明三值矩阵、样本身份/时间和总体结果
-2. 不推送
+1. B28-R2 已 PASS；审查与验证证据已记入 PROGRESS，等待提交
+2. PASS 且获用户授权后提交，回填 SHA，B28 与 TASK-077～079 一起 DONE；不开始 B29，不推送
 
 本地启动 Demo 配置：在 OPSPILOT_DB_* 环境变量基础上加 --spring.profiles.active=demo
 

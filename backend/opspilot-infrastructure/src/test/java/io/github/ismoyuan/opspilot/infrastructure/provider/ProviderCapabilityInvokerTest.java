@@ -122,6 +122,34 @@ class ProviderCapabilityInvokerTest {
         assertThat(seen[0]).isBetween(before.plusMillis(1_000), Instant.now().plusMillis(1_000));
     }
 
+    /**
+     * 恢复采样的冻结期限（04 §80、B28-R1）：早于能力超时时，Provider 收到的就是该期限；忽略期限的 Provider 在该期限处被截断为
+     * TIMEOUT，期限之后取得的数据不会成为结果。
+     */
+    @Test
+    void aFrozenDeadlineEarlierThanTheTimeoutBoundsTheCall() {
+        Instant frozen = Instant.now().plusMillis(200);
+        AdmittedInvocation bounded = withDeadline(invocation(5_000), frozen);
+        Instant[] seen = new Instant[1];
+        long started = System.nanoTime();
+
+        InvocationOutcome outcome = invoker(provider((invocation, deadline) -> {
+                    seen[0] = deadline;
+                    sleep(Duration.ofSeconds(2));
+                    return fetched();
+                }))
+                .invoke(bounded);
+
+        assertThat(seen[0]).isEqualTo(frozen);
+        assertThat(outcome).isInstanceOf(InvocationOutcome.Failed.class);
+        assertThat(((InvocationOutcome.Failed) outcome).errorCode()).isEqualTo(ErrorCode.TIMEOUT);
+        assertThat(Duration.ofNanos(System.nanoTime() - started)).isLessThan(Duration.ofMillis(1_000));
+        assertThat(withDeadline(invocation(1_000), Instant.now().plusSeconds(60))
+                        .deadline(Instant.EPOCH))
+                .as("较晚的冻结期限不放宽能力超时")
+                .isEqualTo(Instant.EPOCH.plusMillis(1_000));
+    }
+
     @Test
     void unexpectedProviderExceptionsPropagateToTheExecutionService() {
         ProviderCapabilityInvoker invoker = invoker(provider((invocation, deadline) -> {
@@ -165,6 +193,21 @@ class ProviderCapabilityInvokerTest {
                 new MetricsQueryArgumentsV1("http.request.latency.p99", WindowKey.LAST_15_MIN, false),
                 new ResolvedWindow(new QueryWindow(now.minusSeconds(900), now), null),
                 Duration.ofMillis(timeoutMillis));
+    }
+
+    private static AdmittedInvocation withDeadline(AdmittedInvocation invocation, Instant deadlineAt) {
+        return new AdmittedInvocation(
+                invocation.invocationId(),
+                invocation.incidentId(),
+                null,
+                null,
+                invocation.resource(),
+                invocation.definition(),
+                invocation.provider(),
+                invocation.arguments(),
+                invocation.window(),
+                invocation.startedAt(),
+                deadlineAt);
     }
 
     private static void sleep(Duration duration) {

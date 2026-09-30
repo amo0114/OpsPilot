@@ -24,7 +24,8 @@ import org.springframework.stereotype.Service;
  * CapabilityInvoker 的生产实现：按能力选唯一的 {@link ObserveProvider} 取数，成功结果一律经 {@link ObserveResultPipeline} 组装
  * （Provider 无法绕过脱敏与确定性提取），失败原样记为调用失败。每个能力至多一个 Provider，重复注册启动即失败。
  *
- * <p>总期限（B16-R1）：从开始调用起算能力超时（{@link AdmittedInvocation#timeout()}），同一期限交给 Provider 约束网络等待，并覆盖其后的
+ * <p>总期限（B16-R1）：从开始调用起算能力超时（{@link AdmittedInvocation#timeout()}），恢复采样另不得越过 Verification 冻结的
+ * deadline（{@link AdmittedInvocation#deadline}，B28-R1），同一期限交给 Provider 约束网络等待，并覆盖其后的
  * 解析、聚合与整段管线（含原始结果写入）。取数与管线在独立虚拟线程中执行，调用方最多等到期限：到期即中断该线程并返回
  * TIMEOUT，迟到的结果不再被采用（此时可能已写出无引用的脱敏原始结果文件）。
  *
@@ -59,7 +60,7 @@ public class ProviderCapabilityInvoker implements CapabilityInvoker {
         if (provider == null) {
             return new InvocationOutcome.Failed(ErrorCode.CAPABILITY_INVOCATION_FAILED, NO_PROVIDER);
         }
-        Instant deadline = clock.instant().plus(invocation.timeout());
+        Instant deadline = invocation.deadline(clock.instant());
         Future<InvocationOutcome> task = executor.submit(() -> complete(provider, invocation, deadline));
         try {
             long remaining =

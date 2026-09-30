@@ -89,6 +89,35 @@ record RemediationFixture(
      * @return 策略 id
      */
     long activateRecoveryPolicy(RecoveryPolicyActivationService recoveryPolicies, String policyKey) {
+        return activateRecoveryPolicy(
+                recoveryPolicies,
+                policyKey,
+                RecoveryPolicyCriteriaV1.of(
+                        60,
+                        60,
+                        List.of(
+                                new RecoveryCriterionV1.QueueInspect(
+                                        "stream-lag-drained",
+                                        "积压达标",
+                                        "statistics-stream",
+                                        new QueueInspectArgumentsV1(),
+                                        new RecoverySamplingV1(1, 0, null),
+                                        new RecoveryPredicateV1.NumericCompare(
+                                                "lag", RecoveryPredicateV1.ComparisonOperator.LTE, 20.0),
+                                        true),
+                                new RecoveryCriterionV1.ServiceInspect(
+                                        "consumer-running",
+                                        "消费者持续运行",
+                                        "statistics-consumer",
+                                        new ServiceInspectArgumentsV1(),
+                                        new RecoverySamplingV1(2, 5, 10),
+                                        new RecoveryPredicateV1.FieldEquals("runtimeState", "RUNNING"),
+                                        true))));
+    }
+
+    /** 同上的绑定，Criteria 由调用方给出（恢复验证用例用更短的采样间隔）。 */
+    long activateRecoveryPolicy(
+            RecoveryPolicyActivationService recoveryPolicies, String policyKey, RecoveryPolicyCriteriaV1 criteria) {
         long stream = investigation.streamId();
         jdbc.update("INSERT INTO data_source_connection (connection_key, name, provider_type, endpoint,"
                 + " config_schema_name, config_schema_version, config_payload, status, created_at, updated_at) VALUES"
@@ -109,31 +138,8 @@ record RemediationFixture(
                     binding);
         }
         return recoveryPolicies
-                .activate(new RecoveryPolicyActivationService.ActivateCommand(
-                        consumer,
-                        policyKey,
-                        "统计消费者恢复标准",
-                        RecoveryPolicyCriteriaV1.of(
-                                60,
-                                60,
-                                List.of(
-                                        new RecoveryCriterionV1.QueueInspect(
-                                                "stream-lag-drained",
-                                                "积压达标",
-                                                "statistics-stream",
-                                                new QueueInspectArgumentsV1(),
-                                                new RecoverySamplingV1(1, 0, null),
-                                                new RecoveryPredicateV1.NumericCompare(
-                                                        "lag", RecoveryPredicateV1.ComparisonOperator.LTE, 20.0),
-                                                true),
-                                        new RecoveryCriterionV1.ServiceInspect(
-                                                "consumer-running",
-                                                "消费者持续运行",
-                                                "statistics-consumer",
-                                                new ServiceInspectArgumentsV1(),
-                                                new RecoverySamplingV1(2, 5, 10),
-                                                new RecoveryPredicateV1.FieldEquals("runtimeState", "RUNNING"),
-                                                true)))))
+                .activate(
+                        new RecoveryPolicyActivationService.ActivateCommand(consumer, policyKey, "统计消费者恢复标准", criteria))
                 .policyId();
     }
 

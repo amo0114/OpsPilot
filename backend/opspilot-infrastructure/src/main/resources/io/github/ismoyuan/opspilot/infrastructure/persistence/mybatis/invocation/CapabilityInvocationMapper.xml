@@ -26,6 +26,46 @@
                 #{i.startedAt}, #{i.correlationId}, #{i.startedAt}, #{i.startedAt})
     </insert>
 
+    <resultMap id="recoverySampleRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.invocation.CapabilityInvocationMapper$RecoverySampleRow">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="criterion_key" javaType="String"/>
+            <arg column="sample_index" javaType="_int"/>
+            <arg column="status" javaType="String"/>
+            <arg column="started_at" javaType="java.time.LocalDateTime"/>
+            <arg column="finished_at" javaType="java.time.LocalDateTime"/>
+            <arg column="observed_at" javaType="java.time.LocalDateTime"/>
+            <arg column="response_schema_name" javaType="String"/>
+            <arg column="response_schema_version" javaType="Integer"/>
+            <arg column="response_payload" javaType="String"/>
+        </constructor>
+    </resultMap>
+
+    <!--
+      恢复样本槽位（04 §18～§19、06 §113）：调查列与 run_no 为空，verificationId＋criterionKey＋sampleIndex 由
+      uk_capability_invocation_sample 保证唯一，重复登记同一槽位被拒绝而不是覆盖
+    -->
+    <insert id="insertRunningRecoverySample" useGeneratedKeys="true" keyProperty="key.id" keyColumn="id">
+        INSERT INTO capability_invocation (incident_id, recovery_verification_id, criterion_key, sample_index,
+                                           capability_key, managed_resource_id, status, request_schema_name,
+                                           request_schema_version, request_payload, started_at, correlation_id,
+                                           created_at, updated_at)
+        VALUES (#{s.incidentId}, #{s.recoveryVerificationId}, #{s.criterionKey}, #{s.sampleIndex}, #{s.capabilityKey},
+                #{s.managedResourceId}, 'RUNNING', #{s.requestSchemaName}, #{s.requestSchemaVersion},
+                #{s.requestPayload}, #{s.startedAt}, #{s.correlationId}, #{s.startedAt}, #{s.startedAt})
+    </insert>
+
+    <!-- 样本时间取该调用 Observation 的最早 observed_at（真实采样时间）；样本身份只来自持久化槽位 -->
+    <select id="selectRecoverySamples" resultMap="recoverySampleRow">
+        SELECT ci.id, ci.criterion_key, ci.sample_index, ci.status, ci.started_at, ci.finished_at,
+               (SELECT MIN(o.observed_at) FROM observation o WHERE o.capability_invocation_id = ci.id) AS observed_at,
+               ci.response_schema_name, ci.response_schema_version,
+               CAST(ci.response_payload AS CHAR) AS response_payload
+        FROM capability_invocation ci
+        WHERE ci.recovery_verification_id = #{verificationId}
+        ORDER BY ci.criterion_key, ci.sample_index
+    </select>
+
     <!-- incident_id 创建后不变：结果事务先据此按 Incident → Invocation 锁序加锁（B18） -->
     <select id="selectIncidentId" resultType="long">
         SELECT incident_id FROM capability_invocation WHERE id = #{id}

@@ -24,13 +24,13 @@ class DispatchConfiguration {
             WorkerProperties properties,
             ObjectProvider<InvestigationWorker> investigations,
             ObjectProvider<ActionExecutionWorker> executions,
-            RecoveryVerificationWorker verifications) {
+            ObjectProvider<RecoveryVerificationWorker> verifications) {
         return new InProcessWorkDispatcher(
                 workerPool(properties),
                 new SingleFlightRegistry(),
                 investigations.getIfAvailable(UnwiredInvestigationWorker::new),
                 executions.getIfAvailable(UnwiredActionExecutionWorker::new),
-                verifications);
+                verifications.getIfAvailable(UnwiredRecoveryVerificationWorker::new));
     }
 
     /** 固定大小、有界排队、满则拒绝（07 §47）。 */
@@ -57,11 +57,5 @@ class DispatchConfiguration {
     DispatchRecoveryScheduler dispatchRecoveryScheduler(
             StartupRecoveryCoordinator coordinator, DispatcherProperties properties) {
         return new DispatchRecoveryScheduler(coordinator, properties);
-    }
-
-    /** 占位由真实 Verification Worker 所在 Task（TASK-079）删除。 */
-    @Bean
-    RecoveryVerificationWorker recoveryVerificationWorker() {
-        return new PlaceholderRecoveryVerificationWorker();
     }
 }

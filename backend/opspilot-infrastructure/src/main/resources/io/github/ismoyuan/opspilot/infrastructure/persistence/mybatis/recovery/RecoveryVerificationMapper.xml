@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.recovery.RecoveryVerificationMapper">
+
+    <resultMap id="verificationRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.recovery.RecoveryVerificationMapper$VerificationRow">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="incident_id" javaType="_long"/>
+            <arg column="verification_no" javaType="_int"/>
+            <arg column="status" javaType="String"/>
+            <arg column="policy_snapshot" javaType="String"/>
+            <arg column="deadline_at" javaType="java.time.LocalDateTime"/>
+            <arg column="started_at" javaType="java.time.LocalDateTime"/>
+            <arg column="lock_version" javaType="_long"/>
+        </constructor>
+    </resultMap>
+
+    <select id="selectById" resultMap="verificationRow">
+        SELECT id, incident_id, verification_no, status, CAST(policy_snapshot AS CHAR) AS policy_snapshot,
+               deadline_at, started_at, lock_version
+        FROM recovery_verification
+        WHERE id = #{id}
+    </select>
+
+    <update id="markRunning">
+        UPDATE recovery_verification
+        SET status = 'RUNNING', started_at = #{at}, updated_at = #{at}, lock_version = lock_version + 1
+        WHERE id = #{id} AND status = 'PENDING' AND lock_version = #{expectedVersion}
+    </update>
+
+    <!-- 终态只从 PENDING/RUNNING 写入一次，结果不覆盖（04 §50） -->
+    <update id="markFinished">
+        UPDATE recovery_verification
+        SET status = #{status}, result_summary = #{summary}, result_payload = #{payload}, finished_at = #{at},
+            updated_at = #{at}, lock_version = lock_version + 1
+        WHERE id = #{id} AND status = #{from} AND lock_version = #{expectedVersion}
+          AND status IN ('PENDING', 'RUNNING')
+    </update>
+</mapper>

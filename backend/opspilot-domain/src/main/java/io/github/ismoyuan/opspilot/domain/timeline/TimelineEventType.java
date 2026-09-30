@@ -44,6 +44,14 @@ public enum TimelineEventType {
      * DIAGNOSED（04 §79、§82）。
      */
     ACTION_EXECUTION_FAILED,
+    /** RecoveryVerification PENDING → RUNNING，开始按冻结快照采样（01 §35、04 §80）。 */
+    RECOVERY_VERIFICATION_STARTED,
+    /** 全部 required 检查 TRUE（01 §30）；Incident 的相应迁移属 TASK-082。 */
+    RECOVERY_VERIFICATION_PASSED,
+    /** 至少一项 required 检查明确 FALSE。 */
+    RECOVERY_VERIFICATION_FAILED,
+    /** 没有 FALSE 但至少一项 required 检查 UNKNOWN。 */
+    RECOVERY_VERIFICATION_INCONCLUSIVE,
     /** Approval 被拒绝，Incident 回到 DIAGNOSED（01 §24.2）。 */
     APPROVAL_REJECTED,
     /** Approval 被撤回（05 §42），Incident 回到 DIAGNOSED；01 §35 最低清单之外的补充类型。 */

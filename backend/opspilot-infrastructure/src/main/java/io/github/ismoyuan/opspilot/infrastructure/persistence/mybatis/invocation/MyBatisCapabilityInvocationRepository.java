@@ -3,6 +3,8 @@ package io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.invocatio
 import io.github.ismoyuan.opspilot.application.capability.CapabilityInvocationRepository;
 import io.github.ismoyuan.opspilot.application.capability.InvocationRecord;
 import io.github.ismoyuan.opspilot.application.capability.NewInvestigationInvocation;
+import io.github.ismoyuan.opspilot.application.capability.NewRecoverySampleInvocation;
+import io.github.ismoyuan.opspilot.application.capability.RecoverySampleInvocation;
 import io.github.ismoyuan.opspilot.domain.capability.CapabilitySchema;
 import io.github.ismoyuan.opspilot.domain.error.ErrorCode;
 import java.time.Instant;
@@ -11,6 +13,7 @@ import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Repository;
 
 @Repository
@@ -37,6 +40,54 @@ class MyBatisCapabilityInvocationRepository implements CapabilityInvocationRepos
                 invocation.correlationId());
         mapper.insertRunningInvestigationCall(insert);
         return insert.getId();
+    }
+
+    @Override
+    public Optional<Long> insertRunningRecoverySample(NewRecoverySampleInvocation invocation) {
+        CapabilityInvocationMapper.GeneratedKey key = new CapabilityInvocationMapper.GeneratedKey();
+        try {
+            mapper.insertRunningRecoverySample(
+                    key,
+                    new CapabilityInvocationMapper.RecoverySampleInsert(
+                            invocation.incidentId(),
+                            invocation.recoveryVerificationId(),
+                            invocation.criterionKey(),
+                            invocation.sampleIndex(),
+                            invocation.capabilityKey(),
+                            invocation.managedResourceId(),
+                            invocation.requestSchema().name(),
+                            invocation.requestSchema().version(),
+                            invocation.requestPayload(),
+                            utc(invocation.startedAt()),
+                            invocation.correlationId()));
+        } catch (DuplicateKeyException ex) {
+            if (String.valueOf(ex.getMessage()).contains("uk_capability_invocation_sample")) {
+                return Optional.empty();
+            }
+            throw ex;
+        }
+        return Optional.of(key.getId());
+    }
+
+    @Override
+    public List<RecoverySampleInvocation> findRecoverySamples(long recoveryVerificationId) {
+        return mapper.selectRecoverySamples(recoveryVerificationId).stream()
+                .map(row -> new RecoverySampleInvocation(
+                        row.id(),
+                        row.criterionKey(),
+                        row.sampleIndex(),
+                        row.status(),
+                        instant(row.startedAt()),
+                        instant(row.finishedAt()),
+                        instant(row.observedAt()),
+                        row.responseSchemaName(),
+                        row.responseSchemaVersion(),
+                        row.responsePayload()))
+                .toList();
+    }
+
+    private static Instant instant(LocalDateTime at) {
+        return at == null ? null : at.toInstant(ZoneOffset.UTC);
     }
 
     @Override

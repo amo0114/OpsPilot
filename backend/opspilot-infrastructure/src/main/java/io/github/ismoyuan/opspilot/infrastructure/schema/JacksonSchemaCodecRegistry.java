@@ -17,6 +17,7 @@ import io.github.ismoyuan.opspilot.application.execution.ServiceRestartReconcili
 import io.github.ismoyuan.opspilot.application.execution.ServiceRestartResultV1;
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicyCriteriaV1;
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicySnapshotV1;
+import io.github.ismoyuan.opspilot.application.recovery.RecoveryVerificationResultV1;
 import io.github.ismoyuan.opspilot.application.schema.SchemaCodecRegistry;
 import io.github.ismoyuan.opspilot.application.schema.SchemaPayloadException;
 import io.github.ismoyuan.opspilot.application.schema.SchemaPayloadException.Reason;
@@ -145,6 +146,11 @@ class JacksonSchemaCodecRegistry implements SchemaCodecRegistry {
                     ServiceRestartResultV1.SCHEMA_NAME,
                     ServiceRestartResultV1.SCHEMA_VERSION,
                     ServiceRestartResultV1.class),
+            // Verification 终态结果（04 §50）
+            entry(
+                    RecoveryVerificationResultV1.SCHEMA_NAME,
+                    RecoveryVerificationResultV1.SCHEMA_VERSION,
+                    RecoveryVerificationResultV1.class),
             // restart 结果未知后经只读核对确认的执行结果（04 §82）
             entry(
                     ServiceRestartReconciliationResultV1.SCHEMA_NAME,
