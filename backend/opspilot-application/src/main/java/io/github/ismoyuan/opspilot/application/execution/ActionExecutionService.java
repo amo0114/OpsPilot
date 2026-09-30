@@ -6,6 +6,7 @@ import io.github.ismoyuan.opspilot.application.execution.ActionExecutionReposito
 import io.github.ismoyuan.opspilot.application.execution.ServiceRestartExecutor.RestartOutcome;
 import io.github.ismoyuan.opspilot.application.execution.ServiceRestartExecutor.TargetResolution;
 import io.github.ismoyuan.opspilot.application.incident.IncidentRepository;
+import io.github.ismoyuan.opspilot.application.recovery.RecoveryVerificationCreator;
 import io.github.ismoyuan.opspilot.application.schema.SchemaCodecRegistry;
 import io.github.ismoyuan.opspilot.application.system.DataSourceConnectionRepository;
 import io.github.ismoyuan.opspilot.application.system.ManagedResourceRepository;
@@ -41,8 +42,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  *       条件更新的获胜者可以发出 CHANGE。准入前任何不满足（含解析失败）都没有发出 CHANGE：Execution FAILED（无 started_at）、方案
  *       CANCELLED、Incident → DIAGNOSED、ACTION_EXECUTION_FAILED（phase=ADMISSION）。
  *   <li>事务外发出一次 restart，不重试。
- *   <li>结果短事务：成功 → SUCCEEDED、方案 EXECUTED、ACTION_EXECUTION_SUCCEEDED（Incident 仍 EXECUTING——以冻结快照创建 Verification
- *       并 → VERIFYING 属 TASK-080 的同一成功事务）；明确失败 → FAILED、方案 EXECUTED、Incident → DIAGNOSED、ACTION_EXECUTION_FAILED；
+ *   <li>结果短事务：成功 → SUCCEEDED、方案 EXECUTED、ACTION_EXECUTION_SUCCEEDED，并以创建 Execution 时冻结的恢复合同创建唯一
+ *       PENDING Verification、Incident EXECUTING → VERIFYING，提交后派发（TASK-080，不重新选择 ACTIVE 策略）；明确失败 → FAILED、方案 EXECUTED、Incident → DIAGNOSED、ACTION_EXECUTION_FAILED；
  *       结果未知 → 不改任何数据，保持 RUNNING，在同一 Worker（仍持有该 Execution 的单飞）内进入有界只读核对，绝不重发。
  * </ol>
  */
@@ -62,6 +63,7 @@ public class ActionExecutionService implements ActionExecutionWorker {
     private final SchemaCodecRegistry codecs;
     private final ExecutionEvents events;
     private final ActionExecutionRecoveryService reconciliation;
+    private final ExecutionVerification verification;
     private final TransactionTemplate transaction;
     private final Clock clock;
 
@@ -76,6 +78,7 @@ public class ActionExecutionService implements ActionExecutionWorker {
             SchemaCodecRegistry codecs,
             TimelineRepository timeline,
             ActionExecutionRecoveryService reconciliation,
+            RecoveryVerificationCreator verifications,
             PlatformTransactionManager transactionManager,
             Clock clock) {
         this.executions = executions;
@@ -88,6 +91,7 @@ public class ActionExecutionService implements ActionExecutionWorker {
         this.codecs = codecs;
         this.events = new ExecutionEvents(timeline);
         this.reconciliation = reconciliation;
+        this.verification = new ExecutionVerification(executions, incidents, verifications);
         this.transaction = new TransactionTemplate(transactionManager);
         this.clock = clock;
     }
@@ -235,6 +239,7 @@ public class ActionExecutionService implements ActionExecutionWorker {
                         ActionExecutionEventPayloadV1.EXECUTION,
                         null,
                         now);
+                verification.start(incident, execution.id(), now);
             }
             case ServiceRestartExecutor.Failed failed -> {
                 if (!executions.markFailed(

@@ -101,6 +101,15 @@ class MyBatisActionExecutions implements ActionExecutionRepository {
     }
 
     @Override
+    public RecoveryContract findRecoveryContract(long executionId) {
+        ActionExecutionMapper.ContractRow row = mapper.selectRecoveryContract(executionId);
+        if (row == null) {
+            throw new IllegalArgumentException("Unknown action execution: " + executionId);
+        }
+        return new RecoveryContract(row.recoveryPolicyId(), row.recoveryPolicyVersion(), row.policySnapshot());
+    }
+
+    @Override
     public void markPlanExecuted(long planId, Instant at) {
         mapper.updatePlanFromActive(planId, "EXECUTED", utc(at));
     }

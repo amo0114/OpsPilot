@@ -44,6 +44,10 @@ public enum TimelineEventType {
      * DIAGNOSED（04 §79、§82）。
      */
     ACTION_EXECUTION_FAILED,
+    /**
+     * 用户在外部处理后请求恢复验证（05 §34）：同事务创建 PENDING Verification 并 DIAGNOSED → VERIFYING；01 §35 最低清单之外的补充类型。
+     */
+    RECOVERY_VERIFICATION_REQUESTED,
     /** RecoveryVerification PENDING → RUNNING，开始按冻结快照采样（01 §35、04 §80）。 */
     RECOVERY_VERIFICATION_STARTED,
     /** 全部 required 检查 TRUE（01 §30）；Incident 的相应迁移属 TASK-082。 */

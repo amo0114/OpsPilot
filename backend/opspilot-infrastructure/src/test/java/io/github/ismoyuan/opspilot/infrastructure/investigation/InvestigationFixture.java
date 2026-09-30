@@ -17,19 +17,20 @@ record InvestigationFixture(
         long otherInvestigationHypothesis) {
 
     static InvestigationFixture reset(JdbcTemplate jdbc) {
+        // 按外键依赖删除：恢复样本与 Verification 在其引用的 Execution 之前（TASK-080 起执行成功会创建 Verification）
         for (String table : List.of(
+                "diagnosis_evidence_ref",
+                "evidence",
+                "observation",
+                "capability_invocation",
+                "recovery_verification",
                 "action_execution",
                 "approval_request",
                 "remediation_action",
                 "remediation_plan",
                 "agent_step_record",
-                "diagnosis_evidence_ref",
                 "diagnosis",
-                "evidence",
                 "hypothesis",
-                "observation",
-                "capability_invocation",
-                "recovery_verification",
                 "recovery_policy",
                 "incident_timeline_event",
                 "investigation",

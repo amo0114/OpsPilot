@@ -1,21 +1,21 @@
 # 当前工作
 
-更新时间：2026-09-30（本地，B28 DONE）
+更新时间：2026-10-01（本地，B29-R2 PASS）
 仓库/分支：/root/projects/OpsPilot-V0.1-IMPLEMENTATION，main；无 remote
-当前批次/状态：B28 DONE（代码 c9dab5b，B28-R2 PASS）；B29 未开始
-成员 Task 及顺序：B28 = TASK-077 → 078 → 079（均 DONE）；下一批 B29 = TASK-080 → 081
-固定 Base SHA：B28 为 db9e2052f4155c96b0e4c5299ddea9302b183a33；B29 开工时读取当时 HEAD
-批外前置核实：B29 开工时按 08 核对其成员的批外前置
-允许目录 / 明确不做 / 关键不变量：B29 开工时按 BATCH-PLAN 与 08 固定
-本批规格章节及 PROGRESS 记录：PROGRESS「B28」
-当前成员及位置：无进行中批次
+当前批次/状态：B29 REVIEW（B29-R2 PASS，B29-V2 通过，待提交）
+成员 Task 及顺序：TASK-080 → TASK-081（均 REVIEW）
+固定 Base SHA：c0eb35c202d6724c4b3b3674933670557a365971（不变）
+批外前置核实：TASK-069/071 DONE、TASK-074/075 DONE、TASK-079 DONE（c9dab5b）
+允许目录 / 明确不做 / 关键不变量：见 PROGRESS「B29」范围；不做 Incident 结果迁移（082）、启动恢复（083）、GET 验证视图、UI/SSE、新迁移、新依赖；成功落账不重选 ACTIVE 策略、同 Execution 唯一 Verification、派发在提交后、事务先锁 Incident、正式应用以真实派发器与 Worker 启动
+本批规格章节及 PROGRESS 记录：PROGRESS「B29」（含“B29-R1 修复”与“B29-R2”）
+当前成员及位置：TASK-080/081 实现、R1 修复与独立复审完成，B29-R2 PASS，均 REVIEW 待提交
 已实现并针对性验证的成员：B01～B28 全部，及 B13 前的独立修复
-未完成 / 未执行验证：执行成功后 Incident 仍停在 EXECUTING、Verification 无创建入口（080/081）；Verification 终态后 Incident 仍 VERIFYING（082）；Verification 补派发/启动恢复与遗留样本中断标记（083）；真实 Provider 恢复采样与 S3 端到端 NOT RUN；CCG 门禁工具本机缺失；其余见 PROGRESS 待处理问题；Redis < 7.2、MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
-未提交文件（含既有无关修改）：无（本交接卡与 PROGRESS 回填随 docs(progress) 提交）
-共同验证及独立 Review 证据编号：B28-V1、B28-R1、B28-V2、B28-R2
+未完成 / 未执行验证：B29 提交与 SHA 回填；Verification 终态后 Incident 仍 VERIFYING（082）；Verification 补派发/启动恢复（083）；真实 Provider 恢复采样与 S3 端到端、ai-runtime、真实 LLM NOT RUN；CCG 门禁工具本机缺失；Redis < 7.2、MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
+未提交文件（含既有无关修改）：B29 全部改动（见 PROGRESS「B29」修改文件，另含 R1 回归 opspilot-boot ApplicationWiringTest）；无既有无关修改
+共同验证及独立 Review 证据编号：B29-V1（修复前）、B29-R1（NEEDS CHANGES）、B29-V2（修复后 clean verify exit 0）、B29-R2（PASS，独立启动/集成/Web 测试 50/50，日志 /tmp/b29-r2-tests.log）
 下一步具体动作：
-1. 开始 B29（TASK-080 执行成功 → 以冻结快照创建 Verification 并 → VERIFYING；TASK-081 手动 verify-recovery），按 BATCH-PLAN 固定基线；成功事务不重新选择 ACTIVE 策略，重复完成不建第二个 Verification，提交后派发
-2. 不推送
+1. B29-R2 已 PASS，可按用户授权进入本批代码提交及进度记录提交步骤，回填真实 SHA 后将 B29 与 TASK-080/081 一起标 DONE
+2. 完成本批提交与回填前不开始 B30；不推送
 
 本地启动 Demo 配置：在 OPSPILOT_DB_* 环境变量基础上加 --spring.profiles.active=demo
 

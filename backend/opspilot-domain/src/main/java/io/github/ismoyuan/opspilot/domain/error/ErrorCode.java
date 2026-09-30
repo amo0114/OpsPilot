@@ -73,6 +73,8 @@ public enum ErrorCode {
     RECOVERY_POLICY_NOT_FOUND(ErrorCategory.RULE_VIOLATION, "目标组件没有可用的恢复验证策略。"),
     /** 目标资源存在多条 ACTIVE RecoveryPolicy，不猜测选择，写操作前拒绝准入（04 §49、05 Recovery 错误码）。 */
     RECOVERY_POLICY_AMBIGUOUS(ErrorCategory.RULE_VIOLATION, "目标组件的恢复验证策略不唯一，无法确定使用哪一个。"),
+    /** 该 Incident 已有 PENDING 或 RUNNING 的 RecoveryVerification，不再创建新的验证（05 §34、§93，01 §36）。 */
+    RECOVERY_VERIFICATION_ALREADY_RUNNING(ErrorCategory.CONFLICT, "已有进行中的恢复验证，请等待其结束后再试。"),
     /** 调查阶段 AI 请求了不允许的意图（06 §103），如写能力。 */
     AI_INTENT_NOT_ALLOWED(ErrorCategory.RULE_VIOLATION, "当前阶段不允许该操作。"),
     /**

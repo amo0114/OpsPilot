@@ -10,6 +10,12 @@ interface RecoveryVerificationMapper {
 
     VerificationRow selectById(@Param("id") long id);
 
+    int insertPending(@Param("key") GeneratedKey key, @Param("v") PendingInsert verification);
+
+    Integer selectMaxVerificationNo(@Param("incidentId") long incidentId);
+
+    int countActive(@Param("incidentId") long incidentId);
+
     int markRunning(
             @Param("id") long id, @Param("expectedVersion") long expectedVersion, @Param("at") LocalDateTime at);
 
@@ -21,6 +27,31 @@ interface RecoveryVerificationMapper {
             @Param("summary") String summary,
             @Param("payload") String payload,
             @Param("at") LocalDateTime at);
+
+    record PendingInsert(
+            long incidentId,
+            Long actionExecutionId,
+            long managedResourceId,
+            long recoveryPolicyId,
+            int recoveryPolicyVersion,
+            String policySnapshot,
+            int verificationNo,
+            LocalDateTime deadlineAt,
+            LocalDateTime createdAt) {}
+
+    /** MyBatis 回填自增主键的载体。 */
+    final class GeneratedKey {
+
+        private Long id;
+
+        public Long getId() {
+            return id;
+        }
+
+        public void setId(Long id) {
+            this.id = id;
+        }
+    }
 
     record VerificationRow(
             long id,

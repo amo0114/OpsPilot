@@ -64,6 +64,20 @@
         WHERE e.id = #{id}
     </select>
 
+    <resultMap id="contractRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.execution.ActionExecutionMapper$ContractRow">
+        <constructor>
+            <arg column="recovery_policy_id" javaType="_long"/>
+            <arg column="recovery_policy_version" javaType="_int"/>
+            <arg column="policy_snapshot" javaType="String"/>
+        </constructor>
+    </resultMap>
+
+    <select id="selectRecoveryContract" resultMap="contractRow">
+        SELECT recovery_policy_id, recovery_policy_version,
+               CAST(recovery_policy_snapshot AS CHAR) AS policy_snapshot
+        FROM action_execution WHERE id = #{id}
+    </select>
+
     <!-- 唯一的 CHANGE 准入：只有这条条件更新的获胜者可以发出 restart（04 §82） -->
     <update id="markRunning">
         UPDATE action_execution

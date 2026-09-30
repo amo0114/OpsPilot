@@ -33,6 +33,7 @@ import io.github.ismoyuan.opspilot.application.execution.ServiceRuntimeInspector
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicyActivationService;
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicySelector;
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicyValidator;
+import io.github.ismoyuan.opspilot.application.recovery.RecoveryVerificationCreator;
 import io.github.ismoyuan.opspilot.application.remediation.RemediationActions;
 import io.github.ismoyuan.opspilot.application.remediation.RemediationApplicationService;
 import io.github.ismoyuan.opspilot.application.remediation.RemediationDraftContextBuilder;
@@ -89,6 +90,7 @@ import org.testcontainers.mysql.MySQLContainer;
     RecoveryPolicyActivationService.class,
     ActionExecutionService.class,
     ActionExecutionRecoveryService.class,
+    RecoveryVerificationCreator.class,
     CapabilityAccess.class,
     CapabilityProviderResolver.class,
     ClockConfiguration.class
@@ -214,8 +216,15 @@ class ActionExecutionReconciliationIntegrationTest {
         assertThat(result.containerId()).isEqualTo(CONTAINER_ID);
         assertThat(result.attemptNo()).isEqualTo(1);
         assertThat(result.serviceStartedAt()).isAfter(result.executionStartedAt());
+        assertThat(jdbc.queryForObject(
+                        "SELECT CONCAT(status, '/', verification_no) FROM recovery_verification"
+                                + " WHERE action_execution_id = ?",
+                        String.class,
+                        executionId))
+                .as("核对确认成功同样创建 Verification（TASK-080）")
+                .isEqualTo("PENDING/1");
         assertThat(planStatus()).isEqualTo("EXECUTED");
-        assertThat(incident()).isEqualTo("EXECUTING/9");
+        assertThat(incident()).isEqualTo("VERIFYING/10");
         assertThat(events())
                 .containsExactly(
                         "ACTION_EXECUTION_STARTED/-",
@@ -278,7 +287,7 @@ class ActionExecutionReconciliationIntegrationTest {
         assertThat(execution(executionId))
                 .containsEntry("status", "SUCCEEDED")
                 .containsEntry("reconciliation_attempt_count", 3L);
-        assertThat(incident()).isEqualTo("EXECUTING/9");
+        assertThat(incident()).isEqualTo("VERIFYING/10");
         assertThat(events()).last().isEqualTo("ACTION_EXECUTION_SUCCEEDED/-");
         verify(executor, times(1)).restart(any(), anyString(), any());
     }

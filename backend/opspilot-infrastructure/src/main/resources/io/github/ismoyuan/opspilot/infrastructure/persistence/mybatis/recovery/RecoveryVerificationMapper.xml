@@ -22,6 +22,25 @@
         WHERE id = #{id}
     </select>
 
+    <insert id="insertPending" useGeneratedKeys="true" keyProperty="key.id" keyColumn="id">
+        INSERT INTO recovery_verification (incident_id, action_execution_id, managed_resource_id, recovery_policy_id,
+                                           recovery_policy_version, policy_snapshot, verification_no, status,
+                                           deadline_at, created_at, updated_at, lock_version)
+        VALUES (#{v.incidentId}, #{v.actionExecutionId}, #{v.managedResourceId}, #{v.recoveryPolicyId},
+                #{v.recoveryPolicyVersion}, #{v.policySnapshot}, #{v.verificationNo}, 'PENDING', #{v.deadlineAt},
+                #{v.createdAt}, #{v.createdAt}, 0)
+    </insert>
+
+    <!-- 编号在 Incident 行锁下分配；uk_recovery_verification_incident_no 兜底 -->
+    <select id="selectMaxVerificationNo" resultType="java.lang.Integer">
+        SELECT MAX(verification_no) FROM recovery_verification WHERE incident_id = #{incidentId}
+    </select>
+
+    <select id="countActive" resultType="int">
+        SELECT COUNT(*) FROM recovery_verification
+        WHERE incident_id = #{incidentId} AND status IN ('PENDING', 'RUNNING')
+    </select>
+
     <update id="markRunning">
         UPDATE recovery_verification
         SET status = 'RUNNING', started_at = #{at}, updated_at = #{at}, lock_version = lock_version + 1

@@ -6,6 +6,7 @@ import io.github.ismoyuan.opspilot.application.execution.ServiceRuntimeInspector
 import io.github.ismoyuan.opspilot.application.execution.ServiceRuntimeInspector.NotInspected;
 import io.github.ismoyuan.opspilot.application.execution.ServiceRuntimeInspector.RuntimeInspection;
 import io.github.ismoyuan.opspilot.application.incident.IncidentRepository;
+import io.github.ismoyuan.opspilot.application.recovery.RecoveryVerificationCreator;
 import io.github.ismoyuan.opspilot.application.schema.SchemaCodecRegistry;
 import io.github.ismoyuan.opspilot.application.system.DataSourceConnectionRepository;
 import io.github.ismoyuan.opspilot.application.timeline.TimelineRepository;
@@ -40,7 +41,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  *       ACTION_EXECUTION_RECONCILIATION_ATTEMPTED，提交。
  *   <li>提交后在事务外以执行准入时解析的容器 id inspect，单次超时受信配置且不超过截止时间。
  *   <li>结果短事务：同一容器、RUNNING 且启动时间晚于 execution.started_at → SUCCEEDED（核对结果载荷）、方案 EXECUTED、
- *       ACTION_EXECUTION_SUCCEEDED（Incident 仍 EXECUTING，Verification 属 TASK-080）；否则不猜测成功——没有剩余次数或已到期即按上面
+ *       ACTION_EXECUTION_SUCCEEDED，并与直接成功相同地以冻结恢复合同创建 Verification、Incident → VERIFYING（TASK-080）；否则不猜测成功——没有剩余次数或已到期即按上面
  *       的 UNCERTAIN 收束，还有额度则进入下一次尝试。
  * </ol>
  * 次数、上限与截止时间都在数据库中，重启不刷新：登记后崩溃只消耗该次，只要次数与期限仍允许就继续只读核对。同一 Execution 的单飞由派发器
@@ -58,6 +59,7 @@ public class ActionExecutionRecoveryService {
     private final SchemaCodecRegistry codecs;
     private final ExecutionEvents events;
     private final ExecutionSettings settings;
+    private final ExecutionVerification verification;
     private final TransactionTemplate transaction;
     private final Clock clock;
 
@@ -69,6 +71,7 @@ public class ActionExecutionRecoveryService {
             SchemaCodecRegistry codecs,
             TimelineRepository timeline,
             ExecutionSettings settings,
+            RecoveryVerificationCreator verifications,
             PlatformTransactionManager transactionManager,
             Clock clock) {
         this.executions = executions;
@@ -78,6 +81,7 @@ public class ActionExecutionRecoveryService {
         this.codecs = codecs;
         this.events = new ExecutionEvents(timeline);
         this.settings = settings;
+        this.verification = new ExecutionVerification(executions, incidents, verifications);
         this.transaction = new TransactionTemplate(transactionManager);
         this.clock = clock;
     }
@@ -244,6 +248,7 @@ public class ActionExecutionRecoveryService {
                     ActionExecutionEventPayloadV1.EXECUTION,
                     null,
                     now);
+            verification.start(incident, attempt.id(), now);
             return true;
         }
         log.info(

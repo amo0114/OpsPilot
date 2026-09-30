@@ -1,7 +1,9 @@
 package io.github.ismoyuan.opspilot.infrastructure.investigation;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
@@ -13,6 +15,7 @@ import io.github.ismoyuan.opspilot.application.ClockConfiguration;
 import io.github.ismoyuan.opspilot.application.ai.AiDecisionPort;
 import io.github.ismoyuan.opspilot.application.ai.protocol.v1.RemediationDraftRequest;
 import io.github.ismoyuan.opspilot.application.ai.protocol.v1.RemediationDraftResponse;
+import io.github.ismoyuan.opspilot.application.ai.protocol.v1.ServiceInspectArgumentsV1;
 import io.github.ismoyuan.opspilot.application.ai.protocol.v1.ServiceRestartParametersV1;
 import io.github.ismoyuan.opspilot.application.approval.ApprovalApplicationService;
 import io.github.ismoyuan.opspilot.application.approval.ApprovalDecisionCommand;
@@ -27,9 +30,14 @@ import io.github.ismoyuan.opspilot.application.execution.ServiceRestartExecution
 import io.github.ismoyuan.opspilot.application.execution.ServiceRestartExecutor;
 import io.github.ismoyuan.opspilot.application.execution.ServiceRestartResultV1;
 import io.github.ismoyuan.opspilot.application.execution.ServiceRuntimeInspector;
+import io.github.ismoyuan.opspilot.application.recovery.RecoveryCriterionV1;
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicyActivationService;
+import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicyCriteriaV1;
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicySelector;
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicyValidator;
+import io.github.ismoyuan.opspilot.application.recovery.RecoveryPredicateV1;
+import io.github.ismoyuan.opspilot.application.recovery.RecoverySamplingV1;
+import io.github.ismoyuan.opspilot.application.recovery.RecoveryVerificationCreator;
 import io.github.ismoyuan.opspilot.application.remediation.RemediationActions;
 import io.github.ismoyuan.opspilot.application.remediation.RemediationApplicationService;
 import io.github.ismoyuan.opspilot.application.remediation.RemediationDraftContextBuilder;
@@ -78,6 +86,7 @@ import org.testcontainers.mysql.MySQLContainer;
     RecoveryPolicyActivationService.class,
     ActionExecutionService.class,
     ActionExecutionRecoveryService.class,
+    RecoveryVerificationCreator.class,
     CapabilityAccess.class,
     CapabilityProviderResolver.class,
     ClockConfiguration.class
@@ -164,7 +173,7 @@ class ActionExecutionWorkerIntegrationTest {
 
     /**
      * 04 §79、06 §109：准入后发出一次 restart，成功落账为 SUCCEEDED（结果、容器 id、started_at），方案 EXECUTED，
-     * STARTED 与 SUCCEEDED 两个事件；Incident 仍 EXECUTING（Verification 属 TASK-080）。解析与重启都不在事务内。
+     * STARTED 与 SUCCEEDED 两个事件；Incident → VERIFYING（TASK-080）。解析与重启都不在事务内。
      */
     @Test
     void aSuccessfulRestartIsRecordedAsTheOperationSucceeded() {
@@ -182,9 +191,132 @@ class ActionExecutionWorkerIntegrationTest {
                 .containsEntry("has_started", "YES");
         assertThat(context(executionId).containerId()).isEqualTo(CONTAINER_ID);
         assertThat(planStatus()).isEqualTo("EXECUTED");
-        assertThat(incident()).isEqualTo("EXECUTING/9");
+        assertThat(incident()).isEqualTo("VERIFYING/10");
         assertThat(events()).containsExactly("ACTION_EXECUTION_STARTED/-", "ACTION_EXECUTION_SUCCEEDED/-");
         verify(executor, times(1)).restart(any(), anyString(), any());
+    }
+
+    // ---------------------------------------------------------------- TASK-080
+
+    /**
+     * 04 §79、08 TASK-080：成功事务以 Execution 冻结的恢复合同（策略 id/版本、快照原文）创建唯一 PENDING Verification——action_execution_id
+     * 为该 Execution、资源为快照所挂资源、verification_no=1、deadline＝创建时间＋快照 maxDurationSeconds——并 Incident → VERIFYING；
+     * Verification 在提交后才派发，派发时已能读到已提交的行。
+     */
+    @Test
+    void aSuccessCreatesTheVerificationFromTheFrozenContract() {
+        long executionId = approvedExecution();
+        restartAnswers(new ServiceRestartExecutor.Succeeded(
+                new ServiceRestartResultV1("DOCKER", CONTAINER_ID, Instant.now(), Instant.now())));
+        List<String> seenAtDispatch = new ArrayList<>();
+        doAnswer(invocation -> {
+                    // 另一条独立连接：只有已提交的行才可见
+                    try (var other = java.sql.DriverManager.getConnection(
+                                    MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword());
+                            var query =
+                                    other.prepareStatement("SELECT status FROM recovery_verification WHERE id = ?")) {
+                        query.setLong(1, invocation.getArgument(0));
+                        try (var rs = query.executeQuery()) {
+                            seenAtDispatch.add(rs.next() ? rs.getString(1) : "NOT_COMMITTED");
+                        }
+                    }
+                    return null;
+                })
+                .when(dispatcher)
+                .dispatchRecoveryVerification(anyLong());
+
+        worker.runActionExecution(executionId);
+
+        Map<String, Object> verification = verification(executionId);
+        assertThat(verification)
+                .containsEntry("status", "PENDING")
+                .containsEntry("verification_no", 1L)
+                .containsEntry("managed_resource_id", seeded.consumer())
+                .containsEntry("same_policy", 1L)
+                .containsEntry("same_snapshot", 1L)
+                .containsEntry("deadline_seconds", 60L)
+                .containsEntry("started_at", null);
+        assertThat(incident()).isEqualTo("VERIFYING/10");
+        verify(dispatcher).dispatchRecoveryVerification((long) verification.get("id"));
+        assertThat(seenAtDispatch).containsExactly("PENDING");
+    }
+
+    /**
+     * ACC-FINAL-14：批准后策略升级（旧版本退休）不改变本次合同——成功落账不重新选择 ACTIVE 策略，Verification 仍引用批准时冻结的
+     * 版本与快照。
+     */
+    @Test
+    void aPolicyUpgradedAfterApprovalDoesNotChangeTheContract() {
+        long executionId = approvedExecution();
+        recoveryPolicies.activate(new RecoveryPolicyActivationService.ActivateCommand(
+                seeded.consumer(),
+                "consumer-recovery",
+                "统计消费者恢复标准（新）",
+                RecoveryPolicyCriteriaV1.of(
+                        90,
+                        90,
+                        List.of(new RecoveryCriterionV1.ServiceInspect(
+                                "consumer-running",
+                                "消费者持续运行",
+                                "statistics-consumer",
+                                new ServiceInspectArgumentsV1(),
+                                new RecoverySamplingV1(1, 0, null),
+                                new RecoveryPredicateV1.FieldEquals("runtimeState", "RUNNING"),
+                                true)))));
+        assertThat(jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM recovery_policy WHERE status = 'ACTIVE' AND version_no = 2", Long.class))
+                .isEqualTo(1L);
+        restartAnswers(new ServiceRestartExecutor.Succeeded(
+                new ServiceRestartResultV1("DOCKER", CONTAINER_ID, Instant.now(), Instant.now())));
+
+        worker.runActionExecution(executionId);
+
+        assertThat(verification(executionId))
+                .containsEntry("recovery_policy_version", 1L)
+                .containsEntry("same_policy", 1L)
+                .containsEntry("same_snapshot", 1L)
+                .containsEntry("deadline_seconds", 60L);
+        assertThat(incident()).isEqualTo("VERIFYING/10");
+    }
+
+    /**
+     * 同一事务：Verification 无法创建（此处预先占用该 Execution 的唯一 Verification 身份）时成功落账整体回滚——Execution 仍 RUNNING、
+     * 方案 ACTIVE、Incident EXECUTING、没有 SUCCEEDED 事件，也不派发；同一 Execution 永远不会有第二个 Verification。
+     */
+    @Test
+    void theSuccessAndItsVerificationCommitTogetherAndOnlyOnce() {
+        long executionId = approvedExecution();
+        jdbc.update(
+                "UPDATE incident SET status = 'VERIFYING' WHERE id = ?",
+                seeded.investigation().incidentId());
+        jdbc.update(
+                "INSERT INTO recovery_verification (incident_id, action_execution_id, managed_resource_id,"
+                        + " recovery_policy_id, recovery_policy_version, policy_snapshot, verification_no, status,"
+                        + " deadline_at, created_at, updated_at) SELECT p.incident_id, e.id, ?, e.recovery_policy_id,"
+                        + " e.recovery_policy_version, e.recovery_policy_snapshot, 7, 'PENDING', UTC_TIMESTAMP(3),"
+                        + " UTC_TIMESTAMP(3), UTC_TIMESTAMP(3) FROM action_execution e JOIN remediation_action a"
+                        + " ON a.id = e.remediation_action_id JOIN remediation_plan p ON p.id = a.remediation_plan_id"
+                        + " WHERE e.id = ?",
+                seeded.consumer(),
+                executionId);
+        jdbc.update(
+                "UPDATE incident SET status = 'EXECUTING' WHERE id = ?",
+                seeded.investigation().incidentId());
+        restartAnswers(new ServiceRestartExecutor.Succeeded(
+                new ServiceRestartResultV1("DOCKER", CONTAINER_ID, Instant.now(), Instant.now())));
+
+        assertThatThrownBy(() -> worker.runActionExecution(executionId)).isInstanceOf(RuntimeException.class);
+
+        assertThat(execution(executionId)).containsEntry("status", "RUNNING");
+        assertThat(planStatus()).isEqualTo("ACTIVE");
+        assertThat(incident()).isEqualTo("EXECUTING/9");
+        assertThat(events()).containsExactly("ACTION_EXECUTION_STARTED/-");
+        assertThat(jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM recovery_verification WHERE action_execution_id = ?",
+                        Long.class,
+                        executionId))
+                .isEqualTo(1L);
+        verify(dispatcher, never()).dispatchRecoveryVerification(anyLong());
     }
 
     /** 04 §79：明确失败 FAILED（错误码与固定文案）、方案 EXECUTED、Incident 回到 DIAGNOSED。 */
@@ -224,7 +356,7 @@ class ActionExecutionWorkerIntegrationTest {
 
         assertThat(execution(executionId)).containsEntry("status", "SUCCEEDED").containsEntry("error_code", null);
         assertThat(planStatus()).isEqualTo("EXECUTED");
-        assertThat(incident()).isEqualTo("EXECUTING/9");
+        assertThat(incident()).isEqualTo("VERIFYING/10");
         assertThat(events())
                 .containsExactly(
                         "ACTION_EXECUTION_STARTED/-",
@@ -410,6 +542,21 @@ class ActionExecutionWorkerIntegrationTest {
                 "SELECT status, result_schema_name, error_code, IF(started_at IS NULL, 'NO', 'YES') AS has_started"
                         + " FROM action_execution WHERE id = ?",
                 executionId);
+    }
+
+    /** 该 Execution 的 Verification 与其冻结合同是否与 Execution 一致。 */
+    private Map<String, Object> verification(long executionId) {
+        Map<String, Object> row = new java.util.HashMap<>(jdbc.queryForMap(
+                "SELECT v.id, v.status, v.verification_no, v.managed_resource_id, v.recovery_policy_version, v.started_at,"
+                        + " (v.recovery_policy_id = e.recovery_policy_id AND v.recovery_policy_version"
+                        + " = e.recovery_policy_version) AS same_policy,"
+                        + " (v.policy_snapshot = e.recovery_policy_snapshot) AS same_snapshot,"
+                        + " TIMESTAMPDIFF(SECOND, v.created_at, v.deadline_at) AS deadline_seconds"
+                        + " FROM recovery_verification v JOIN action_execution e ON e.id = v.action_execution_id"
+                        + " WHERE v.action_execution_id = ?",
+                executionId));
+        row.replaceAll((key, value) -> value instanceof Number number ? number.longValue() : value);
+        return row;
     }
 
     private ServiceRestartExecutionContextV1 context(long executionId) {

@@ -18,6 +18,8 @@ interface ActionExecutionMapper {
 
     RecordRow selectRecord(@Param("id") long id);
 
+    ContractRow selectRecoveryContract(@Param("id") long id);
+
     int markRunning(
             @Param("id") long id,
             @Param("expectedVersion") long expectedVersion,
@@ -64,6 +66,8 @@ interface ActionExecutionMapper {
             LocalDateTime reconciliationDeadlineAt) {}
 
     record ExecutionRow(long id, String status) {}
+
+    record ContractRow(long recoveryPolicyId, int recoveryPolicyVersion, String policySnapshot) {}
 
     record PendingInsert(
             long remediationActionId,

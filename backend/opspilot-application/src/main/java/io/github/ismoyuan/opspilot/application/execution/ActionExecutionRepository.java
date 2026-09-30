@@ -53,6 +53,9 @@ public interface ActionExecutionRepository {
             String errorMessage,
             Instant finishedAt);
 
+    /** 创建时冻结的恢复合同（04 §45、§52）；执行成功后据此创建 Verification，不重新选择 ACTIVE 策略。 */
+    RecoveryContract findRecoveryContract(long executionId);
+
     /** 方案 ACTIVE → EXECUTED：已发生执行尝试，不表示成功或已恢复（04 §38）。 */
     void markPlanExecuted(long planId, Instant at);
 
@@ -77,6 +80,9 @@ public interface ActionExecutionRepository {
             int maxReconciliationAttempts,
             Instant lastReconciliationAt,
             Instant reconciliationDeadlineAt) {}
+
+    /** @param policySnapshot recovery.policy.snapshot / 1 的 JSON */
+    record RecoveryContract(long recoveryPolicyId, int recoveryPolicyVersion, String policySnapshot) {}
 
     /** 一次 Execution 的身份与当前状态。 */
     record ExecutionRef(long executionId, ActionExecutionStatus status) {}

@@ -34,6 +34,35 @@ class MyBatisRecoveryVerifications implements RecoveryVerificationRepository {
     }
 
     @Override
+    public long insertPending(NewRecoveryVerification verification) {
+        RecoveryVerificationMapper.GeneratedKey key = new RecoveryVerificationMapper.GeneratedKey();
+        mapper.insertPending(
+                key,
+                new RecoveryVerificationMapper.PendingInsert(
+                        verification.incidentId(),
+                        verification.actionExecutionId(),
+                        verification.managedResourceId(),
+                        verification.recoveryPolicyId(),
+                        verification.recoveryPolicyVersion(),
+                        verification.policySnapshot(),
+                        verification.verificationNo(),
+                        utc(verification.deadlineAt()),
+                        utc(verification.createdAt())));
+        return key.getId();
+    }
+
+    @Override
+    public int nextVerificationNo(long incidentId) {
+        Integer max = mapper.selectMaxVerificationNo(incidentId);
+        return max == null ? 1 : max + 1;
+    }
+
+    @Override
+    public boolean existsActive(long incidentId) {
+        return mapper.countActive(incidentId) > 0;
+    }
+
+    @Override
     public boolean markRunning(long verificationId, long expectedVersion, Instant startedAt) {
         return mapper.markRunning(verificationId, expectedVersion, utc(startedAt)) == 1;
     }

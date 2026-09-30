@@ -32,6 +32,7 @@ import io.github.ismoyuan.opspilot.application.execution.ServiceRuntimeInspector
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicyActivationService;
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicySelector;
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicyValidator;
+import io.github.ismoyuan.opspilot.application.recovery.RecoveryVerificationCreator;
 import io.github.ismoyuan.opspilot.application.remediation.RemediationActions;
 import io.github.ismoyuan.opspilot.application.remediation.RemediationApplicationService;
 import io.github.ismoyuan.opspilot.application.remediation.RemediationDraftContextBuilder;
@@ -86,6 +87,7 @@ import org.testcontainers.mysql.MySQLContainer;
     RecoveryPolicyActivationService.class,
     ActionExecutionService.class,
     ActionExecutionRecoveryService.class,
+    RecoveryVerificationCreator.class,
     CapabilityAccess.class,
     CapabilityProviderResolver.class,
     ClockConfiguration.class
