@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-30（B20 REVIEW：B20-V1 exit 0，B20-R1 PASS，待用户提交，Base 1175caa）
+> 最近更新：2026-09-30（B20 DONE，commit a25d1b9；B21 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -69,9 +69,9 @@
 | TASK-059 | B19 | COMPLETE_INVESTIGATION 全链路 | DONE | commit 789f9f8（B19，Base b2e8f3d） | B19-V1 verify exit 0＋InvestigationOrchestrationIntegrationTest 32/32（本批新增 4 项）；B19-R1 PASS；见 PROGRESS「B19」 |
 | TASK-060 | B19 | Diagnosis Version Evolution | DONE | commit 789f9f8（B19，Base b2e8f3d） | B19-V1 verify exit 0＋InvestigationOrchestrationIntegrationTest 32/32（本批新增 4 项）；B19-R1 PASS；见 PROGRESS「B19」 |
 | TASK-061 | B19 | Undetermined Outcomes | DONE | commit 789f9f8（B19，Base b2e8f3d） | B19-V1 verify exit 0＋InvestigationOrchestrationIntegrationTest 32/32（本批新增 4 项）；B19-R1 PASS；见 PROGRESS「B19」 |
-| TASK-062 | B20 | Remediation 数据结构 | REVIEW | 未提交（B20 工作树） | B20-V1 verify exit 0＋RemediationSchemaTest 16/16、Plan 失效/取消/继续调查核对集成测试；B20-R1 PASS，待提交 |
-| TASK-063 | B20 | Remediation Draft Context | REVIEW | 未提交（B20 工作树） | B20-V1 verify exit 0＋RemediationDraftIntegrationTest 5/5、ai-runtime 178 passed；真实模型 remediation-v1 2 次通过；B20-R1 PASS，待提交 |
-| TASK-064 | B20 | Remediation Proposal 校验 | REVIEW | 未提交（B20 工作树） | B20-V1 verify exit 0＋RemediationDraftIntegrationTest（校验与 Java 策略）；真实模型建议经 Java 校验得 MEDIUM/true；B20-R1 PASS，待提交 |
+| TASK-062 | B20 | Remediation 数据结构 | DONE | commit a25d1b9（B20，Base 1175caa） | B20-V1 verify exit 0＋RemediationSchemaTest 16/16、Plan 失效/取消/继续调查核对集成测试；B20-R1 PASS，待提交 |
+| TASK-063 | B20 | Remediation Draft Context | DONE | commit a25d1b9（B20，Base 1175caa） | B20-V1 verify exit 0＋RemediationDraftIntegrationTest 5/5、ai-runtime 178 passed；真实模型 remediation-v1 2 次通过；B20-R1 PASS，待提交 |
+| TASK-064 | B20 | Remediation Proposal 校验 | DONE | commit a25d1b9（B20，Base 1175caa） | B20-V1 verify exit 0＋RemediationDraftIntegrationTest（校验与 Java 策略）；真实模型建议经 Java 校验得 MEDIUM/true；B20-R1 PASS，待提交 |
 | TASK-065 | B21 | request-remediation | TODO | — | NOT RUN |
 | TASK-066 | B21 | Approval API | TODO | — | NOT RUN |
 | TASK-067 | B24 | Approval 并发与历史方案保护 | TODO | — | NOT RUN |
@@ -751,7 +751,7 @@
 
 ### B20 — 修复计划表、上下文与 Proposal 校验
 
-- 状态：REVIEW（B20-R1 PASS，待用户提交；未提交、未推送）
+- 状态：DONE（B20-R1 PASS，已提交 a25d1b9）
 - 成员及顺序：TASK-062 → TASK-063 → TASK-064；批外前置：TASK-061 DONE（789f9f8，B19-R1 PASS）
 - Base SHA：1175caafb3144574bfeaba229664979d1e556b47
 - 用户决定（2026-09-30，TASK-063 设计前）：allowedActions 只含与本次诊断相关的资源——当前 Diagnosis 冻结 Evidence 所依据观测的资源与 Incident 登记的受影响资源，并通过与调查相同的归属/ACTIVE/类型/绑定/唯一 Provider 判定；没有可用动作时 request-remediation 以 422 DIAGNOSIS_NOT_ACTIONABLE（reason=NO_APPLICABLE_ACTION）拒绝且不调用 AI。背景：协议 v1 没有“无合适动作”的回答，若提供系统内全部可重启资源，S1/S2 会被迫提出重启无关 Consumer（05 §30 禁止）
@@ -778,6 +778,7 @@
   - 本次仅更新 CURRENT/PROGRESS 的 Review 与交接信息，纠正 CURRENT 中 B19 待提交、TASK-063 未完成的过期条目；未改实现。Migration 为本批 V004，无新依赖；未提交、未推送。
 
 - 修改文件：backend——V004__create_remediation_tables.sql（新）；domain/error/ErrorCode（DIAGNOSIS_NOT_ACTIONABLE）；application/approval/{PendingApprovalQuery（新）,PendingApprovalCanceller（注释）}、application/remediation/{AllowedRemediationAction,RemediationActions,RemediationContextQuery,RemediationDraftContext,RemediationDraftContextBuilder,RemediationProposalValidator,ValidatedRemediationProposal}（新）、RemediationPlanSuperseder（注释）、application/capability/CapabilityAccess（evaluateChange）、application/investigation/InvestigationApplicationService（真实 PENDING 核对）；infrastructure/persistence/mybatis/remediation/{RemediationMapper,MyBatisRemediationRecords,RemediationQueryMapper,MyBatisRemediationContextQuery}（新）及两个 XML；删除 infrastructure/{approval/UnavailablePendingApprovalCanceller,remediation/NoRemediationPlanSuperseder}；测试 persistence/RemediationSchemaTest、investigation/{RemediationDraftIntegrationTest,RemediationFixture}（新），修改 investigation/{InvestigationFixture,InvestigationRunIntegrationTest,DiagnosisIntegrationTest,RealLlmClosureRun}。ai-runtime——llm/prompts（remediation-v1）、llm/openai_compatible（注释）、tests/test_openai_compatible_client.py。docs/dev。Migration：V004；无新依赖
+- 提交：代码提交 a25d1b9f9bfb999ca5ee0950254638d2b49b0796（feat(remediation): plan tables, draft context and proposal validation (TASK-062–064)）；SHA 回填为后续 docs 提交；未推送
 
 ### TASK-039 修复 — 准入 step_no 分配并发死锁（B12-R1/R2 约定）
 
