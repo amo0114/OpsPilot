@@ -1,5 +1,6 @@
 package io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.system;
 
+import io.github.ismoyuan.opspilot.application.system.query.ActiveRecoveryPolicyProjection;
 import io.github.ismoyuan.opspilot.application.system.query.ResourceSummaryView;
 import io.github.ismoyuan.opspilot.application.system.query.SystemSummaryView;
 import java.util.List;
@@ -21,4 +22,7 @@ interface SystemQueryMapper {
             @Param("systemKey") String systemKey, @Param("resourceKey") String resourceKey);
 
     List<String> selectEnabledCapabilityKeys(@Param("managedResourceId") long managedResourceId);
+
+    List<ActiveRecoveryPolicyProjection> selectActiveRecoveryPolicies(
+            @Param("managedResourceId") long managedResourceId);
 }

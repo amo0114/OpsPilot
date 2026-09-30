@@ -2,11 +2,15 @@ package io.github.ismoyuan.opspilot.application.system.query;
 
 import io.github.ismoyuan.opspilot.application.error.ApplicationException;
 import io.github.ismoyuan.opspilot.application.query.PageResult;
+import io.github.ismoyuan.opspilot.application.recovery.RecoveryCriterionV1;
+import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicyCriteriaV1;
+import io.github.ismoyuan.opspilot.application.schema.SchemaCodecRegistry;
 import io.github.ismoyuan.opspilot.domain.capability.CapabilityKey;
 import io.github.ismoyuan.opspilot.domain.error.ErrorCode;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,9 +19,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class SystemQueryService {
 
     private final SystemQueryRepository repository;
+    private final SchemaCodecRegistry codecs;
 
-    public SystemQueryService(SystemQueryRepository repository) {
+    public SystemQueryService(SystemQueryRepository repository, SchemaCodecRegistry codecs) {
         this.repository = repository;
+        this.codecs = codecs;
     }
 
     /** 分页参数已由 web 边界校验。 */
@@ -57,7 +63,26 @@ public class SystemQueryService {
                 resource.resourceType(),
                 resource.status(),
                 capabilities,
-                null);
+                recoveryPolicy(found.get().activeRecoveryPolicies()));
+    }
+
+    /**
+     * 恢复标准摘要（05 §17）：唯一 ACTIVE 策略的名称、版本与按执行顺序排列的各项检查名称；没有或出现多条 ACTIVE 时不展示，
+     * 不猜测选择（04 §49）。
+     */
+    private RecoveryPolicySummaryView recoveryPolicy(List<ActiveRecoveryPolicyProjection> active) {
+        if (active.size() != 1) {
+            return null;
+        }
+        ActiveRecoveryPolicyProjection policy = active.getFirst();
+        RecoveryPolicyCriteriaV1 criteria = codecs.decode(
+                policy.criteriaSchemaName(),
+                policy.criteriaSchemaVersion(),
+                policy.criteriaPayload(),
+                RecoveryPolicyCriteriaV1.class);
+        String summary =
+                criteria.criteria().stream().map(RecoveryCriterionV1::name).collect(Collectors.joining("；"));
+        return new RecoveryPolicySummaryView(policy.name(), policy.versionNo(), summary);
     }
 
     private static ApplicationException systemNotFound(String systemKey) {

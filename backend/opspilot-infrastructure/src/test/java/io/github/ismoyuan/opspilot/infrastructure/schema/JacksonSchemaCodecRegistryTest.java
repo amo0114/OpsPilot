@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
+import io.github.ismoyuan.opspilot.application.capability.result.ServiceInspectResultV1;
 import io.github.ismoyuan.opspilot.application.schema.SchemaPayloadException;
 import io.github.ismoyuan.opspilot.application.schema.SchemaPayloadException.Reason;
 import io.github.ismoyuan.opspilot.domain.error.ErrorCode;
@@ -229,5 +230,31 @@ class JacksonSchemaCodecRegistryTest {
                     assertThat(ex.schemaName()).isEqualTo(schemaName);
                     assertThat(ex.schemaVersion()).isEqualTo(schemaVersion);
                 });
+    }
+
+    /** 同一严格 Mapper 下，任何注册 Schema 的整数字段都不接受小数（B23-R1）。 */
+    @ParameterizedTest
+    @CsvSource(
+            delimiter = '|',
+            value = {"1.5 | null", "1.0 | null", "1 | 137.0"})
+    void integerFieldsRejectDecimals(String restartCount, String exitCode) {
+        assertThatThrownBy(() -> registry.decode(
+                        ServiceInspectResultV1.SCHEMA_NAME,
+                        1,
+                        serviceResult(restartCount, exitCode),
+                        ServiceInspectResultV1.class))
+                .isInstanceOfSatisfying(
+                        SchemaPayloadException.class,
+                        ex -> assertThat(ex.reason()).isEqualTo(Reason.INVALID_PAYLOAD));
+        ServiceInspectResultV1 exact = registry.decode(
+                ServiceInspectResultV1.SCHEMA_NAME, 1, serviceResult("1", "137"), ServiceInspectResultV1.class);
+        assertThat(exact.restartCount()).isEqualTo(1);
+        assertThat(exact.exitCode()).isEqualTo(137);
+    }
+
+    private static String serviceResult(String restartCount, String exitCode) {
+        return "{\"runtimeState\": \"STOPPED\", \"healthStatus\": \"UNKNOWN\", \"startedAt\": null,"
+                + " \"restartCount\": " + restartCount + ", \"image\": null, \"exitCode\": " + exitCode
+                + ", \"finishedAt\": null}";
     }
 }

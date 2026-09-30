@@ -1,4 +1,4 @@
--- ShortLink Demo 系统接入配置（06 §131、08 TASK-010）。只含配置数据，不含 Fault、Incident 或 RecoveryPolicy。
+-- ShortLink Demo 系统接入配置（06 §131、08 TASK-010）与 S3 恢复策略（08 TASK-076）。只含配置数据，不含 Fault 或 Incident。
 -- 仅 demo profile 加载（07 §93）：db/demo 不在默认 Flyway locations 中。
 -- 可重复迁移：每次内容变化后在全部版本化迁移之后重跑；按唯一键 upsert，重跑收敛到本文件内容。
 -- 不使用已弃用的 VALUES()（且需兼容 8.0.16），ON DUPLICATE KEY UPDATE 引用 SELECT 派生表列。
@@ -118,3 +118,17 @@ FROM (SELECT 'redirect-service' AS resource_key, 'metrics.query' AS capability_k
 JOIN managed_system s ON s.system_key = 'shortlink-platform'
 JOIN managed_resource r ON r.managed_system_id = s.id AND r.resource_key = src.resource_key
 ON DUPLICATE KEY UPDATE enabled = TRUE, updated_at = UTC_TIMESTAMP(3);
+
+-- S3 恢复合同（09 §75、06 §113，08 TASK-076）：挂在 statistics-consumer，执行顺序 B -> C -> D -> A，四项均 required。
+-- 与 Java 激活校验一致的条件由 ShortLinkDemoSeedTest 用正式 Codec 与 RecoveryPolicyValidator 复核。
+-- 策略版本不可改写（01 §28）：只在该资源还没有任何策略时插入 v1 ACTIVE，重跑不修改已有版本，也不会产生第二个 ACTIVE；
+-- 阈值等校准须经激活服务生成新版本并记录依据，不改本行后期望覆盖。pendingCount 阈值 20 为 Demo 可配置默认值（09 §75）。
+INSERT INTO recovery_policy (managed_resource_id, policy_key, name, version_no, criteria_schema_name,
+                             criteria_schema_version, criteria_payload, status, created_at, activated_at)
+SELECT r.id, 'statistics-consumer-recovery', '统计消费者恢复标准', 1, 'recovery.policy.criteria', 1,
+       CAST('{"schemaName":"recovery.policy.criteria","schemaVersion":1,"maxDurationSeconds":120,"maxSampleAgeSeconds":120,"criteria":[{"criterionKey":"stream-lag-decreasing","name":"未投递积压进入并保持健康区间","capabilityKey":"queue.inspect","targetResourceKey":"statistics-stream","arguments":{},"sampling":{"sampleCount":4,"intervalSeconds":10,"maxGapSeconds":20},"predicate":{"type":"MONOTONIC_TREND","field":"lag","direction":"DECREASING","healthyThreshold":20,"requireFinalHealthy":true},"required":true},{"criterionKey":"stream-lag-drained","name":"末次未投递积压达标","capabilityKey":"queue.inspect","targetResourceKey":"statistics-stream","arguments":{},"sampling":{"sampleCount":1,"intervalSeconds":0,"maxGapSeconds":null},"predicate":{"type":"NUMERIC_COMPARE","field":"lag","operator":"LTE","value":20},"required":true},{"criterionKey":"stream-pending-healthy","name":"已投递未确认积压保持健康","capabilityKey":"queue.inspect","targetResourceKey":"statistics-stream","arguments":{},"sampling":{"sampleCount":2,"intervalSeconds":5,"maxGapSeconds":10},"predicate":{"type":"NUMERIC_COMPARE","field":"pendingCount","operator":"LTE","value":20},"required":true},{"criterionKey":"consumer-running","name":"消费者持续运行","capabilityKey":"service.inspect","targetResourceKey":"statistics-consumer","arguments":{},"sampling":{"sampleCount":2,"intervalSeconds":5,"maxGapSeconds":10},"predicate":{"type":"FIELD_EQUALS","field":"runtimeState","value":"RUNNING"},"required":true}]}' AS JSON),
+       'ACTIVE', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3)
+FROM managed_resource r
+JOIN managed_system s ON s.id = r.managed_system_id AND s.system_key = 'shortlink-platform'
+WHERE r.resource_key = 'statistics-consumer'
+  AND NOT EXISTS (SELECT 1 FROM recovery_policy p WHERE p.managed_resource_id = r.id);

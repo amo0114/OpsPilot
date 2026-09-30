@@ -47,7 +47,9 @@ class MyBatisSystemQueryRepository implements SystemQueryRepository {
     @Override
     public Optional<ResourceCapabilityProjection> findResource(String systemKey, String resourceKey) {
         return Optional.ofNullable(mapper.selectResourceByKeys(systemKey, resourceKey))
-                .map(row ->
-                        new ResourceCapabilityProjection(row.toView(), mapper.selectEnabledCapabilityKeys(row.id())));
+                .map(row -> new ResourceCapabilityProjection(
+                        row.toView(),
+                        mapper.selectEnabledCapabilityKeys(row.id()),
+                        mapper.selectActiveRecoveryPolicies(row.id())));
     }
 }

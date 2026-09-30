@@ -106,6 +106,38 @@ class MyBatisSystemQueryRepositoryTest {
         assertThat(queries.findSystemDetail("missing-platform")).isEmpty();
     }
 
+    /** 只返回 ACTIVE 策略的原始 Criteria，退休版本不出现（04 §48～§49）。 */
+    @Test
+    void resourceProjectionCarriesOnlyTheActiveRecoveryPolicy() {
+        insertPolicy(1, "RETIRED");
+        insertPolicy(2, "ACTIVE");
+
+        assertThat(queries.findResource("shortlink-platform", "statistics-consumer")
+                        .orElseThrow()
+                        .activeRecoveryPolicies())
+                .singleElement()
+                .satisfies(policy -> {
+                    assertThat(policy.name()).isEqualTo("统计消费者恢复标准");
+                    assertThat(policy.versionNo()).isEqualTo(2);
+                    assertThat(policy.criteriaSchemaName()).isEqualTo("recovery.policy.criteria");
+                    assertThat(policy.criteriaSchemaVersion()).isEqualTo(1);
+                    assertThat(policy.criteriaPayload()).contains("\"criteria\"");
+                });
+    }
+
+    private void insertPolicy(int version, String status) {
+        jdbc.update(
+                "INSERT INTO recovery_policy (managed_resource_id, policy_key, name, version_no, criteria_schema_name,"
+                        + " criteria_schema_version, criteria_payload, status, created_at, activated_at, retired_at)"
+                        + " VALUES (?, 'statistics-consumer-recovery', '统计消费者恢复标准', ?, 'recovery.policy.criteria',"
+                        + " 1, '{\"schemaName\": \"recovery.policy.criteria\", \"schemaVersion\": 1,"
+                        + " \"criteria\": [{}]}', ?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3), ?)",
+                consumer,
+                version,
+                status,
+                status.equals("ACTIVE") ? null : java.sql.Timestamp.valueOf("2099-01-01 00:00:00"));
+    }
+
     @Test
     void resourceProjectionIsScopedToSystemAndKeepsOnlyEnabledCapabilities() {
         ResourceCapabilityProjection found = queries.findResource("shortlink-platform", "statistics-consumer")
@@ -115,6 +147,7 @@ class MyBatisSystemQueryRepositoryTest {
                 .isEqualTo(new ResourceSummaryView(
                         "statistics-consumer", "Statistics Consumer", ResourceType.CONSUMER, ResourceStatus.ACTIVE));
         assertThat(found.enabledCapabilityKeys()).containsExactly("service.inspect", "service.restart");
+        assertThat(found.activeRecoveryPolicies()).isEmpty();
         assertThat(queries.findResource("billing-platform", "statistics-consumer")
                         .orElseThrow()
                         .resource()

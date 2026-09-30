@@ -86,4 +86,22 @@
           AND enabled = TRUE
         ORDER BY capability_key
     </select>
+
+    <resultMap id="activeRecoveryPolicy" type="io.github.ismoyuan.opspilot.application.system.query.ActiveRecoveryPolicyProjection">
+        <constructor>
+            <arg column="name" javaType="String"/>
+            <arg column="version_no" javaType="_int"/>
+            <arg column="criteria_schema_name" javaType="String"/>
+            <arg column="criteria_schema_version" javaType="_int"/>
+            <arg column="criteria_payload" javaType="String"/>
+        </constructor>
+    </resultMap>
+
+    <select id="selectActiveRecoveryPolicies" resultMap="activeRecoveryPolicy">
+        SELECT name, version_no, criteria_schema_name, criteria_schema_version, criteria_payload
+        FROM recovery_policy
+        WHERE managed_resource_id = #{managedResourceId}
+          AND status = 'ACTIVE'
+        ORDER BY id
+    </select>
 </mapper>

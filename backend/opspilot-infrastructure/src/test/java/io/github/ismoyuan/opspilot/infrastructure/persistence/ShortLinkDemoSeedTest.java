@@ -2,7 +2,17 @@ package io.github.ismoyuan.opspilot.infrastructure.persistence;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.entry;
+import static org.assertj.core.api.Assertions.tuple;
 
+import io.github.ismoyuan.opspilot.application.capability.CapabilityAccess;
+import io.github.ismoyuan.opspilot.application.capability.CapabilityProviderResolver;
+import io.github.ismoyuan.opspilot.application.recovery.RecoveryCriterionV1;
+import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicyCriteriaV1;
+import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicyRecord;
+import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicyRepository;
+import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicyValidator;
+import io.github.ismoyuan.opspilot.application.recovery.RecoveryPredicateV1;
+import io.github.ismoyuan.opspilot.application.recovery.RecoverySamplingV1;
 import io.github.ismoyuan.opspilot.application.schema.SchemaCodecRegistry;
 import io.github.ismoyuan.opspilot.application.system.CapabilityBindingRepository;
 import io.github.ismoyuan.opspilot.application.system.DataSourceConnectionRepository;
@@ -34,6 +44,7 @@ import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.init.ScriptUtils;
@@ -46,6 +57,7 @@ import org.testcontainers.mysql.MySQLContainer;
 /** 以 demo 的 Flyway locations 在真实 MySQL 上应用 Seed，经仓储与 SchemaCodecRegistry 读回，核对 06 §131 配置。 */
 @SpringBootTest(properties = "spring.flyway.locations=classpath:db/migration,classpath:db/demo")
 @Testcontainers
+@Import({RecoveryPolicyValidator.class, CapabilityAccess.class, CapabilityProviderResolver.class})
 class ShortLinkDemoSeedTest {
 
     private static final String SEED = "db/demo/R__shortlink_demo_seed.sql";
@@ -94,6 +106,12 @@ class ShortLinkDemoSeedTest {
 
     @Autowired
     SchemaCodecRegistry codecs;
+
+    @Autowired
+    RecoveryPolicyRepository recoveryPolicies;
+
+    @Autowired
+    RecoveryPolicyValidator recoveryPolicyValidator;
 
     @Autowired
     JdbcTemplate jdbc;
@@ -268,6 +286,87 @@ class ShortLinkDemoSeedTest {
                 .isEqualTo("shortlink-statistics-consumer");
     }
 
+    /**
+     * S3 恢复合同（09 §75）：statistics-consumer 上唯一 ACTIVE 的 v1，按正式 Codec 解码为 B -> C -> D -> A 四项 required，并通过
+     * 与激活相同的 ACTIVE 前校验（08 TASK-076）；其他组件没有策略。
+     */
+    @Test
+    void seedsTheS3RecoveryPolicyAsALegalActiveContract() {
+        ManagedResource consumer = shortLinkResource("statistics-consumer");
+        RecoveryPolicyRecord policy = recoveryPolicies.findActive(consumer.id()).getFirst();
+
+        assertThat(recoveryPolicies.findActive(consumer.id())).hasSize(1);
+        assertThat(policy.policyKey()).isEqualTo("statistics-consumer-recovery");
+        assertThat(policy.name()).isEqualTo("统计消费者恢复标准");
+        assertThat(policy.versionNo()).isEqualTo(1);
+        RecoveryPolicyCriteriaV1 criteria = codecs.decode(
+                policy.criteriaSchemaName(),
+                policy.criteriaSchemaVersion(),
+                policy.criteriaPayload(),
+                RecoveryPolicyCriteriaV1.class);
+        assertThat(criteria.maxDurationSeconds()).isEqualTo(120);
+        assertThat(criteria.maxSampleAgeSeconds()).isEqualTo(120);
+        assertThat(criteria.criteria())
+                .extracting(RecoveryCriterionV1::criterionKey, RecoveryCriterionV1::targetResourceKey)
+                .containsExactly(
+                        tuple("stream-lag-decreasing", "statistics-stream"),
+                        tuple("stream-lag-drained", "statistics-stream"),
+                        tuple("stream-pending-healthy", "statistics-stream"),
+                        tuple("consumer-running", "statistics-consumer"));
+        assertThat(criteria.criteria())
+                .extracting(RecoveryCriterionV1::sampling)
+                .containsExactly(
+                        new RecoverySamplingV1(4, 10, 20),
+                        new RecoverySamplingV1(1, 0, null),
+                        new RecoverySamplingV1(2, 5, 10),
+                        new RecoverySamplingV1(2, 5, 10));
+        assertThat(criteria.criteria().getFirst().predicate())
+                .isEqualTo(new RecoveryPredicateV1.MonotonicTrend(
+                        "lag", RecoveryPredicateV1.TrendDirection.DECREASING, 20.0, true));
+        assertThat(criteria.criteria()).allMatch(RecoveryCriterionV1::required);
+        recoveryPolicyValidator.validate(consumer, criteria);
+
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM recovery_policy", Integer.class))
+                .isEqualTo(1);
+    }
+
+    /** 策略版本不可改写：Seed 重跑不修改已有版本，资源已有新版本时也不再插入第二个 ACTIVE（01 §28、04 §49）。 */
+    @Test
+    void rerunningSeedNeverRewritesOrReactivatesARecoveryPolicy() throws Exception {
+        long consumer = shortLinkResource("statistics-consumer").id();
+        jdbc.update(
+                "UPDATE recovery_policy SET status = 'RETIRED', retired_at = UTC_TIMESTAMP(3)"
+                        + " WHERE managed_resource_id = ?",
+                consumer);
+        jdbc.update(
+                "INSERT INTO recovery_policy (managed_resource_id, policy_key, name, version_no, criteria_schema_name,"
+                        + " criteria_schema_version, criteria_payload, status, created_at, activated_at)"
+                        + " SELECT managed_resource_id, policy_key, name, 2, criteria_schema_name,"
+                        + " criteria_schema_version, criteria_payload, 'ACTIVE', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3)"
+                        + " FROM recovery_policy WHERE managed_resource_id = ? AND version_no = 1",
+                consumer);
+        String before = jdbc.queryForList("SELECT id, version_no, status, retired_at FROM recovery_policy ORDER BY id")
+                .toString();
+
+        try {
+            try (Connection connection = dataSource.getConnection()) {
+                ScriptUtils.executeSqlScript(connection, new ClassPathResource(SEED));
+            }
+
+            assertThat(jdbc.queryForList("SELECT id, version_no, status, retired_at FROM recovery_policy ORDER BY id")
+                            .toString())
+                    .isEqualTo(before);
+            assertThat(recoveryPolicies.findActive(consumer))
+                    .singleElement()
+                    .extracting(RecoveryPolicyRecord::versionNo)
+                    .isEqualTo(2);
+        } finally {
+            // 其他用例共享同一数据库，恢复为 Seed 的初始状态
+            jdbc.update("DELETE FROM recovery_policy WHERE version_no = 2");
+            jdbc.update("UPDATE recovery_policy SET status = 'ACTIVE', retired_at = NULL");
+        }
+    }
+
     @Test
     void flywayRecordsSeedAsRepeatableMigration() {
         assertThat(jdbc.queryForObject(
@@ -275,6 +374,13 @@ class ShortLinkDemoSeedTest {
                                 + " WHERE script = 'R__shortlink_demo_seed.sql' AND version IS NULL AND success = 1",
                         Integer.class))
                 .isEqualTo(1);
+    }
+
+    private ManagedResource shortLinkResource(String resourceKey) {
+        return shortLinkResources().stream()
+                .filter(resource -> resource.resourceKey().equals(resourceKey))
+                .findFirst()
+                .orElseThrow();
     }
 
     private List<ManagedResource> shortLinkResources() {
@@ -289,7 +395,8 @@ class ShortLinkDemoSeedTest {
                 "managed_resource",
                 "data_source_connection",
                 "resource_binding",
-                "capability_binding")) {
+                "capability_binding",
+                "recovery_policy")) {
             counts.put(table, jdbc.queryForObject("SELECT COUNT(*) FROM " + table, Integer.class));
         }
         return counts;

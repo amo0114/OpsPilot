@@ -10,6 +10,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import io.github.ismoyuan.opspilot.application.ai.protocol.v1.ServiceInspectArgumentsV1;
+import io.github.ismoyuan.opspilot.application.recovery.RecoveryCriterionV1;
+import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicyCriteriaV1;
+import io.github.ismoyuan.opspilot.application.recovery.RecoveryPredicateV1;
+import io.github.ismoyuan.opspilot.application.recovery.RecoverySamplingV1;
+import io.github.ismoyuan.opspilot.application.schema.SchemaCodecRegistry;
+import io.github.ismoyuan.opspilot.application.system.query.ActiveRecoveryPolicyProjection;
 import io.github.ismoyuan.opspilot.application.system.query.ResourceCapabilityProjection;
 import io.github.ismoyuan.opspilot.application.system.query.ResourceSummaryView;
 import io.github.ismoyuan.opspilot.application.system.query.SystemDetailView;
@@ -44,6 +51,9 @@ class SystemControllerTest {
 
     @MockitoBean
     SystemQueryRepository repository;
+
+    @MockitoBean
+    SchemaCodecRegistry codecs;
 
     @Test
     void listUsesPageEnvelope() throws Exception {
@@ -125,7 +135,7 @@ class SystemControllerTest {
     void resourceDetailMapsModesAndDropsUnknownCapabilities() throws Exception {
         given(repository.findResource("shortlink-platform", "statistics-consumer"))
                 .willReturn(Optional.of(new ResourceCapabilityProjection(
-                        CONSUMER, List.of("custom.thing", "service.inspect", "service.restart"))));
+                        CONSUMER, List.of("custom.thing", "service.inspect", "service.restart"), List.of())));
 
         mvc.perform(get("/api/v1/systems/shortlink-platform/resources/statistics-consumer"))
                 .andExpect(status().isOk())
@@ -139,6 +149,46 @@ class SystemControllerTest {
                 .andExpect(jsonPath("$.data.capabilities[1].mode").value("CHANGE"))
                 .andExpect(jsonPath("$.data.recoveryPolicy").isEmpty())
                 .andExpect(content().string(not(containsString("custom.thing"))));
+    }
+
+    /** 唯一 ACTIVE 策略按 Schema 解码，摘要为按执行顺序排列的检查名称；多条 ACTIVE 不猜测选择（04 §49）。 */
+    @Test
+    void resourceDetailSummarisesTheSingleActiveRecoveryPolicy() throws Exception {
+        ActiveRecoveryPolicyProjection policy = new ActiveRecoveryPolicyProjection(
+                "统计消费者恢复标准", 2, RecoveryPolicyCriteriaV1.SCHEMA_NAME, 1, "{\"stored\": true}");
+        given(codecs.decode(
+                        RecoveryPolicyCriteriaV1.SCHEMA_NAME, 1, "{\"stored\": true}", RecoveryPolicyCriteriaV1.class))
+                .willReturn(RecoveryPolicyCriteriaV1.of(
+                        120,
+                        120,
+                        List.of(running("consumer-running", "消费者持续运行"), running("consumer-healthy", "消费者健康检查通过"))));
+        given(repository.findResource("shortlink-platform", "statistics-consumer"))
+                .willReturn(Optional.of(new ResourceCapabilityProjection(CONSUMER, List.of(), List.of(policy))));
+
+        mvc.perform(get("/api/v1/systems/shortlink-platform/resources/statistics-consumer"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.recoveryPolicy.name").value("统计消费者恢复标准"))
+                .andExpect(jsonPath("$.data.recoveryPolicy.version").value(2))
+                .andExpect(jsonPath("$.data.recoveryPolicy.summary").value("消费者持续运行；消费者健康检查通过"))
+                .andExpect(content().string(not(containsString("criterionKey"))));
+
+        given(repository.findResource("shortlink-platform", "statistics-consumer"))
+                .willReturn(
+                        Optional.of(new ResourceCapabilityProjection(CONSUMER, List.of(), List.of(policy, policy))));
+        mvc.perform(get("/api/v1/systems/shortlink-platform/resources/statistics-consumer"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.recoveryPolicy").isEmpty());
+    }
+
+    private static RecoveryCriterionV1 running(String key, String name) {
+        return new RecoveryCriterionV1.ServiceInspect(
+                key,
+                name,
+                "statistics-consumer",
+                new ServiceInspectArgumentsV1(),
+                new RecoverySamplingV1(1, 0, null),
+                new RecoveryPredicateV1.FieldEquals("runtimeState", "RUNNING"),
+                true);
     }
 
     @Test

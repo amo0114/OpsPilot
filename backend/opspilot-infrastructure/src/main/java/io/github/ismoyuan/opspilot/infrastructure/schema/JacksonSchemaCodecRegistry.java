@@ -12,6 +12,7 @@ import io.github.ismoyuan.opspilot.application.capability.result.LogsSearchResul
 import io.github.ismoyuan.opspilot.application.capability.result.MetricsQueryResultV1;
 import io.github.ismoyuan.opspilot.application.capability.result.QueueInspectResultV1;
 import io.github.ismoyuan.opspilot.application.capability.result.ServiceInspectResultV1;
+import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicyCriteriaV1;
 import io.github.ismoyuan.opspilot.application.schema.SchemaCodecRegistry;
 import io.github.ismoyuan.opspilot.application.schema.SchemaPayloadException;
 import io.github.ismoyuan.opspilot.application.schema.SchemaPayloadException.Reason;
@@ -121,7 +122,12 @@ class JacksonSchemaCodecRegistry implements SchemaCodecRegistry {
             entry(
                     ServiceStatusObservationV1.SCHEMA_NAME,
                     ServiceStatusObservationV1.SCHEMA_VERSION,
-                    ServiceStatusObservationV1.class));
+                    ServiceStatusObservationV1.class),
+            // 恢复策略 Criteria（06 §113、07 §97）：激活前完整校验，快照按同一类型解释
+            entry(
+                    RecoveryPolicyCriteriaV1.SCHEMA_NAME,
+                    RecoveryPolicyCriteriaV1.SCHEMA_VERSION,
+                    RecoveryPolicyCriteriaV1.class));
 
     private final JsonMapper mapper = JsonMapper.builder()
             .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
@@ -135,6 +141,10 @@ class JacksonSchemaCodecRegistry implements SchemaCodecRegistry {
                     config -> config.setCoercion(CoercionInputShape.Integer, CoercionAction.Fail)
                             .setCoercion(CoercionInputShape.Float, CoercionAction.Fail)
                             .setCoercion(CoercionInputShape.Boolean, CoercionAction.Fail))
+            // 小数不得被截断成整数字段（版本号、计数、秒数）；整数写入小数字段（阈值）仍是精确的，保持允许（B23-R1）
+            .disable(DeserializationFeature.ACCEPT_FLOAT_AS_INT)
+            .withCoercionConfig(
+                    LogicalType.Integer, config -> config.setCoercion(CoercionInputShape.Float, CoercionAction.Fail))
             .build();
 
     @Override

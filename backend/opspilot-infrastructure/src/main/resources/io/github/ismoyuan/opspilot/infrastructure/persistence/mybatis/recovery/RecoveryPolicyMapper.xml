@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.recovery.RecoveryPolicyMapper">
+
+    <resultMap id="policyRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.recovery.RecoveryPolicyMapper$PolicyRow">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="managed_resource_id" javaType="_long"/>
+            <arg column="policy_key" javaType="String"/>
+            <arg column="name" javaType="String"/>
+            <arg column="version_no" javaType="_int"/>
+            <arg column="criteria_schema_name" javaType="String"/>
+            <arg column="criteria_schema_version" javaType="_int"/>
+            <arg column="criteria_payload" javaType="String"/>
+            <arg column="activated_at" javaType="java.time.LocalDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <!-- 稳定存在的父行锁：同一资源的激活在此串行，包括没有旧策略时的首次激活（04 §49） -->
+    <select id="lockResource" resultType="long">
+        SELECT id FROM managed_resource WHERE id = #{resourceId} FOR UPDATE
+    </select>
+
+    <select id="selectActive" resultMap="policyRow">
+        SELECT id, managed_resource_id, policy_key, name, version_no, criteria_schema_name, criteria_schema_version,
+               criteria_payload, activated_at
+        FROM recovery_policy
+        WHERE managed_resource_id = #{resourceId} AND status = 'ACTIVE'
+        ORDER BY id
+    </select>
+
+    <select id="selectMaxVersion" resultType="_int">
+        SELECT COALESCE(MAX(version_no), 0)
+        FROM recovery_policy
+        WHERE managed_resource_id = #{resourceId} AND policy_key = CAST(#{policyKey} AS BINARY)
+    </select>
+
+    <!-- 跨 policy_key 退休：每个资源最多一个 ACTIVE（04 §49）；只改状态与退休时间，不改写内容 -->
+    <update id="retireActive">
+        UPDATE recovery_policy
+        SET status = 'RETIRED', retired_at = #{at}
+        WHERE managed_resource_id = #{resourceId} AND status = 'ACTIVE'
+    </update>
+
+    <insert id="insertActive" useGeneratedKeys="true" keyProperty="key.id" keyColumn="id">
+        INSERT INTO recovery_policy (managed_resource_id, policy_key, name, version_no, criteria_schema_name,
+                                     criteria_schema_version, criteria_payload, status, created_at, activated_at)
+        VALUES (#{policy.managedResourceId}, #{policy.policyKey}, #{policy.name}, #{policy.versionNo},
+                #{policy.criteriaSchemaName}, #{policy.criteriaSchemaVersion}, #{policy.criteriaPayload}, 'ACTIVE',
+                #{policy.at}, #{policy.at})
+    </insert>
+</mapper>
