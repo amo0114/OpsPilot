@@ -24,5 +24,13 @@ public enum TimelineEventType {
      */
     CAPABILITY_REQUEST_REJECTED,
     /** 新 Diagnosis 版本已冻结，Incident 同事务 INVESTIGATING → DIAGNOSED。 */
-    DIAGNOSIS_CREATED
+    DIAGNOSIS_CREATED,
+    /** AI 处理建议经 Java 校验形成 Plan / Action（01 §35）。 */
+    REMEDIATION_PROPOSED,
+    /** 为 Action 创建 PENDING Approval，Incident 同事务 DIAGNOSED → AWAITING_APPROVAL（01 §35、04 §77）。 */
+    APPROVAL_REQUESTED,
+    /** Approval 被拒绝，Incident 回到 DIAGNOSED（01 §24.2）。 */
+    APPROVAL_REJECTED,
+    /** Approval 被撤回（05 §42），Incident 回到 DIAGNOSED；01 §35 最低清单之外的补充类型。 */
+    APPROVAL_CANCELLED
 }

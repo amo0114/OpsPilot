@@ -13,6 +13,10 @@ public enum ErrorCode {
     INCIDENT_STATE_CONFLICT(ErrorCategory.CONFLICT, "当前故障状态不允许执行该操作。"),
     INCIDENT_VERSION_CONFLICT(ErrorCategory.CONFLICT, "故障已被其他操作更新，请刷新后重试。"),
     PENDING_APPROVAL_EXISTS(ErrorCategory.CONFLICT, "存在待审批的处理方案，请先拒绝或撤回审批。"),
+    /** Approval 已被其他操作更新（05 §41～§43 expectedApprovalVersion）。 */
+    APPROVAL_VERSION_CONFLICT(ErrorCategory.CONFLICT, "审批已被其他操作更新，请刷新后重试。"),
+    /** Approval 已有不同的决定，决定不可反转（04 §44、05 §43）。 */
+    APPROVAL_ALREADY_DECIDED(ErrorCategory.CONFLICT, "该审批已经作出决定，不能更改。"),
     RESOURCE_NOT_IN_SYSTEM(ErrorCategory.RULE_VIOLATION, "指定的组件不属于该业务系统。"),
     DIAGNOSIS_NOT_FOUND(ErrorCategory.NOT_FOUND, "诊断版本不存在。"),
     /** Diagnosis 草稿的主假设、引用证据或支持证据不满足 01 §20 / 04 §34。 */
@@ -61,6 +65,12 @@ public enum ErrorCode {
     /** 响应超过配置的大小上限，未读取完。 */
     RESULT_TOO_LARGE(ErrorCategory.DEPENDENCY_INVALID_RESPONSE, "数据源返回的结果过大。"),
     PROVIDER_UNAVAILABLE(ErrorCategory.DEPENDENCY_UNAVAILABLE, "数据源暂不可用。"),
+    /** 方案所基于的 Diagnosis 已不是最新版本或方案已不再 ACTIVE（01 §23、05 §38）。 */
+    REMEDIATION_PLAN_SUPERSEDED(ErrorCategory.CONFLICT, "该处理方案已过期，请重新请求处理建议。"),
+    /** 方案动作在复核时已不可执行：目标资源、能力绑定或 Provider 不再满足（06 §107、05 §30）。 */
+    REMEDIATION_ACTION_NOT_EXECUTABLE(ErrorCategory.RULE_VIOLATION, "该处理动作当前不可执行。"),
+    /** 目标资源没有唯一合法的 ACTIVE RecoveryPolicy，写操作前拒绝准入（01 §24、05 §38）。 */
+    RECOVERY_POLICY_NOT_FOUND(ErrorCategory.RULE_VIOLATION, "目标组件没有可用的恢复验证策略。"),
     /** 调查阶段 AI 请求了不允许的意图（06 §103），如写能力。 */
     AI_INTENT_NOT_ALLOWED(ErrorCategory.RULE_VIOLATION, "当前阶段不允许该操作。"),
     /**

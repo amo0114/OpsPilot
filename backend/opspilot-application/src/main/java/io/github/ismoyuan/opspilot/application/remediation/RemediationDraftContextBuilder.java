@@ -9,10 +9,8 @@ import io.github.ismoyuan.opspilot.domain.error.ErrorCode;
 import io.github.ismoyuan.opspilot.domain.incident.Incident;
 import io.github.ismoyuan.opspilot.domain.incident.IncidentKey;
 import io.github.ismoyuan.opspilot.domain.incident.IncidentStatus;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -74,10 +72,8 @@ public class RemediationDraftContextBuilder {
             throw notActionable(incident, diagnosis, "UNDETERMINED");
         }
         List<RemediationContextQuery.FrozenEvidence> evidence = query.findFrozenEvidence(diagnosis.id());
-        Set<Long> candidates = new LinkedHashSet<>();
-        evidence.forEach(e -> candidates.add(e.resourceId()));
-        candidates.addAll(query.findAffectedResourceIds(incident.id()));
-        List<AllowedRemediationAction> allowed = actions.allowedActions(incident.managedSystemId(), candidates);
+        List<AllowedRemediationAction> allowed =
+                actions.allowedActionsForDiagnosis(incident.managedSystemId(), incident.id(), evidence);
         if (allowed.isEmpty()) {
             throw notActionable(incident, diagnosis, "NO_APPLICABLE_ACTION");
         }

@@ -7,7 +7,9 @@ import io.github.ismoyuan.opspilot.domain.capability.CapabilityMode;
 import io.github.ismoyuan.opspilot.domain.capability.CapabilityRegistry;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.TreeSet;
 import org.springframework.stereotype.Service;
 
@@ -23,12 +25,26 @@ public class RemediationActions {
     private final CapabilityRegistry registry;
     private final CapabilityAccess access;
     private final ManagedResourceRepository resources;
+    private final RemediationContextQuery query;
 
     public RemediationActions(
-            CapabilityRegistry registry, CapabilityAccess access, ManagedResourceRepository resources) {
+            CapabilityRegistry registry,
+            CapabilityAccess access,
+            ManagedResourceRepository resources,
+            RemediationContextQuery query) {
         this.registry = registry;
         this.access = access;
         this.resources = resources;
+        this.query = query;
+    }
+
+    /** 与该 Diagnosis 相关的候选资源（冻结 Evidence 所依据的资源 ∪ Incident 受影响资源）上的可用写动作。 */
+    public List<AllowedRemediationAction> allowedActionsForDiagnosis(
+            long managedSystemId, long incidentId, List<RemediationContextQuery.FrozenEvidence> frozenEvidence) {
+        Set<Long> candidates = new LinkedHashSet<>();
+        frozenEvidence.forEach(e -> candidates.add(e.resourceId()));
+        candidates.addAll(query.findAffectedResourceIds(incidentId));
+        return allowedActions(managedSystemId, candidates);
     }
 
     /** @return 按资源 id、能力键稳定排序；没有可用动作时为空 */

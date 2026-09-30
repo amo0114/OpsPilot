@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-30（B20 DONE，commit a25d1b9；B21 未开始）
+> 最近更新：2026-09-30（B21 REVIEW：B21-R1 PASS，待提交，Base 0edfb87）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -72,8 +72,8 @@
 | TASK-062 | B20 | Remediation 数据结构 | DONE | commit a25d1b9（B20，Base 1175caa） | B20-V1 verify exit 0＋RemediationSchemaTest 16/16、Plan 失效/取消/继续调查核对集成测试；B20-R1 PASS，待提交 |
 | TASK-063 | B20 | Remediation Draft Context | DONE | commit a25d1b9（B20，Base 1175caa） | B20-V1 verify exit 0＋RemediationDraftIntegrationTest 5/5、ai-runtime 178 passed；真实模型 remediation-v1 2 次通过；B20-R1 PASS，待提交 |
 | TASK-064 | B20 | Remediation Proposal 校验 | DONE | commit a25d1b9（B20，Base 1175caa） | B20-V1 verify exit 0＋RemediationDraftIntegrationTest（校验与 Java 策略）；真实模型建议经 Java 校验得 MEDIUM/true；B20-R1 PASS，待提交 |
-| TASK-065 | B21 | request-remediation | TODO | — | NOT RUN |
-| TASK-066 | B21 | Approval API | TODO | — | NOT RUN |
+| TASK-065 | B21 | request-remediation | REVIEW | 未提交（B21 工作树） | B21-V1 verify exit 0＋RemediationApprovalIntegrationTest（创建与回滚）、RemediationControllerTest；B21-R1 PASS，待提交 |
+| TASK-066 | B21 | Approval API | REVIEW | 未提交（B21 工作树） | B21-V1 verify exit 0＋RemediationApprovalIntegrationTest（查询/拒绝/撤回/批准复核/并发）、RemediationControllerTest；批准成功路径属 TASK-069；B21-R1 PASS，待提交 |
 | TASK-067 | B24 | Approval 并发与历史方案保护 | TODO | — | NOT RUN |
 | TASK-068 | B22 | ActionExecution 数据结构 | TODO | — | NOT RUN |
 | TASK-069 | B25 | Approve → Execution | TODO | — | NOT RUN |
@@ -780,6 +780,29 @@
 - 修改文件：backend——V004__create_remediation_tables.sql（新）；domain/error/ErrorCode（DIAGNOSIS_NOT_ACTIONABLE）；application/approval/{PendingApprovalQuery（新）,PendingApprovalCanceller（注释）}、application/remediation/{AllowedRemediationAction,RemediationActions,RemediationContextQuery,RemediationDraftContext,RemediationDraftContextBuilder,RemediationProposalValidator,ValidatedRemediationProposal}（新）、RemediationPlanSuperseder（注释）、application/capability/CapabilityAccess（evaluateChange）、application/investigation/InvestigationApplicationService（真实 PENDING 核对）；infrastructure/persistence/mybatis/remediation/{RemediationMapper,MyBatisRemediationRecords,RemediationQueryMapper,MyBatisRemediationContextQuery}（新）及两个 XML；删除 infrastructure/{approval/UnavailablePendingApprovalCanceller,remediation/NoRemediationPlanSuperseder}；测试 persistence/RemediationSchemaTest、investigation/{RemediationDraftIntegrationTest,RemediationFixture}（新），修改 investigation/{InvestigationFixture,InvestigationRunIntegrationTest,DiagnosisIntegrationTest,RealLlmClosureRun}。ai-runtime——llm/prompts（remediation-v1）、llm/openai_compatible（注释）、tests/test_openai_compatible_client.py。docs/dev。Migration：V004；无新依赖
 - 提交：代码提交 a25d1b9f9bfb999ca5ee0950254638d2b49b0796（feat(remediation): plan tables, draft context and proposal validation (TASK-062–064)）；SHA 回填为后续 docs 提交；未推送
 
+### B21 — 请求修复、审批查询、拒绝与取消
+
+- 状态：REVIEW（B21-R1 PASS；未提交、未推送）
+- 成员及顺序：TASK-065 → TASK-066；批外前置：TASK-064 DONE（a25d1b9，B20-R1 PASS）
+- Base SHA：0edfb87da5a940819b47a253e0ef62c6d7ac4103
+- 范围：domain（Approval 状态与决定规则、错误码、时间线事件与载荷）；application（request-remediation 用例：只读上下文 → 事务外 AI → 短事务复核并创建 Plan/Action/PENDING Approval、DIAGNOSED→AWAITING_APPROVAL、时间线；Approval 查询、拒绝、撤回与批准复核）；infrastructure（方案/审批写入与查询的 MyBatis 实现）；web（POST request-remediation、GET/approve/reject/cancel Approval）；测试；docs/dev。明确不做：ActionExecution、RecoveryPolicy 选择与快照、批准成功路径（TASK-067～069、074～076）、SSE、UI、新迁移
+- 规格：08 TASK-065～066；01 §22～§25；04 §38～§44、§77～§78；05 §29～§32、§37～§43、§93～§94；06 §104～§108
+- 关键不变量：LLM 调用不在事务内；AI 失败或复核失效不留半套 Plan/Action/Approval，Incident 保持 DIAGNOSED；Approval 只从 PENDING 前进、决定留痕且不可反转，锁序 Incident → Approval；重复提交相同决定幂等命中先于过时版本判定；批准在执行与恢复合同接通前不得以半套 APPROVED 冒充成功
+- 验证要求：真实 MySQL 用例与并发/回滚集成测试、Web 合同测试；批尾 backend `./mvnw -B clean verify`
+- 新增依赖：无
+- 开工已有修改：无（工作树干净）
+- 成员进度：
+  - TASK-065：RemediationApplicationService.requestRemediation 严格三段——RemediationDraftContextBuilder 只读快照 → 退出事务调用 AiDecisionPort.draftRemediation → 先按请求时的 allowedActions 校验（越界 AI_INTENT_NOT_ALLOWED）→ 新短事务：按 key 锁 Incident、经唯一转换入口 REQUEST_APPROVAL（DIAGNOSED 与 expectedVersion）、最新 Diagnosis 仍是请求时那一版（否则 INCIDENT_VERSION_CONFLICT）、按此刻重新计算的相关 allowedActions 复核所选动作（资源/绑定/Provider 变化则 REMEDIATION_ACTION_NOT_EXECUTABLE），通过后 RemediationRepository 插入 ACTIVE Plan、Action（Registry 的 MEDIUM 与 requiresApproval、规范 JSON 参数）、PENDING Approval，DIAGNOSED → AWAITING_APPROVAL，追加 REMEDIATION_PROPOSED（AI_RUNTIME）与 APPROVAL_REQUESTED（USER）；RemediationActions 增加 allowedActionsForDiagnosis，上下文构造与复核共用。Web：POST /api/v1/incidents/{key}/actions/request-remediation → 201（05 §32 结构）
+  - TASK-066：domain ApprovalRequest（决定只从 PENDING 前进、留痕、版本加一；isSameDecision 用于 05 §43 幂等）、ApprovalStatus、RemediationPlanStatus；ErrorCode 增加 APPROVAL_VERSION_CONFLICT、APPROVAL_ALREADY_DECIDED、REMEDIATION_PLAN_SUPERSEDED、REMEDIATION_ACTION_NOT_EXECUTABLE、RECOVERY_POLICY_NOT_FOUND；TimelineEventType 增加 REMEDIATION_PROPOSED、APPROVAL_REQUESTED、APPROVAL_REJECTED、APPROVAL_CANCELLED 与载荷。ApprovalApplicationService：GET 视图（具体 Action 与目标资源，未知 id 为 RESOURCE_NOT_FOUND）；拒绝/撤回一个短事务，锁序 Incident → Approval（先无锁读出所属 Incident），相同决定与说明的重复提交先于版本判定返回原结果，其他已决定 APPROVAL_ALREADY_DECIDED，版本不符 APPROVAL_VERSION_CONFLICT / INCIDENT_VERSION_CONFLICT，说明 >500 REQUEST_VALIDATION_FAILED；成功时 Approval → REJECTED/CANCELLED、方案 ACTIVE → CANCELLED（本批决定，关闭「待处理问题」相关行）、AWAITING_APPROVAL → DIAGNOSED、APPROVAL_REJECTED/APPROVAL_CANCELLED。批准：复核 PENDING、版本、可迁移到 EXECUTING、Plan ACTIVE 且基于最新 Diagnosis（否则 REMEDIATION_PLAN_SUPERSEDED）、目标仍可执行（CapabilityAccess.evaluateChange，否则 REMEDIATION_ACTION_NOT_EXECUTABLE）；RecoveryPolicy 与 ActionExecution 尚不存在，如实以 RECOVERY_POLICY_NOT_FOUND 拒绝，不写任何数据（08 TASK-066 分阶段边界）。MyBatisApprovals 实现 RemediationRepository 与 ApprovalRepository（条件更新只从 PENDING 且版本未变）。Web：GET /api/v1/approvals/{id}、POST …/approve（成功合同 202 留待 TASK-069）、…/reject、…/cancel（200）
+  - 验证：infrastructure RemediationApprovalIntegrationTest 9/9（真实 MySQL；AI 替身记录调用时无事务）——创建一次提交完成且各字段正确；AI 不可用与越界建议不留记录；AI 运行期间绑定停用 → REMEDIATION_ACTION_NOT_EXECUTABLE、Incident 被更新 → INCIDENT_VERSION_CONFLICT、时间线失败整体回滚；GET 视图与未知 id；拒绝一次生效、重复相同提交（过时版本）返回原结果不再写入、其他决定均已决定；撤回后可继续调查；过时版本与超长说明无写入；批准复核的四种拒绝均不写入、Approval 保持 PENDING；并发拒绝与撤回只有一个生效。web RemediationControllerTest 15/15（201/200 包络与字段、校验与未知字段 400、错误码到 HTTP 状态的映射）
+  - 变异检查（均已还原，cmp 确认）：AI 调用放进事务 → aValidProposal… 失败；去掉按此刻 allowedActions 的复核 → changesDuringTheAiCall… 失败；幂等判定放到版本校验之后 → rejectionIsRecordedOnce… 失败；拒绝不处理方案 → 同上失败；批准不复核方案失效 → approvalIsRechecked… 失败
+- B21-V1（最终代码树，本机实测）：backend/；`./mvnw -B clean verify`；2026-09-30 05:18～05:29 UTC，JDK 21＋Docker（Testcontainers mysql:8.4.11 等）；exit 0；Enforcer 与 Spotless check 通过；domain 41、infrastructure 623、web 36、boot 6，均 0 失败 0 跳过；RealLlmClosureRun 未被 verify 运行；`git diff --check` 通过。ai-runtime 未修改（NOT RUN）；真实模型、S1～S3 NOT RUN（本批不要求）
+- B21-R1 独立 Review：PASS（2026-09-30）。范围为固定 Base `0edfb87da5a940819b47a253e0ef62c6d7ac4103` 至当前工作树，包含全部未跟踪文件；未发现本批阻断问题。由主审直接完成代码与规格核对。
+  - 核对：事务外 AI、提交前 Incident/Diagnosis/当前 allowedActions 复核、Plan/Action/Approval/状态/Timeline 原子落账；拒绝/撤回的 Incident → Approval 锁序、条件更新、决定审计与先于版本校验的幂等判断；API 字段与错误映射。拒绝/撤回将 ACTIVE Plan 置 CANCELLED 与历史保留相容；批准的无写入 422 符合 08 TASK-066 分阶段边界，完整成功路径仍由 TASK-069 接通。
+  - 本次实际运行：backend/ `./mvnw -B test -pl opspilot-infrastructure,opspilot-web -am -Dtest=RemediationApprovalIntegrationTest,RemediationControllerTest -Dsurefire.failIfNoSpecifiedTests=false`，exit 0；真实 MySQL 集成 9、Web 15，合计 24，0 失败/错误/跳过；`git diff --check` 通过。日志 `/tmp/b21-r1-tests.log`。完整 clean verify 本轮 NOT RUN，沿用实施方 B21-V1 记录；ai-runtime、真实 LLM、S1～S3 NOT RUN。
+  - 后续接通批准成功路径时注意：`ApprovalApplicationService.lock` 在 Incident 行锁之前的一致性读会建立 MySQL REPEATABLE READ 快照；TASK-067/069 应确保随后 Diagnosis/资源/Binding 的复核不使用等待行锁前的旧快照。本批批准始终无写入拒绝，故不是本批阻断项。
+- 修改文件：domain/remediation/{ApprovalRequest,ApprovalStatus,RemediationPlanStatus}（新）、domain/timeline/{RemediationProposedPayloadV1,ApprovalRequestedPayloadV1,ApprovalDecidedPayloadV1}（新）、TimelineEventType、domain/error/ErrorCode；application/remediation/{RemediationApplicationService,RemediationRepository,RequestRemediationCommand,RequestRemediationResult}（新）、RemediationActions、RemediationDraftContextBuilder；application/approval/{ApprovalApplicationService,ApprovalRepository,ApprovalDecisionCommand,ApprovalDecisionResult}（新）；infrastructure/persistence/mybatis/remediation/{ApprovalMapper,MyBatisApprovals,GeneratedKey}（新）及 ApprovalMapper.xml；web/remediation/{RemediationController,RemediationResponses,ApprovalDecisionRequest}（新）；测试 infrastructure investigation/RemediationApprovalIntegrationTest、web remediation/RemediationControllerTest（新）；docs/dev。无 Migration、无新依赖
+
 ### TASK-039 修复 — 准入 step_no 分配并发死锁（B12-R1/R2 约定）
 
 - 状态：DONE（Review PASS，已提交 30aea1f）
@@ -1027,6 +1050,8 @@
 | LLM 总超时（默认 50s）须不大于 Java 单步上限 agent_step_timeout_seconds（默认 60s），否则 Java 先超时、Python 仍在等待模型 | ai-runtime config、Java AiRuntime 配置 | 部署时按两侧配置对齐 | TASK-105 |
 | Java HttpAiRuntimeClient 对明文 http 的 AI Runtime 发出 HTTP/2 升级（h2c），uvicorn 每次记 “Unsupported upgrade request” WARNING 后按 HTTP/1.1 应答；闭合运行 6 次均如此，结果不受影响 | infrastructure/ai/HttpAiRuntimeClient | 可在客户端固定 HTTP_1_1 消除告警与一次协商；属 TASK-034 客户端，未在本批修改 | 触及 AI 客户端的后续 Task |
 | （原因已定位并处理，B18-R2 修复：hypothesisUpdate 中多写 reason；Prompt 已说明，第 6、7 次 10/10 步有效；验收运行继续观察）deepseek-v4.1-flash 在真实闭合运行中偶发不合 v1 的输出：4 次运行共 18 步中 4 步 AI_OUTPUT_INVALID（第 3 次连续 3 步，触发连续失败阈值收束为 UNDETERMINED）；原因未定位，第 4 次加入违规字段日志后未复现 | ai-runtime investigation/service、llm/prompts | 验收运行（TASK-104～106、S1～S3）时查看 “Model answer rejected by protocol v1” 日志中的字段路径，按真实原因调整 Prompt 或结构约束，不放宽协议校验 | TASK-104～106 |
-| 拒绝或撤回审批后该 Plan 仍为 ACTIVE（04 §38 状态集未规定）：Incident 回到 DIAGNOSED，其 Action 的 Approval 已终态、不能再批准；此时取消 Incident（非 AWAITING_APPROVAL）不经取消器，Plan 保持 ACTIVE；继续调查产生新 Diagnosis 时会被置为 SUPERSEDED | application/approval、infrastructure/persistence/mybatis/remediation | TASK-066 实现拒绝/撤回时确定 Plan 的去向（如同事务置 CANCELLED），并据此调整 Incident 取消的联动 | TASK-066 |
+| （已关闭，B21/TASK-066：拒绝与撤回同事务把方案置为 CANCELLED）拒绝或撤回审批后该 Plan 仍为 ACTIVE（04 §38 状态集未规定）：Incident 回到 DIAGNOSED，其 Action 的 Approval 已终态、不能再批准；此时取消 Incident（非 AWAITING_APPROVAL）不经取消器，Plan 保持 ACTIVE；继续调查产生新 Diagnosis 时会被置为 SUPERSEDED | application/approval、infrastructure/persistence/mybatis/remediation | TASK-066 实现拒绝/撤回时确定 Plan 的去向（如同事务置 CANCELLED），并据此调整 Incident 取消的联动 | TASK-066 |
 | remediation_plan 与所属 Incident / 当前 Diagnosis 的一致性只在 Java 创建事务中保证（库内没有 plan.incident_id 与 diagnosis 所属 Incident 的复合外键） | V004、TASK-065 创建事务 | TASK-065 在同一 Incident 行锁下以当前最新 Diagnosis 创建；如需库内保护，另加 investigation_id 列与复合外键 | TASK-065 |
 | 处理建议的相关资源规则（用户决定）依赖证据与受影响资源：若 S3 的诊断既未引用消费者的观测、Incident 也未把消费者登记为受影响资源，则会返回 NO_APPLICABLE_ACTION | application/remediation/RemediationActions | TASK-092/106 为 S3 登记受影响资源（statistics-consumer），或确保调查引用消费者观测；验收在 TASK-109 | TASK-092/106/109 |
+| 批准在执行与恢复合同接通前固定返回 RECOVERY_POLICY_NOT_FOUND（复核全部通过后）；成功路径（选择唯一 ACTIVE RecoveryPolicy、冻结快照、PENDING → APPROVED、创建 ActionExecution、AWAITING_APPROVAL → EXECUTING、202 与 05 §39 响应体含 execution）与 APPROVED 的幂等返回尚未实现 | application/approval/ApprovalApplicationService#approve、web RemediationController | TASK-067～069、074～076 接通；接通时把控制器的批准响应改为 05 §39 结构并补幂等 | TASK-069 |
+| request-remediation 的 AI 调用元数据（模型、Prompt 版本、Token）未持久化：AiDecisionPort.draftRemediation 只返回建议 | application/remediation、infrastructure/ai | 如需审计处理建议的模型信息，在 Action 或时间线载荷中加入（规格未要求） | 需要时单独确认 |

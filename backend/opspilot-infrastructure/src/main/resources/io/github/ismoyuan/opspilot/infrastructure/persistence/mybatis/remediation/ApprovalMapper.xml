@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.remediation.ApprovalMapper">
+
+    <resultMap id="lockedApprovalRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.remediation.ApprovalMapper$LockedApprovalRow">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="remediation_action_id" javaType="_long"/>
+            <arg column="status" javaType="String"/>
+            <arg column="requested_at" javaType="java.time.LocalDateTime"/>
+            <arg column="decided_by" javaType="String"/>
+            <arg column="decided_at" javaType="java.time.LocalDateTime"/>
+            <arg column="comment" javaType="String"/>
+            <arg column="lock_version" javaType="_long"/>
+            <arg column="plan_id" javaType="_long"/>
+            <arg column="plan_status" javaType="String"/>
+            <arg column="diagnosis_id" javaType="_long"/>
+            <arg column="capability_key" javaType="String"/>
+            <arg column="target_resource_id" javaType="_long"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="approvalViewRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.remediation.ApprovalMapper$ApprovalViewRow">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="status" javaType="String"/>
+            <arg column="lock_version" javaType="_long"/>
+            <arg column="incident_key" javaType="String"/>
+            <arg column="action_id" javaType="_long"/>
+            <arg column="action_summary" javaType="String"/>
+            <arg column="capability_key" javaType="String"/>
+            <arg column="resource_key" javaType="String"/>
+            <arg column="resource_name" javaType="String"/>
+            <arg column="risk_level" javaType="String"/>
+            <arg column="expected_impact_summary" javaType="String"/>
+            <arg column="requested_at" javaType="java.time.LocalDateTime"/>
+            <arg column="decided_by" javaType="String"/>
+            <arg column="decided_at" javaType="java.time.LocalDateTime"/>
+            <arg column="comment" javaType="String"/>
+        </constructor>
+    </resultMap>
+
+    <insert id="insertPlan" useGeneratedKeys="true" keyProperty="key.id" keyColumn="id">
+        INSERT INTO remediation_plan (incident_id, diagnosis_id, title, summary, status, created_at, updated_at)
+        VALUES (#{incidentId}, #{diagnosisId}, #{title}, #{summary}, 'ACTIVE', #{at}, #{at})
+    </insert>
+
+    <insert id="insertAction" useGeneratedKeys="true" keyProperty="key.id" keyColumn="id">
+        INSERT INTO remediation_action (remediation_plan_id, capability_key, target_resource_id, parameter_schema_name,
+                                        parameter_schema_version, parameter_payload, summary, expected_impact_summary,
+                                        risk_level, requires_approval, created_at)
+        VALUES (#{planId}, #{capabilityKey}, #{targetResourceId}, #{schemaName}, #{schemaVersion}, #{payload},
+                #{summary}, #{expectedImpactSummary}, #{riskLevel}, #{requiresApproval}, #{at})
+    </insert>
+
+    <insert id="insertApproval" useGeneratedKeys="true" keyProperty="key.id" keyColumn="id">
+        INSERT INTO approval_request (remediation_action_id, status, requested_at, created_at, updated_at, lock_version)
+        VALUES (#{actionId}, 'PENDING', #{at}, #{at}, #{at}, 0)
+    </insert>
+
+    <select id="selectIncidentId" resultType="long">
+        SELECT p.incident_id
+        FROM approval_request a
+        JOIN remediation_action ra ON ra.id = a.remediation_action_id
+        JOIN remediation_plan p ON p.id = ra.remediation_plan_id
+        WHERE a.id = #{approvalId}
+    </select>
+
+    <!-- 调用方已持有 Incident 行锁（Incident → Approval 锁序） -->
+    <select id="selectForUpdate" resultMap="lockedApprovalRow">
+        SELECT a.id, a.remediation_action_id, a.status, a.requested_at, a.decided_by, a.decided_at, a.comment,
+               a.lock_version, p.id AS plan_id, p.status AS plan_status, p.diagnosis_id, ra.capability_key,
+               ra.target_resource_id
+        FROM approval_request a
+        JOIN remediation_action ra ON ra.id = a.remediation_action_id
+        JOIN remediation_plan p ON p.id = ra.remediation_plan_id
+        WHERE a.id = #{approvalId}
+        FOR UPDATE
+    </select>
+
+    <!-- 只从 PENDING 且版本未变时决定（04 §44） -->
+    <update id="updateDecision">
+        UPDATE approval_request
+        SET status = #{status}, decided_by = #{decidedBy}, decided_at = #{decidedAt}, comment = #{comment},
+            updated_at = #{decidedAt}, lock_version = lock_version + 1
+        WHERE id = #{approvalId} AND status = 'PENDING' AND lock_version = #{expectedVersion}
+    </update>
+
+    <update id="cancelActivePlan">
+        UPDATE remediation_plan
+        SET status = 'CANCELLED', updated_at = #{at}
+        WHERE id = #{planId} AND status = 'ACTIVE'
+    </update>
+
+    <select id="selectView" resultMap="approvalViewRow">
+        SELECT a.id, a.status, a.lock_version, i.incident_key, ra.id AS action_id, ra.summary AS action_summary,
+               ra.capability_key, r.resource_key, r.name AS resource_name, ra.risk_level, ra.expected_impact_summary,
+               a.requested_at, a.decided_by, a.decided_at, a.comment
+        FROM approval_request a
+        JOIN remediation_action ra ON ra.id = a.remediation_action_id
+        JOIN remediation_plan p ON p.id = ra.remediation_plan_id
+        JOIN incident i ON i.id = p.incident_id
+        JOIN managed_resource r ON r.id = ra.target_resource_id
+        WHERE a.id = #{approvalId}
+    </select>
+</mapper>
