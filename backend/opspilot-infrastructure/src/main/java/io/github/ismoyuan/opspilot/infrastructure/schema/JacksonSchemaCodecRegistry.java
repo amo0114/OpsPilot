@@ -12,7 +12,9 @@ import io.github.ismoyuan.opspilot.application.capability.result.LogsSearchResul
 import io.github.ismoyuan.opspilot.application.capability.result.MetricsQueryResultV1;
 import io.github.ismoyuan.opspilot.application.capability.result.QueueInspectResultV1;
 import io.github.ismoyuan.opspilot.application.capability.result.ServiceInspectResultV1;
+import io.github.ismoyuan.opspilot.application.execution.ServiceRestartExecutionContextV1;
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicyCriteriaV1;
+import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicySnapshotV1;
 import io.github.ismoyuan.opspilot.application.schema.SchemaCodecRegistry;
 import io.github.ismoyuan.opspilot.application.schema.SchemaPayloadException;
 import io.github.ismoyuan.opspilot.application.schema.SchemaPayloadException.Reason;
@@ -127,7 +129,16 @@ class JacksonSchemaCodecRegistry implements SchemaCodecRegistry {
             entry(
                     RecoveryPolicyCriteriaV1.SCHEMA_NAME,
                     RecoveryPolicyCriteriaV1.SCHEMA_VERSION,
-                    RecoveryPolicyCriteriaV1.class));
+                    RecoveryPolicyCriteriaV1.class),
+            // Execution 创建时冻结的恢复合同与受信执行上下文（04 §45、§52）
+            entry(
+                    RecoveryPolicySnapshotV1.SCHEMA_NAME,
+                    RecoveryPolicySnapshotV1.SCHEMA_VERSION,
+                    RecoveryPolicySnapshotV1.class),
+            entry(
+                    ServiceRestartExecutionContextV1.SCHEMA_NAME,
+                    ServiceRestartExecutionContextV1.SCHEMA_VERSION,
+                    ServiceRestartExecutionContextV1.class));
 
     private final JsonMapper mapper = JsonMapper.builder()
             .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)

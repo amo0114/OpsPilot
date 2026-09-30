@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.execution.ActionExecutionMapper">
+
+    <resultMap id="executionRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.execution.ActionExecutionMapper$ExecutionRow">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="status" javaType="String"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="pendingWork" type="io.github.ismoyuan.opspilot.application.dispatch.DispatchableWork$ActionExecution">
+        <constructor>
+            <arg column="id" javaType="_long"/>
+        </constructor>
+    </resultMap>
+
+    <insert id="insertPending" useGeneratedKeys="true" keyProperty="key.id" keyColumn="id">
+        INSERT INTO action_execution (remediation_action_id, approval_request_id, idempotency_key, status, executor_key,
+                                      recovery_policy_id, recovery_policy_version, recovery_policy_snapshot,
+                                      execution_context_schema_name, execution_context_schema_version,
+                                      execution_context_payload, reconciliation_attempt_count,
+                                      max_reconciliation_attempts, correlation_id, created_at, updated_at, lock_version)
+        VALUES (#{execution.remediationActionId}, #{execution.approvalRequestId}, #{execution.idempotencyKey}, 'PENDING',
+                #{execution.executorKey}, #{execution.recoveryPolicyId}, #{execution.recoveryPolicyVersion},
+                #{execution.recoveryPolicySnapshot}, #{execution.executionContextSchemaName},
+                #{execution.executionContextSchemaVersion}, #{execution.executionContextPayload}, 0,
+                #{execution.maxReconciliationAttempts}, #{execution.correlationId}, #{execution.at}, #{execution.at}, 0)
+    </insert>
+
+    <select id="selectByActionId" resultMap="executionRow">
+        SELECT id, status FROM action_execution WHERE remediation_action_id = #{actionId}
+    </select>
+
+    <!-- 只取 PENDING；按状态索引 idx_action_execution_status 扫描 -->
+    <select id="selectPending" resultMap="pendingWork">
+        SELECT id FROM action_execution WHERE status = 'PENDING' ORDER BY id
+    </select>
+</mapper>

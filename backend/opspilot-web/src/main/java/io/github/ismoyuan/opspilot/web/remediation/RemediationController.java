@@ -2,6 +2,7 @@ package io.github.ismoyuan.opspilot.web.remediation;
 
 import io.github.ismoyuan.opspilot.application.approval.ApprovalApplicationService;
 import io.github.ismoyuan.opspilot.application.approval.ApprovalDecisionCommand;
+import io.github.ismoyuan.opspilot.application.approval.ApprovalDecisionResult;
 import io.github.ismoyuan.opspilot.application.remediation.RemediationApplicationService;
 import io.github.ismoyuan.opspilot.application.remediation.RequestRemediationCommand;
 import io.github.ismoyuan.opspilot.web.incident.IncidentActionRequest;
@@ -13,6 +14,7 @@ import io.github.ismoyuan.opspilot.web.response.ApiResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -22,8 +24,8 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 处理建议与审批 API（05 §29～§32、§37～§43，08 TASK-065～066）。控制器只做请求映射，不访问持久化；批准在执行与恢复合同接通
- * （TASK-069）前由用例如实拒绝，成功时的 202 合同届时生效。
+ * 处理建议与审批 API（05 §29～§32、§37～§43，08 TASK-065～066、069）。控制器只做请求映射，不访问持久化。批准创建 Execution 后
+ * 返回 202 Accepted，不等待 Docker 执行（05 §39）；相同决定的重复提交返回原决定与既有 Execution，200（05 §43）。
  */
 @RestController
 @RequestMapping("/api/v1")
@@ -58,12 +60,13 @@ public class RemediationController {
     }
 
     @PostMapping("/approvals/{approvalId}/actions/approve")
-    @ResponseStatus(HttpStatus.ACCEPTED)
-    public ApiResponse<ApprovalDecisionResponse> approve(
+    public ResponseEntity<ApiResponse<ApprovalDecisionResponse>> approve(
             @PathVariable long approvalId,
             @Valid @RequestBody ApprovalDecisionRequest body,
             HttpServletRequest request) {
-        return respond(ApprovalDecisionResponse.of(approvals.approve(command(approvalId, body))), request);
+        ApprovalDecisionResult result = approvals.approve(command(approvalId, body));
+        return ResponseEntity.status(result.replayed() ? HttpStatus.OK : HttpStatus.ACCEPTED)
+                .body(respond(ApprovalDecisionResponse.of(result), request));
     }
 
     @PostMapping("/approvals/{approvalId}/actions/reject")

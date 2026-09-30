@@ -5,6 +5,7 @@ import io.github.ismoyuan.opspilot.application.approval.ApprovalRepository;
 import io.github.ismoyuan.opspilot.application.remediation.RequestRemediationResult;
 import io.github.ismoyuan.opspilot.application.remediation.ValidatedRemediationProposal;
 import io.github.ismoyuan.opspilot.domain.capability.RiskLevel;
+import io.github.ismoyuan.opspilot.domain.execution.ActionExecutionStatus;
 import io.github.ismoyuan.opspilot.domain.incident.IncidentStatus;
 import io.github.ismoyuan.opspilot.domain.remediation.ApprovalStatus;
 import io.github.ismoyuan.opspilot.domain.remediation.RemediationPlanStatus;
@@ -93,13 +94,15 @@ final class RemediationResponses {
         }
     }
 
+    /** @param execution 批准创建的 Execution（05 §39）；拒绝与撤回为 null */
     record ApprovalDecisionResponse(
             long approvalId,
             ApprovalStatus approvalStatus,
             long approvalVersion,
             String incidentKey,
             IncidentStatus incidentStatus,
-            long incidentVersion) {
+            long incidentVersion,
+            ExecutionResponse execution) {
 
         static ApprovalDecisionResponse of(ApprovalDecisionResult result) {
             return new ApprovalDecisionResponse(
@@ -108,7 +111,14 @@ final class RemediationResponses {
                     result.approvalVersion(),
                     result.incidentKey().value(),
                     result.incidentStatus(),
-                    result.incidentVersion());
+                    result.incidentVersion(),
+                    result.execution() == null
+                            ? null
+                            : new ExecutionResponse(
+                                    result.execution().executionId(),
+                                    result.execution().status()));
         }
     }
+
+    record ExecutionResponse(long executionId, ActionExecutionStatus status) {}
 }

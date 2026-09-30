@@ -2,12 +2,19 @@ package io.github.ismoyuan.opspilot.infrastructure.investigation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 import io.github.ismoyuan.opspilot.application.ClockConfiguration;
 import io.github.ismoyuan.opspilot.application.ai.AiDecisionPort;
+import io.github.ismoyuan.opspilot.application.ai.protocol.v1.QueueInspectArgumentsV1;
 import io.github.ismoyuan.opspilot.application.ai.protocol.v1.RemediationDraftRequest;
 import io.github.ismoyuan.opspilot.application.ai.protocol.v1.RemediationDraftResponse;
 import io.github.ismoyuan.opspilot.application.ai.protocol.v1.ServiceInspectArgumentsV1;
@@ -17,8 +24,11 @@ import io.github.ismoyuan.opspilot.application.approval.ApprovalDecisionCommand;
 import io.github.ismoyuan.opspilot.application.approval.ApprovalDecisionResult;
 import io.github.ismoyuan.opspilot.application.capability.CapabilityAccess;
 import io.github.ismoyuan.opspilot.application.capability.CapabilityProviderResolver;
+import io.github.ismoyuan.opspilot.application.dispatch.DispatchableWork;
+import io.github.ismoyuan.opspilot.application.dispatch.DispatchableWorkSource;
 import io.github.ismoyuan.opspilot.application.dispatch.WorkDispatcher;
 import io.github.ismoyuan.opspilot.application.error.ApplicationException;
+import io.github.ismoyuan.opspilot.application.execution.ServiceRestartExecutionContextV1;
 import io.github.ismoyuan.opspilot.application.incident.CancelIncidentCommand;
 import io.github.ismoyuan.opspilot.application.incident.IncidentApplicationService;
 import io.github.ismoyuan.opspilot.application.investigation.ContinueInvestigationCommand;
@@ -27,6 +37,7 @@ import io.github.ismoyuan.opspilot.application.recovery.RecoveryCriterionV1;
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicyActivationService;
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicyCriteriaV1;
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicySelector;
+import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicySnapshotV1;
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicyValidator;
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryPredicateV1;
 import io.github.ismoyuan.opspilot.application.recovery.RecoverySamplingV1;
@@ -36,11 +47,14 @@ import io.github.ismoyuan.opspilot.application.remediation.RemediationDraftConte
 import io.github.ismoyuan.opspilot.application.remediation.RemediationProposalValidator;
 import io.github.ismoyuan.opspilot.application.remediation.RequestRemediationCommand;
 import io.github.ismoyuan.opspilot.application.remediation.RequestRemediationResult;
+import io.github.ismoyuan.opspilot.application.schema.SchemaCodecRegistry;
 import io.github.ismoyuan.opspilot.application.timeline.TimelineRepository;
 import io.github.ismoyuan.opspilot.domain.error.ErrorCode;
 import io.github.ismoyuan.opspilot.domain.error.OpsPilotException;
+import io.github.ismoyuan.opspilot.domain.execution.ActionExecutionStatus;
 import io.github.ismoyuan.opspilot.domain.incident.IncidentStatus;
 import io.github.ismoyuan.opspilot.domain.remediation.ApprovalStatus;
+import io.github.ismoyuan.opspilot.domain.timeline.TimelineEventType;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.util.ArrayList;
@@ -67,7 +81,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mysql.MySQLContainer;
 
 /**
- * 08 TASK-065～067：真实 MySQL 上的请求处理建议与审批决定。AI 为脚本替身（在无事务的线程状态下被调用，可在“AI 运行中”改变数据
+ * 08 TASK-065～067、069：真实 MySQL 上的请求处理建议、审批决定与批准创建 Execution。AI 为脚本替身（在无事务的线程状态下被调用，可在“AI 运行中”改变数据
  * 以制造复核失败）；其余为生产用例、仓储与约束。
  */
 @SpringBootTest
@@ -119,6 +133,12 @@ class RemediationApprovalIntegrationTest {
 
     @Autowired
     DataSource dataSource;
+
+    @Autowired
+    SchemaCodecRegistry codecs;
+
+    @Autowired
+    List<DispatchableWorkSource> workSources;
 
     @MockitoBean
     AiDecisionPort ai;
@@ -257,7 +277,12 @@ class RemediationApprovalIntegrationTest {
         assertThat(state(approvalId)).isEqualTo("REJECTED/demo-user/当前不希望重启消费者。/CANCELLED");
         assertThat(events("APPROVAL_REJECTED")).isOne();
 
-        assertThat(approvals.reject(decision(approvalId, 0, 8, "当前不希望重启消费者。"))).isEqualTo(rejected);
+        ApprovalDecisionResult repeated = approvals.reject(decision(approvalId, 0, 8, "当前不希望重启消费者。"));
+        assertThat(repeated.replayed()).isTrue();
+        assertThat(repeated)
+                .usingRecursiveComparison()
+                .ignoringFields("replayed")
+                .isEqualTo(rejected);
         assertThat(events("APPROVAL_REJECTED")).isOne();
         for (Runnable other : List.<Runnable>of(
                 () -> approvals.reject(decision(approvalId, 1, 9, "另一条说明")),
@@ -303,11 +328,11 @@ class RemediationApprovalIntegrationTest {
     }
 
     /**
-     * 05 §38、08 TASK-066 分阶段边界：批准复核 Plan 与动作；全部通过时因为尚无任何 RecoveryPolicy（TASK-074 起）如实返回
-     * RECOVERY_POLICY_NOT_FOUND，Approval 保持 PENDING、Incident 保持 AWAITING_APPROVAL，不产生半套 APPROVED。
+     * 05 §38：批准复核 Plan、动作与版本；目标没有恢复策略时 RECOVERY_POLICY_NOT_FOUND。任何拒绝都不写入：Approval 保持 PENDING、
+     * Incident 保持 AWAITING_APPROVAL，不产生半套 APPROVED。
      */
     @Test
-    void approvalIsRecheckedAndNeverHalfAppliedBeforeExecutionExists() {
+    void approvalIsRecheckedAndNeverHalfApplied() {
         long approvalId = request().approvalId();
 
         assertDecisionRejected(
@@ -369,7 +394,7 @@ class RemediationApprovalIntegrationTest {
 
     /**
      * 04 §52、§78、08 TASK-067：批准在任何写入前选择目标资源唯一合法的 ACTIVE RecoveryPolicy——没有、按此刻绑定不合法、多条
-     * 各有其码；合法时复核全部通过，但执行尚未接通（TASK-069），仍不写入任何数据。
+     * 各有其码，均不写入。
      */
     @Test
     void approvalSelectsTheSingleLegalRecoveryPolicyBeforeAnyWrite() {
@@ -381,11 +406,6 @@ class RemediationApprovalIntegrationTest {
                 Map.of("reason", "NO_ACTIVE_POLICY"));
 
         activateConsumerPolicy("consumer-recovery");
-        assertRejectedWith(
-                () -> approvals.approve(decision(approvalId, 0, 8, "批准执行")),
-                ErrorCode.REMEDIATION_ACTION_NOT_EXECUTABLE,
-                Map.of("reason", "EXECUTION_NOT_AVAILABLE"));
-
         jdbc.update(
                 "UPDATE capability_binding SET enabled = FALSE WHERE managed_resource_id = ?"
                         + " AND capability_key = 'service.inspect'",
@@ -448,7 +468,7 @@ class RemediationApprovalIntegrationTest {
         assertNothingDecided(approvalId);
     }
 
-    /** 批准与拒绝并发：锁序 Incident → Approval 使它们串行，只有拒绝落账；批准要么先执行且不写入，要么看到已决定。 */
+    /** 批准与拒绝并发：锁序 Incident → Approval 使它们串行，只有先取得锁的决定落账，另一个看到已决定或版本冲突。 */
     @Test
     void concurrentApproveAndRejectDecideExactlyOnce() throws Exception {
         long approvalId = request().approvalId();
@@ -464,16 +484,227 @@ class RemediationApprovalIntegrationTest {
         });
         start.countDown();
 
-        assertThat(reject.get(30, TimeUnit.SECONDS)).isEqualTo("OK");
-        assertThat(approve.get(30, TimeUnit.SECONDS))
-                .isIn(
-                        ErrorCode.REMEDIATION_ACTION_NOT_EXECUTABLE,
-                        ErrorCode.APPROVAL_ALREADY_DECIDED,
-                        ErrorCode.APPROVAL_VERSION_CONFLICT);
-        assertThat(state(approvalId)).isEqualTo("REJECTED/demo-user/-/CANCELLED");
-        assertThat(events("APPROVAL_REJECTED")).isOne();
+        List<Object> outcomes = List.of(approve.get(30, TimeUnit.SECONDS), reject.get(30, TimeUnit.SECONDS));
+
+        assertThat(outcomes).containsOnlyOnce("OK");
+        assertThat(outcomes)
+                .filteredOn(ErrorCode.class::isInstance)
+                .singleElement()
+                .isIn(ErrorCode.APPROVAL_ALREADY_DECIDED, ErrorCode.APPROVAL_VERSION_CONFLICT);
+        int executions = jdbc.queryForObject("SELECT COUNT(*) FROM action_execution", Integer.class);
+        if (outcomes.getFirst().equals("OK")) {
+            assertThat(state(approvalId)).isEqualTo("APPROVED/demo-user/-/ACTIVE");
+            assertThat(executions).isOne();
+        } else {
+            assertThat(state(approvalId)).isEqualTo("REJECTED/demo-user/-/CANCELLED");
+            assertThat(executions).isZero();
+        }
+        assertThat(events("APPROVAL_APPROVED") + events("APPROVAL_REJECTED")).isOne();
+    }
+
+    // ---------------------------------------------------------------- TASK-069
+
+    /**
+     * 04 §45、§52、§78、05 §38～§39：复核全部通过后一个事务落账——Approval APPROVED（决定人、说明、版本 1）、PENDING Execution
+     * （确定性幂等键、执行器、策略 id/版本、完整快照、受信执行上下文、核对上限快照）、Incident EXECUTING（版本 9）与 APPROVAL_APPROVED；
+     * 方案仍 ACTIVE（执行结果落账时才 EXECUTED）。提交之后才派发。
+     */
+    @Test
+    void approvalFreezesTheContractCreatesThePendingExecutionAndDispatchesAfterCommit() {
+        long approvalId = request().approvalId();
+        long policyId = activateConsumerPolicy("consumer-recovery");
+        List<String> dispatchObservations = new ArrayList<>();
+        // 派发时从另一条独立连接读取：只有批准事务已提交，才能看到 PENDING Execution
+        doAnswer(invocation -> {
+                    long executionId = invocation.getArgument(0);
+                    try (Connection other = DriverManager.getConnection(
+                                    MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword());
+                            var query = other.prepareStatement("SELECT status FROM action_execution WHERE id = ?")) {
+                        query.setLong(1, executionId);
+                        try (var rs = query.executeQuery()) {
+                            dispatchObservations.add(rs.next() ? rs.getString(1) : "NOT_VISIBLE");
+                        }
+                    }
+                    return null;
+                })
+                .when(dispatcher)
+                .dispatchActionExecution(anyLong());
+
+        ApprovalDecisionResult result = approvals.approve(decision(approvalId, 0, 8, "批准执行"));
+
+        assertThat(result.replayed()).isFalse();
+        assertThat(result.approvalStatus()).isEqualTo(ApprovalStatus.APPROVED);
+        assertThat(result.approvalVersion()).isOne();
+        assertThat(result.incidentStatus()).isEqualTo(IncidentStatus.EXECUTING);
+        assertThat(result.incidentVersion()).isEqualTo(9);
+        assertThat(result.execution().status()).isEqualTo(ActionExecutionStatus.PENDING);
+        long executionId = result.execution().executionId();
+        assertThat(dispatchObservations).containsExactly("PENDING");
+        assertThat(state(approvalId)).isEqualTo("APPROVED/demo-user/批准执行/ACTIVE");
+        long actionId = jdbc.queryForObject(
+                "SELECT remediation_action_id FROM approval_request WHERE id = ?", Long.class, approvalId);
+        assertThat(jdbc.queryForMap(
+                        "SELECT status, idempotency_key, executor_key, CAST(recovery_policy_id AS SIGNED) AS policy,"
+                                + " recovery_policy_version, execution_context_schema_name,"
+                                + " execution_context_schema_version, reconciliation_attempt_count,"
+                                + " max_reconciliation_attempts, started_at, CAST(approval_request_id AS SIGNED) AS"
+                                + " approval FROM action_execution WHERE id = ?",
+                        executionId))
+                .containsEntry("status", "PENDING")
+                .containsEntry("idempotency_key", "action-execution:" + actionId)
+                .containsEntry("executor_key", "docker.service-restart")
+                .containsEntry("policy", policyId)
+                .containsEntry("recovery_policy_version", 1L)
+                .containsEntry("execution_context_schema_name", "service.restart.execution-context")
+                .containsEntry("execution_context_schema_version", 1L)
+                .containsEntry("reconciliation_attempt_count", 0L)
+                .containsEntry("max_reconciliation_attempts", 3L)
+                .containsEntry("started_at", null)
+                .containsEntry("approval", approvalId);
+
+        RecoveryPolicySnapshotV1 snapshot = codecs.decode(
+                RecoveryPolicySnapshotV1.SCHEMA_NAME,
+                1,
+                jdbc.queryForObject(
+                        "SELECT CAST(recovery_policy_snapshot AS CHAR) FROM action_execution WHERE id = ?",
+                        String.class,
+                        executionId),
+                RecoveryPolicySnapshotV1.class);
+        assertThat(snapshot.policyId()).isEqualTo(policyId);
+        assertThat(snapshot.policyKey()).isEqualTo("consumer-recovery");
+        assertThat(snapshot.policyVersion()).isOne();
+        assertThat(snapshot.managedResourceId()).isEqualTo(seeded.consumer());
+        assertThat(snapshot.maxDurationSeconds()).isEqualTo(60);
+        assertThat(snapshot.criteria())
+                .extracting(
+                        criterion -> criterion.criterion().criterionKey(),
+                        RecoveryPolicySnapshotV1.SnapshotCriterion::targetResourceId,
+                        RecoveryPolicySnapshotV1.SnapshotCriterion::consumerGroup)
+                .containsExactly(
+                        tuple("stream-lag-drained", seeded.investigation().streamId(), "stats-consumer-group"),
+                        tuple("consumer-running", seeded.consumer(), null));
+
+        ServiceRestartExecutionContextV1 context = codecs.decode(
+                ServiceRestartExecutionContextV1.SCHEMA_NAME,
+                1,
+                jdbc.queryForObject(
+                        "SELECT CAST(execution_context_payload AS CHAR) FROM action_execution WHERE id = ?",
+                        String.class,
+                        executionId),
+                ServiceRestartExecutionContextV1.class);
+        assertThat(context)
+                .isEqualTo(new ServiceRestartExecutionContextV1(
+                        seeded.consumer(),
+                        jdbc.queryForObject(
+                                "SELECT id FROM resource_binding WHERE managed_resource_id = ?",
+                                Long.class,
+                                seeded.consumer()),
+                        jdbc.queryForObject(
+                                "SELECT id FROM data_source_connection WHERE connection_key = 'docker-local'",
+                                Long.class),
+                        "shortlink-statistics-consumer",
+                        null));
+        assertThat(jdbc.queryForMap(
+                        "SELECT status, CAST(lock_version AS SIGNED) AS version FROM incident WHERE id = ?",
+                        seeded.investigation().incidentId()))
+                .containsEntry("status", "EXECUTING")
+                .containsEntry("version", 9L);
+        assertThat(jdbc.queryForObject(
+                        "SELECT CAST(payload->>'$.executionId' AS SIGNED) FROM incident_timeline_event"
+                                + " WHERE event_type = 'APPROVAL_APPROVED'",
+                        Long.class))
+                .isEqualTo(executionId);
+    }
+
+    /** 04 §78：时间线写入失败使整个批准回滚——没有 APPROVED、没有 Execution、Incident 不变，也不派发。 */
+    @Test
+    void aFailureInTheApprovalTransactionLeavesNothingBehind() {
+        long approvalId = request().approvalId();
+        activateConsumerPolicy("consumer-recovery");
+        doThrow(new IllegalStateException("timeline unavailable"))
+                .when(timeline)
+                .append(argThat(event -> event.eventType() == TimelineEventType.APPROVAL_APPROVED));
+
+        assertThatThrownBy(() -> approvals.approve(decision(approvalId, 0, 8, null)))
+                .isInstanceOf(IllegalStateException.class);
+
+        assertNothingDecided(approvalId);
+        verify(dispatcher, never()).dispatchActionExecution(anyLong());
+    }
+
+    /**
+     * 05 §43、04 §46～§47：同一操作者重复提交相同批准与说明（含过时版本）返回原决定与既有 Execution，不再创建、不再派发、不写时间线；
+     * 说明不同或改为拒绝均为已决定。
+     */
+    @Test
+    void repeatingTheSameApprovalReturnsTheExistingExecution() {
+        long approvalId = request().approvalId();
+        activateConsumerPolicy("consumer-recovery");
+        ApprovalDecisionResult first = approvals.approve(decision(approvalId, 0, 8, "批准执行"));
+
+        ApprovalDecisionResult repeated = approvals.approve(decision(approvalId, 0, 8, "  批准执行 "));
+
+        assertThat(repeated.replayed()).isTrue();
+        assertThat(repeated.execution()).isEqualTo(first.execution());
+        assertThat(repeated.approvalVersion()).isOne();
+        assertThat(repeated.incidentStatus()).isEqualTo(IncidentStatus.EXECUTING);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM action_execution", Integer.class))
-                .isZero();
+                .isOne();
+        assertThat(events("APPROVAL_APPROVED")).isOne();
+        verify(dispatcher, times(1)).dispatchActionExecution(first.execution().executionId());
+        for (Runnable other : List.<Runnable>of(
+                () -> approvals.approve(decision(approvalId, 1, 9, "另一条说明")),
+                () -> approvals.reject(decision(approvalId, 1, 9, "批准执行")))) {
+            assertDecisionRejected(other, ErrorCode.APPROVAL_ALREADY_DECIDED);
+        }
+    }
+
+    /** 并发的相同批准：锁序使它们串行，只创建一个 Execution、只派发一次；后到者得到原决定。 */
+    @Test
+    void concurrentApprovalsCreateExactlyOneExecution() throws Exception {
+        long approvalId = request().approvalId();
+        activateConsumerPolicy("consumer-recovery");
+        CountDownLatch start = new CountDownLatch(1);
+        List<CompletableFuture<ApprovalDecisionResult>> calls = new ArrayList<>();
+        for (int i = 0; i < 2; i++) {
+            calls.add(CompletableFuture.supplyAsync(() -> {
+                await(start);
+                return approvals.approve(decision(approvalId, 0, 8, null));
+            }));
+        }
+        start.countDown();
+        List<ApprovalDecisionResult> results = new ArrayList<>();
+        for (var call : calls) {
+            results.add(call.get(30, TimeUnit.SECONDS));
+        }
+
+        assertThat(results).extracting(ApprovalDecisionResult::replayed).containsExactlyInAnyOrder(false, true);
+        assertThat(results)
+                .extracting(ApprovalDecisionResult::execution)
+                .containsOnly(results.getFirst().execution());
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM action_execution", Integer.class))
+                .isOne();
+        verify(dispatcher, times(1)).dispatchActionExecution(anyLong());
+    }
+
+    /**
+     * 08 TASK-069：提交后派发失败不影响已提交的批准；PENDING Execution 由补派发来源重新找到（07 §51），RUNNING 不在其中。
+     */
+    @Test
+    void aFailedDispatchIsRecoveredFromThePendingExecutionSource() {
+        long approvalId = request().approvalId();
+        activateConsumerPolicy("consumer-recovery");
+        doThrow(new IllegalStateException("queue full")).when(dispatcher).dispatchActionExecution(anyLong());
+
+        long executionId =
+                approvals.approve(decision(approvalId, 0, 8, null)).execution().executionId();
+
+        assertThat(state(approvalId)).startsWith("APPROVED/");
+        assertThat(pendingExecutionWork()).containsExactly(new DispatchableWork.ActionExecution(executionId));
+        jdbc.update(
+                "UPDATE action_execution SET status = 'RUNNING', started_at = UTC_TIMESTAMP(3) WHERE id = ?",
+                executionId);
+        assertThat(pendingExecutionWork()).isEmpty();
     }
 
     /**
@@ -501,28 +732,66 @@ class RemediationApprovalIntegrationTest {
 
     // ---------------------------------------------------------------- helpers
 
-    /** 统计消费者上的 ACTIVE 策略：service.inspect 检查其运行状态（先启用 service.inspect 绑定）。 */
-    private void activateConsumerPolicy(String policyKey) {
+    /**
+     * 统计消费者上的 ACTIVE 策略：先检查 Stream（经 Redis 绑定，配置选定消费组 stats-consumer-group）的 lag，再检查消费者运行状态；
+     * 启用所需的 queue.inspect / service.inspect 绑定。
+     *
+     * @return 策略 id
+     */
+    private long activateConsumerPolicy(String policyKey) {
+        long stream = seeded.investigation().streamId();
+        jdbc.update("INSERT INTO data_source_connection (connection_key, name, provider_type, endpoint,"
+                + " config_schema_name, config_schema_version, config_payload, status, created_at, updated_at) VALUES"
+                + " ('redis-local', 'R', 'REDIS', 'redis://redis:6379', 'redis.connection.config', 1, '{}', 'ACTIVE',"
+                + " UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))");
         jdbc.update(
-                "INSERT INTO capability_binding (managed_resource_id, capability_key, enabled, created_at, updated_at)"
-                        + " VALUES (?, 'service.inspect', TRUE, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))"
-                        + " ON DUPLICATE KEY UPDATE enabled = TRUE",
-                seeded.consumer());
-        recoveryPolicies.activate(new RecoveryPolicyActivationService.ActivateCommand(
-                seeded.consumer(),
-                policyKey,
-                "统计消费者恢复标准",
-                RecoveryPolicyCriteriaV1.of(
-                        60,
-                        60,
-                        List.of(new RecoveryCriterionV1.ServiceInspect(
-                                "consumer-running",
-                                "消费者持续运行",
-                                "statistics-consumer",
-                                new ServiceInspectArgumentsV1(),
-                                new RecoverySamplingV1(2, 5, 10),
-                                new RecoveryPredicateV1.FieldEquals("runtimeState", "RUNNING"),
-                                true)))));
+                "INSERT INTO resource_binding (managed_resource_id, data_source_connection_id, selector_schema_name,"
+                        + " selector_schema_version, selector_payload, created_at, updated_at) SELECT ?, id,"
+                        + " 'redis.resource.binding', 1, '{\"streamKey\": \"shortlink:stats\", \"consumerGroup\":"
+                        + " \"stats-consumer-group\"}', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3) FROM data_source_connection"
+                        + " WHERE connection_key = 'redis-local'",
+                stream);
+        for (Object[] binding :
+                List.of(new Object[] {stream, "queue.inspect"}, new Object[] {seeded.consumer(), "service.inspect"})) {
+            jdbc.update(
+                    "INSERT INTO capability_binding (managed_resource_id, capability_key, enabled, created_at,"
+                            + " updated_at) VALUES (?, ?, TRUE, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
+                    binding);
+        }
+        return recoveryPolicies
+                .activate(new RecoveryPolicyActivationService.ActivateCommand(
+                        seeded.consumer(),
+                        policyKey,
+                        "统计消费者恢复标准",
+                        RecoveryPolicyCriteriaV1.of(
+                                60,
+                                60,
+                                List.of(
+                                        new RecoveryCriterionV1.QueueInspect(
+                                                "stream-lag-drained",
+                                                "积压达标",
+                                                "statistics-stream",
+                                                new QueueInspectArgumentsV1(),
+                                                new RecoverySamplingV1(1, 0, null),
+                                                new RecoveryPredicateV1.NumericCompare(
+                                                        "lag", RecoveryPredicateV1.ComparisonOperator.LTE, 20.0),
+                                                true),
+                                        new RecoveryCriterionV1.ServiceInspect(
+                                                "consumer-running",
+                                                "消费者持续运行",
+                                                "statistics-consumer",
+                                                new ServiceInspectArgumentsV1(),
+                                                new RecoverySamplingV1(2, 5, 10),
+                                                new RecoveryPredicateV1.FieldEquals("runtimeState", "RUNNING"),
+                                                true)))))
+                .policyId();
+    }
+
+    private List<DispatchableWork> pendingExecutionWork() {
+        return workSources.stream()
+                .<DispatchableWork>flatMap(source -> source.findDispatchable().stream())
+                .filter(DispatchableWork.ActionExecution.class::isInstance)
+                .toList();
     }
 
     /** 以 root 查询 InnoDB 事务，直到有事务处于锁等待。 */

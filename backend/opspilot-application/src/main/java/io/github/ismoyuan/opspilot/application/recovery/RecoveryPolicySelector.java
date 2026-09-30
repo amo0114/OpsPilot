@@ -31,8 +31,11 @@ public class RecoveryPolicySelector {
         this.codecs = codecs;
     }
 
-    /** 选中的策略行及其已解码 Criteria。 */
-    public record SelectedRecoveryPolicy(RecoveryPolicyRecord policy, RecoveryPolicyCriteriaV1 criteria) {}
+    /** 选中的策略行、已解码 Criteria 与按此刻配置解析出的各项目标与 Provider（同序）。 */
+    public record SelectedRecoveryPolicy(
+            RecoveryPolicyRecord policy,
+            RecoveryPolicyCriteriaV1 criteria,
+            List<RecoveryPolicyValidator.ResolvedCriterion> resolved) {}
 
     /**
      * @param target 写操作的目标资源（策略挂在资源上，04 §51）
@@ -55,8 +58,9 @@ public class RecoveryPolicySelector {
                 policy.criteriaSchemaVersion(),
                 policy.criteriaPayload(),
                 RecoveryPolicyCriteriaV1.class);
+        List<RecoveryPolicyValidator.ResolvedCriterion> resolved;
         try {
-            validator.validate(target, criteria);
+            resolved = validator.validate(target, criteria);
         } catch (ApplicationException ex) {
             // 不合格的判据与其原因：check 为校验拒绝码，checkReason 为其原因；reason 固定表示“策略按此刻配置不可执行”
             Map<String, Object> details = new LinkedHashMap<>();
@@ -66,7 +70,7 @@ public class RecoveryPolicySelector {
             details.put("checkReason", ex.details().get("reason"));
             throw notFound(target, "POLICY_NOT_EXECUTABLE", details);
         }
-        return new SelectedRecoveryPolicy(policy, criteria);
+        return new SelectedRecoveryPolicy(policy, criteria, resolved);
     }
 
     private static ApplicationException notFound(ManagedResource target, String reason, Map<String, Object> extra) {

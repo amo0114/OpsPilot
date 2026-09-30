@@ -13,6 +13,7 @@ import io.github.ismoyuan.opspilot.application.approval.ApprovalDecisionCommand;
 import io.github.ismoyuan.opspilot.application.approval.ApprovalDecisionResult;
 import io.github.ismoyuan.opspilot.application.approval.ApprovalRepository;
 import io.github.ismoyuan.opspilot.application.error.ApplicationException;
+import io.github.ismoyuan.opspilot.application.execution.ActionExecutionRepository;
 import io.github.ismoyuan.opspilot.application.remediation.RemediationApplicationService;
 import io.github.ismoyuan.opspilot.application.remediation.RequestRemediationCommand;
 import io.github.ismoyuan.opspilot.application.remediation.RequestRemediationResult;
@@ -20,6 +21,7 @@ import io.github.ismoyuan.opspilot.application.remediation.ValidatedRemediationP
 import io.github.ismoyuan.opspilot.domain.capability.CapabilitySchema;
 import io.github.ismoyuan.opspilot.domain.capability.RiskLevel;
 import io.github.ismoyuan.opspilot.domain.error.ErrorCode;
+import io.github.ismoyuan.opspilot.domain.execution.ActionExecutionStatus;
 import io.github.ismoyuan.opspilot.domain.incident.IncidentKey;
 import io.github.ismoyuan.opspilot.domain.incident.IncidentStatus;
 import io.github.ismoyuan.opspilot.domain.remediation.ApprovalStatus;
@@ -183,7 +185,14 @@ class RemediationControllerTest {
     void rejectReturnsTheDecision() throws Exception {
         given(approvals.reject(new ApprovalDecisionCommand(53, 0, 8, "当前不希望重启消费者。", "demo-user")))
                 .willReturn(new ApprovalDecisionResult(
-                        53, ApprovalStatus.REJECTED, 1, new IncidentKey(KEY), IncidentStatus.DIAGNOSED, 9));
+                        53,
+                        ApprovalStatus.REJECTED,
+                        1,
+                        new IncidentKey(KEY),
+                        IncidentStatus.DIAGNOSED,
+                        9,
+                        null,
+                        false));
 
         mvc.perform(post("/api/v1/approvals/53/actions/reject")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -192,7 +201,52 @@ class RemediationControllerTest {
                 .andExpect(jsonPath("$.data.approvalStatus").value("REJECTED"))
                 .andExpect(jsonPath("$.data.approvalVersion").value(1))
                 .andExpect(jsonPath("$.data.incidentStatus").value("DIAGNOSED"))
-                .andExpect(jsonPath("$.data.incidentVersion").value(9));
+                .andExpect(jsonPath("$.data.incidentVersion").value(9))
+                .andExpect(jsonPath("$.data.execution").isEmpty());
+    }
+
+    /** 05 §39、§43：首次批准 202 且带出 PENDING Execution；相同决定的重复提交返回原决定与既有 Execution，200。 */
+    @Test
+    void approveIsAcceptedOnceAndReplaysWithOk() throws Exception {
+        ApprovalDecisionCommand command = new ApprovalDecisionCommand(53, 0, 8, "当前不希望重启消费者。", "demo-user");
+        ApprovalDecisionResult approved = new ApprovalDecisionResult(
+                53,
+                ApprovalStatus.APPROVED,
+                1,
+                new IncidentKey(KEY),
+                IncidentStatus.EXECUTING,
+                9,
+                new ActionExecutionRepository.ExecutionRef(61, ActionExecutionStatus.PENDING),
+                false);
+        given(approvals.approve(command)).willReturn(approved);
+
+        mvc.perform(post("/api/v1/approvals/53/actions/approve")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(DECISION))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.data.approvalId").value(53))
+                .andExpect(jsonPath("$.data.approvalStatus").value("APPROVED"))
+                .andExpect(jsonPath("$.data.incidentStatus").value("EXECUTING"))
+                .andExpect(jsonPath("$.data.incidentVersion").value(9))
+                .andExpect(jsonPath("$.data.execution.executionId").value(61))
+                .andExpect(jsonPath("$.data.execution.status").value("PENDING"));
+
+        given(approvals.approve(command))
+                .willReturn(new ApprovalDecisionResult(
+                        53,
+                        ApprovalStatus.APPROVED,
+                        1,
+                        new IncidentKey(KEY),
+                        IncidentStatus.EXECUTING,
+                        9,
+                        new ActionExecutionRepository.ExecutionRef(61, ActionExecutionStatus.RUNNING),
+                        true));
+        mvc.perform(post("/api/v1/approvals/53/actions/approve")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(DECISION))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.execution.executionId").value(61))
+                .andExpect(jsonPath("$.data.execution.status").value("RUNNING"));
     }
 
     /** 05 §38、§43：批准的前置拒绝与已决定、版本冲突各有其码。 */

@@ -29,6 +29,8 @@ public enum TimelineEventType {
     REMEDIATION_PROPOSED,
     /** 为 Action 创建 PENDING Approval，Incident 同事务 DIAGNOSED → AWAITING_APPROVAL（01 §35、04 §77）。 */
     APPROVAL_REQUESTED,
+    /** Approval 被批准：同事务创建 PENDING Execution 并冻结恢复合同，Incident AWAITING_APPROVAL → EXECUTING（04 §78）。 */
+    APPROVAL_APPROVED,
     /** Approval 被拒绝，Incident 回到 DIAGNOSED（01 §24.2）。 */
     APPROVAL_REJECTED,
     /** Approval 被撤回（05 §42），Incident 回到 DIAGNOSED；01 §35 最低清单之外的补充类型。 */
