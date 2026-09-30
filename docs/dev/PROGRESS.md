@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-30（B24 REVIEW，Base bdfbaac；B24-V1 exit 0，B24-R1 PASS，待提交，未提交）
+> 最近更新：2026-09-30（B24 DONE，commit 0b934ed；B25 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -74,7 +74,7 @@
 | TASK-064 | B20 | Remediation Proposal 校验 | DONE | commit a25d1b9（B20，Base 1175caa） | B20-V1 verify exit 0＋RemediationDraftIntegrationTest（校验与 Java 策略）；真实模型建议经 Java 校验得 MEDIUM/true；B20-R1 PASS，待提交 |
 | TASK-065 | B21 | request-remediation | DONE | commit ef115c8（B21，Base 0edfb87） | B21-V1 verify exit 0＋RemediationApprovalIntegrationTest（创建与回滚）、RemediationControllerTest；B21-R1 PASS，待提交 |
 | TASK-066 | B21 | Approval API | DONE | commit ef115c8（B21，Base 0edfb87） | B21-V1 verify exit 0＋RemediationApprovalIntegrationTest（查询/拒绝/撤回/批准复核/并发）、RemediationControllerTest；批准成功路径属 TASK-069；B21-R1 PASS，待提交 |
-| TASK-067 | B24 | Approval 并发与历史方案保护 | REVIEW | 未提交（B24，Base bdfbaac）：策略选择、批准锁前快照修复与策略复核、RECOVERY_POLICY_AMBIGUOUS | B24-V1 verify exit 0＋RemediationApprovalIntegrationTest 13/13（真实 MySQL，含锁等待交错与并发）、RemediationControllerTest 16/16＋变异 3 项；B24-R1 PASS，待提交 |
+| TASK-067 | B24 | Approval 并发与历史方案保护 | DONE | commit 0b934ed（B24，Base bdfbaac） | B24-V1 verify exit 0＋RemediationApprovalIntegrationTest 13/13（真实 MySQL，含锁等待交错与并发）、RemediationControllerTest 16/16＋变异 3 项；B24-R1 PASS；批准成功路径属 TASK-069 |
 | TASK-068 | B22 | ActionExecution 数据结构 | DONE | commit 1a655fd（B22，Base 423baf7） | B22-V1 verify exit 0＋ActionExecutionSchemaTest 33/33（真实 MySQL）＋变异 2 项；B22-R1 PASS |
 | TASK-069 | B25 | Approve → Execution | TODO | — | NOT RUN |
 | TASK-070 | B26 | Docker service.restart Executor | TODO | — | NOT RUN |
@@ -872,7 +872,7 @@
 
 ### B24 — 审批并发、过期计划与策略准入
 
-- 状态：REVIEW（实现与针对性验证完成，B24-V1 exit 0；B24-R1 PASS，未提交）
+- 状态：DONE（B24-R1 PASS，已提交 0b934ed）
 - 成员及顺序：TASK-067；批外前置：TASK-066 DONE（ef115c8）、TASK-068/074 DONE（1a655fd）、TASK-075/076 DONE（e9d32c6）
 - Base SHA：bdfbaac0d8a57bd40e454b4a9f338b91eb8957f0
 - 范围：domain ErrorCode 增加 05 已列的 RECOVERY_POLICY_AMBIGUOUS；application/recovery 选择目标资源唯一合法 ACTIVE 策略（0 条 NOT_FOUND、多条 AMBIGUOUS、1 条则按正式 Codec 解码并以 RecoveryPolicyValidator 复核类型/目标/采样与当前绑定，不合法视为没有可用策略）；ApprovalApplicationService：B21-R1 提示的一致性读快照问题（Approval 所属 Incident 的无锁查询移到事务之外，事务内首先取 Incident → Approval 行锁，之后的复核读取锁后的最新数据）、批准复核加入策略选择；审批并发（批准与拒绝/撤回并发只有一个决定生效）与经真实 request-remediation 产生方案的取消联动端到端断言（回填 TASK-019/026 相关待处理行）；测试；docs/dev。明确不做：批准成功路径——PENDING → APPROVED、冻结快照写入、创建 ActionExecution、→ EXECUTING、幂等键、202 响应（TASK-069）；执行 Worker（070～）；API 结构变化；新迁移、新依赖
@@ -893,7 +893,7 @@
   - 本轮实际运行：backend/ `./mvnw -B test -pl opspilot-infrastructure,opspilot-web -am -Dtest=RemediationApprovalIntegrationTest,RemediationControllerTest -Dsurefire.failIfNoSpecifiedTests=false`，exit 0；真实 MySQL 集成 13、Web 16，共 29 tests，0 失败/错误/跳过。包含锁等待期间配置提交、策略准入各分支、批准与拒绝并发、真实方案的 Incident 取消联动；日志 `/tmp/b24-r1-tests.log`。`git diff --check` 通过。
   - 完整 clean verify 本轮 NOT RUN，沿用实施方 B24-V1；批准成功路径/快照冻结/Execution 创建、ai-runtime、真实 LLM、S1～S3、CCG NOT RUN。未修改实现代码、未提交、未推送；保持 REVIEW，提交并回填真实 SHA 后再 DONE。
 - 修改文件：新增 application/recovery/RecoveryPolicySelector；修改 domain/error/ErrorCode、application/approval/ApprovalApplicationService，测试 infrastructure investigation/RemediationApprovalIntegrationTest、web remediation/RemediationControllerTest；docs/dev。Migration：无；新增依赖：无
-- 提交：未提交（B24-R1 PASS，待用户提交）；范围外问题：无新增
+- 提交：代码提交 0b934ed7e70bc4d1a95490269b109c63328d0b4b（feat(approval): recovery policy admission and post-lock rechecks for approvals (TASK-067)）；SHA 回填为后续 docs 提交；未推送；范围外问题：无新增
 
 ### TASK-039 修复 — 准入 step_no 分配并发死锁（B12-R1/R2 约定）
 
