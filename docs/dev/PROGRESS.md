@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-30（B26 REVIEW，Base 59b015b；B26-V1 exit 0，B26-R1 PASS，未提交）
+> 最近更新：2026-09-30（B26 DONE，commit 96dc7cd；B27 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -77,8 +77,8 @@
 | TASK-067 | B24 | Approval 并发与历史方案保护 | DONE | commit 0b934ed（B24，Base bdfbaac） | B24-V1 verify exit 0＋RemediationApprovalIntegrationTest 13/13（真实 MySQL，含锁等待交错与并发）、RemediationControllerTest 16/16＋变异 3 项；B24-R1 PASS；批准成功路径属 TASK-069 |
 | TASK-068 | B22 | ActionExecution 数据结构 | DONE | commit 1a655fd（B22，Base 423baf7） | B22-V1 verify exit 0＋ActionExecutionSchemaTest 33/33（真实 MySQL）＋变异 2 项；B22-R1 PASS |
 | TASK-069 | B25 | Approve → Execution | DONE | commit 90d80a2（B25，Base 050aa1a） | B25-V1 verify exit 0＋RemediationApprovalIntegrationTest 18/18（真实 MySQL）、RemediationControllerTest 17/17＋变异 3 项；B25-R1 PASS；真实 Worker 前 Execution 保持 PENDING（TASK-071） |
-| TASK-070 | B26 | Docker service.restart Executor | REVIEW | 未提交（B26，Base 59b015b）：Engine API restart 写路径与 DockerServiceRestartExecutor | B26-V1 verify exit 0＋DockerServiceRestartExecutorIntegrationTest 6/6（含真实 Docker 重启）＋变异 1 项；B26-R1 PASS，待提交 |
-| TASK-071 | B26 | Execution Worker | REVIEW | 未提交（B26，Base 59b015b）：ActionExecutionService、条件更新与结果落账、真实 Worker 替换占位 | B26-V1 verify exit 0＋ActionExecutionWorkerIntegrationTest 8/8（真实 MySQL，含真实 Docker 端到端）＋变异 3 项；B26-R1 PASS，待提交 |
+| TASK-070 | B26 | Docker service.restart Executor | DONE | commit 96dc7cd（B26，Base 59b015b） | B26-V1 verify exit 0＋DockerServiceRestartExecutorIntegrationTest 6/6（含真实 Docker 重启）＋变异 1 项；B26-R1 PASS |
+| TASK-071 | B26 | Execution Worker | DONE | commit 96dc7cd（B26，Base 59b015b） | B26-V1 verify exit 0＋ActionExecutionWorkerIntegrationTest 8/8（真实 MySQL，含真实 Docker 端到端）＋变异 3 项；B26-R1 PASS；成功后 Verification 属 TASK-080，未知结果核对属 TASK-072 |
 | TASK-072 | B27 | Execution Reconciliation | TODO | — | NOT RUN |
 | TASK-073 | B27 | Execution Startup Recovery | TODO | — | NOT RUN |
 | TASK-074 | B22 | RecoveryPolicy / Verification 数据结构 | DONE | commit 1a655fd（B22，Base 423baf7） | B22-V1 verify exit 0＋RecoverySchemaTest 43/43（真实 MySQL）＋变异 3 项；B22-R1 PASS |
@@ -922,7 +922,7 @@
 
 ### B26 — Docker Restart 与执行 Worker
 
-- 状态：REVIEW（实现与针对性验证完成，B26-V1 exit 0；B26-R1 PASS，未提交）
+- 状态：DONE（B26-R1 PASS，已提交 96dc7cd）
 - 成员及顺序：TASK-070 → TASK-071；批外前置：TASK-069 DONE（90d80a2，B25-R1 PASS）
 - Base SHA：59b015b1f7f9a8338e783ba078a4651bfe716ac5
 - 范围：TASK-070——infrastructure Docker Engine API 客户端增加唯一写路径 `POST /containers/{id}/restart`（沿用 TASK-057 的 unix socket Engine API 客户端，无新依赖；禁止 Runtime.exec/ProcessBuilder/CLI/shell），DockerServiceRestartExecutor 区分“确定未生效/失败”“成功”与“结果未知”（请求写出后的超时或断连为未知），结果 service.restart.result / 1；TASK-071——application 执行 Worker：PENDING 时在事务外按执行上下文的连接与容器名解析真实容器 id → 短事务锁 Incident、复核 Execution 仍 PENDING 与 CHANGE 绑定/目标未变、条件更新 PENDING → RUNNING（保存容器 id 与 started_at）＋ACTION_EXECUTION_STARTED → 事务外发出一次 restart → 结果事务：成功 SUCCEEDED＋Plan EXECUTED＋ACTION_EXECUTION_SUCCEEDED；明确失败 FAILED＋Plan EXECUTED＋Incident → DIAGNOSED＋ACTION_EXECUTION_FAILED；未知保持 RUNNING（核对属 TASK-072）；非 PENDING 不派发 CHANGE。以真实 Worker 替换占位；测试；docs/dev。明确不做：有界只读核对（072）、RUNNING 启动恢复（073）、Verification 创建与 Incident → VERIFYING（080）、UI/SSE、新迁移、新依赖
@@ -943,7 +943,7 @@
   - 本轮实际验证：backend/ `./mvnw -B test -pl opspilot-infrastructure -am -Dtest=DockerServiceRestartExecutorIntegrationTest,ActionExecutionWorkerIntegrationTest,RemediationApprovalIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false`，exit 0；32 tests（6＋8＋18），0 失败/错误/跳过。包含真实 Docker 执行器重启、真实 MySQL/Worker/Docker 路径、四 Worker 并发单次派发、状态/版本条件更新及未知结果不重发；日志 `/tmp/b26-r1-tests.log`。测试容器已清理；`git diff --check` 通过。
   - 完整 clean verify 本轮 NOT RUN，沿用实施方 B26-V1；ShortLink/S3、reconciliation、启动恢复、Verification 创建、ai-runtime、真实 LLM、CCG NOT RUN。08 TASK-071 明确将 Verification 集成留到 TASK-080，因此成功后暂留 EXECUTING 可接受；未知结果待 TASK-072 接入核对，本次 PASS 不表示恢复闭环已完成。未修改实现代码、未提交、未推送；保持 REVIEW，提交与回填真实 SHA 后再 DONE。
 - 修改文件：新增 application/execution/{ActionExecutionService,ServiceRestartExecutor,ServiceRestartResultV1}、domain/timeline/ActionExecutionEventPayloadV1、infrastructure/dispatch/UnwiredActionExecutionWorker、infrastructure/provider/DockerServiceRestartExecutor，测试 DockerServiceRestartExecutorIntegrationTest、ActionExecutionWorkerIntegrationTest；删除 infrastructure/dispatch/PlaceholderActionExecutionWorker；修改 application/execution/ActionExecutionRepository、domain TimelineEventType、infrastructure dispatch/DispatchConfiguration、persistence/mybatis/execution/{ActionExecutionMapper,MyBatisActionExecutions}＋XML、provider/{DockerEngineClient,ProviderCallException,ProviderConfiguration}、schema/JacksonSchemaCodecRegistry，测试 RemediationApprovalIntegrationTest、RemediationFixture、JacksonSchemaCodecRegistryTest；docs/dev。Migration：无；新增依赖：无
-- 提交：未提交（B26-R1 PASS，待用户提交）；范围外问题：见待处理问题新增行（执行成功后 EXECUTING 暂停与未知结果核对，归 072/080）
+- 提交：代码提交 96dc7cd27afc01ddd39a96ee6b8e8e2b28359538（feat(execution): docker service.restart executor and execution worker (TASK-070–071)）；SHA 回填为后续 docs 提交；未推送；范围外问题：见待处理问题（执行成功后 EXECUTING 暂停与未知结果核对，归 072/080）
 
 ### TASK-039 修复 — 准入 step_no 分配并发死锁（B12-R1/R2 约定）
 
