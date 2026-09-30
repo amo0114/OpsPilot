@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-30（B23 REVIEW，B23-R1 P2 已修复，B23-V2 exit 0，B23-R2 PASS，待提交）
+> 最近更新：2026-09-30（B23 DONE，commit e9d32c6；B24 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -82,8 +82,8 @@
 | TASK-072 | B27 | Execution Reconciliation | TODO | — | NOT RUN |
 | TASK-073 | B27 | Execution Startup Recovery | TODO | — | NOT RUN |
 | TASK-074 | B22 | RecoveryPolicy / Verification 数据结构 | DONE | commit 1a655fd（B22，Base 423baf7） | B22-V1 verify exit 0＋RecoverySchemaTest 43/43（真实 MySQL）＋变异 3 项；B22-R1 PASS |
-| TASK-075 | B23 | RecoveryPolicy Criteria V1 | REVIEW | 未提交（B23，Base 8afeae9）：application/recovery 类型与投影、Codec 注册 | B23-V1 verify exit 0＋RecoveryPolicyCriteriaCodecTest 55/55＋变异 4 项；B23-R1 P2 已关闭（B23-V2 exit 0），B23-R2 PASS，待提交 |
-| TASK-076 | B23 | RecoveryPolicy Activation | REVIEW | 未提交（B23，Base 8afeae9）：激活服务/校验器、MyBatis、S3 Seed、组件详情 recoveryPolicy | B23-V1 verify exit 0＋RecoveryPolicyActivationIntegrationTest 6/6、ShortLinkDemoSeedTest 8/8（真实 MySQL）、系统查询与 Web 测试＋变异 4 项；B23-R1 P2 已关闭（B23-V2 exit 0），B23-R2 PASS，待提交 |
+| TASK-075 | B23 | RecoveryPolicy Criteria V1 | DONE | commit e9d32c6（B23，Base 8afeae9） | B23-V2 verify exit 0＋RecoveryPolicyCriteriaCodecTest 63/63、JacksonSchemaCodecRegistryTest 48/48＋变异 4 项；B23-R1 P2（小数截断）已修复，B23-R2 PASS |
+| TASK-076 | B23 | RecoveryPolicy Activation | DONE | commit e9d32c6（B23，Base 8afeae9） | B23-V2 verify exit 0＋RecoveryPolicyActivationIntegrationTest 6/6、ShortLinkDemoSeedTest 8/8（真实 MySQL）、系统查询与 Web 测试＋变异 4 项；B23-R2 PASS |
 | TASK-077 | B28 | Recovery Predicate Evaluator | TODO | — | NOT RUN |
 | TASK-078 | B28 | Recovery Sampling Runner | TODO | — | NOT RUN |
 | TASK-079 | B28 | Recovery Verification Runner | TODO | — | NOT RUN |
@@ -836,7 +836,7 @@
 
 ### B23 — 恢复策略类型、合法性校验与激活
 
-- 状态：REVIEW（B23-R1 P2 已修复，B23-V2 exit 0；B23-R2 PASS，待提交）
+- 状态：DONE（B23-R2 PASS，已提交 e9d32c6）
 - 成员及顺序：TASK-075 → TASK-076；批外前置：TASK-074 DONE（1a655fd，B22-R1 PASS）、TASK-029 DONE（d796643，B07）、TASK-044 与 TASK-046 DONE（36fd25a，B13）
 - Base SHA：8afeae94a7d927c8ec13bd0e0a66163a9fc3730c
 - 范围：TASK-075——application 恢复策略类型（RecoveryPolicyCriteriaV1、RecoveryCriterionV1 按 capabilityKey 判别并复用各能力强类型参数、RecoverySamplingV1、RecoveryPredicateV1 按 type 判别 FIELD_EQUALS/NUMERIC_COMPARE/MONOTONIC_TREND）、注册标量投影（06 §113 点名：service.inspect runtimeState/healthStatus、queue.inspect lag/pendingCount、metrics.query latest）、三值 TRUE/FALSE/UNKNOWN 类型、recovery.policy.criteria / 1 在 SchemaCodecRegistry 注册（只接受 version 1）；TASK-076——激活服务（锁 managed_resource 父行 → 每个 Criterion 的目标资源同系统、经 CapabilityAccess 的 OBSERVE/绑定/唯一 Provider 判定、谓词与结果字段相容、非空且至少一项 required → 退休旧 ACTIVE → 插入新版本 ACTIVE）、ACTIVE 策略查询、MyBatis 实现、S3 合法 Policy Seed（demo 位置，按 09 §75 B→C→D→A）、组件详情 recoveryPolicy 填充（待处理问题行）；测试；docs/dev。明确不做：谓词求值与三值合取（TASK-077）、采样/Verification Runner（078～079）、批准事务冻结快照与 Execution 创建（069）、审批并发（067）、公开策略管理 API（05 未定义）、UI、新迁移（沿用 V006）、新依赖
@@ -868,7 +868,7 @@
   - 本轮实跑：backend/ `./mvnw -B test -pl opspilot-infrastructure -am -Dtest=RecoveryPolicyCriteriaCodecTest,JacksonSchemaCodecRegistryTest -Dsurefire.failIfNoSpecifiedTests=false`，exit 0；111 tests（63＋48），0 失败/错误/跳过，包含所有整数 Criteria 字段、整值小数、另一注册 Schema 的整数字段及 12.5/20.5 阈值往返。日志 `/tmp/b23-r2-tests.log`；`git diff --check` 通过。
   - 完整 clean verify 本轮 NOT RUN，最终完整构建沿用实施方 B23-V2；R1 的激活/Seed/查询/Web 针对性证据保留。本轮 ai-runtime、真实 LLM、S1～S3、CCG NOT RUN。未修改实现代码、未提交、未推送；批次及成员保持 REVIEW，待提交并回填真实 SHA 后再 DONE。
 - 修改文件：新增 application/recovery/{CriterionResult,RecoveryChecks,RecoveryCriterionV1,RecoveryField,RecoveryPolicyActivationService,RecoveryPolicyCriteriaV1,RecoveryPolicyRecord,RecoveryPolicyRepository,RecoveryPolicyValidator,RecoveryPredicateV1,RecoverySamplingV1}、application/system/query/ActiveRecoveryPolicyProjection、infrastructure/persistence/mybatis/recovery/{MyBatisRecoveryPolicies,RecoveryPolicyMapper}＋RecoveryPolicyMapper.xml、测试 infrastructure/recovery/RecoveryPolicyActivationIntegrationTest、infrastructure/schema/RecoveryPolicyCriteriaCodecTest；修改 application/system/query/{ResourceCapabilityProjection,ResourceDetailView,SystemQueryService}、infrastructure/persistence/mybatis/system/{MyBatisSystemQueryRepository,SystemQueryMapper}＋SystemQueryMapper.xml、infrastructure/schema/JacksonSchemaCodecRegistry、db/demo/R__shortlink_demo_seed.sql，测试 ShortLinkDemoSeedTest、MyBatisSystemQueryRepositoryTest、web SystemControllerTest；docs/dev。Migration：无（沿用 V006）；新增依赖：无；新增错误码：无
-- 提交：未提交（B23-R2 PASS，待用户提交）；范围外问题：无新增
+- 提交：代码提交 e9d32c62fbbdadff4d3f9ab1e37ab0f00e779f48（feat(recovery): recovery policy criteria codec, activation and S3 seed (TASK-075–076)）；SHA 回填为后续 docs 提交；未推送；范围外问题：无新增
 
 ### TASK-039 修复 — 准入 step_no 分配并发死锁（B12-R1/R2 约定）
 
