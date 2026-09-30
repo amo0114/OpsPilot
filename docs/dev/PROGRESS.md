@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-10-01（B29 REVIEW，Base c0eb35c，B29-R2 PASS，B29-V2 通过，待提交）
+> 最近更新：2026-10-01（B29 DONE，commit cdc9f0e；B30 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -87,8 +87,8 @@
 | TASK-077 | B28 | Recovery Predicate Evaluator | DONE | commit c9dab5b（B28，Base db9e205） | B28-V1 verify exit 0＋RecoveryPredicateEvaluatorTest 11/11＋变异 2 项；B28-R1 NEEDS CHANGES → 已修复，B28-V2 verify exit 0，B28-R2 PASS |
 | TASK-078 | B28 | Recovery Sampling Runner | DONE | commit c9dab5b（B28，Base db9e205） | B28-V1 verify exit 0＋RecoveryVerificationIntegrationTest 10/10（采样身份/时间/间隔/deadline/运行时复核）＋变异 3 项；B28-R1 NEEDS CHANGES → 已修复，B28-V2 verify exit 0，B28-R2 PASS |
 | TASK-079 | B28 | Recovery Verification Runner | DONE | commit c9dab5b（B28，Base db9e205） | B28-V1 verify exit 0＋RecoveryVerificationIntegrationTest 10/10（短路、矩阵、终态持久化、续采、并发）＋变异 1 项；B28-R1 NEEDS CHANGES → 已修复，B28-V2 verify exit 0，B28-R2 PASS |
-| TASK-080 | B29 | Execution Success → Verification | REVIEW | 未提交（B29，Base c0eb35c） | B29-V1 verify exit 0＋ActionExecutionWorkerIntegrationTest 11/11、ActionExecutionReconciliationIntegrationTest 7/7、ExecutionStartupRecoveryIntegrationTest 5/5＋变异 1 项；B29-R1 NEEDS CHANGES → 已修复，B29-V2 verify exit 0（含 ApplicationWiringTest），B29-R2 PASS（独立测试 50/50），待提交 |
-| TASK-081 | B29 | Manual Verify Recovery | REVIEW | 未提交（B29，Base c0eb35c） | B29-V1 verify exit 0＋VerifyRecoveryIntegrationTest 4/4、RecoveryControllerTest 12/12＋变异 1 项；B29-R1 NEEDS CHANGES → 已修复，B29-V2 verify exit 0（含 ApplicationWiringTest），B29-R2 PASS（独立测试 50/50），待提交 |
+| TASK-080 | B29 | Execution Success → Verification | DONE | commit cdc9f0e（B29，Base c0eb35c） | B29-V1 verify exit 0＋ActionExecutionWorkerIntegrationTest 11/11、ActionExecutionReconciliationIntegrationTest 7/7、ExecutionStartupRecoveryIntegrationTest 5/5＋变异 1 项；B29-R1 NEEDS CHANGES → 已修复，B29-V2 verify exit 0（含 ApplicationWiringTest），B29-R2 PASS（独立测试 50/50），待提交 |
+| TASK-081 | B29 | Manual Verify Recovery | DONE | commit cdc9f0e（B29，Base c0eb35c） | B29-V1 verify exit 0＋VerifyRecoveryIntegrationTest 4/4、RecoveryControllerTest 12/12＋变异 1 项；B29-R1 NEEDS CHANGES → 已修复，B29-V2 verify exit 0（含 ApplicationWiringTest），B29-R2 PASS（独立测试 50/50），待提交 |
 | TASK-082 | B30 | Verification Outcome Transition | TODO | — | NOT RUN |
 | TASK-083 | B30 | Verification Startup Recovery | TODO | — | NOT RUN |
 | TASK-084 | B31 | Timeline Query | TODO | — | NOT RUN |
@@ -1021,7 +1021,7 @@
 
 ### B29 — 执行后验证与手动验证入口
 
-- 状态：REVIEW（B29-R2 PASS，B29-V2 通过，待提交；成员 TASK-080/081 均 REVIEW，基线不变）
+- 状态：DONE（B29-R2 PASS，已提交 cdc9f0e）
 - 成员及顺序：TASK-080 → TASK-081；批外前置：TASK-069 DONE（90d80a2）、TASK-071 DONE（96dc7cd）、TASK-074/075 DONE（1a655fd、e9d32c6）、TASK-079 DONE（c9dab5b，B28-R2 PASS）
 - Base SHA：c0eb35c202d6724c4b3b3674933670557a365971
 - 范围：TASK-080——执行确定成功的结果事务（直接成功与 B27 只读核对确认两条路径）在同一事务内：Execution SUCCEEDED＋方案 EXECUTED，以 Execution 已冻结的 recovery_policy 身份与快照创建唯一 PENDING Verification（verification_no 按 Incident 递增、deadline_at＝创建时间＋快照 maxDurationSeconds），Incident EXECUTING → VERIFYING＋时间线，提交后派发 Verification；不重新选择 ACTIVE 策略。TASK-081——`POST /api/v1/incidents/{incidentKey}/actions/verify-recovery`（expectedVersion、resourceKey、note）：同一事务先锁 Incident，DIAGNOSED 与版本复核，资源属于本系统，没有 PENDING/RUNNING Verification（RECOVERY_VERIFICATION_ALREADY_RUNNING），选择唯一合法 ACTIVE 策略（RECOVERY_POLICY_NOT_FOUND/AMBIGUOUS）并冻结快照，创建 action_execution_id 为空的 PENDING Verification，DIAGNOSED → VERIFYING＋时间线，提交后派发，202 返回 verificationNo、status=PENDING 与 Incident 版本；测试；docs/dev。明确不做：Verification 结果的 Incident 迁移（082）、Verification 补派发来源/启动恢复（083）、GET 验证列表/详情（084～086 视图）、UI/SSE、新迁移、新依赖
@@ -1061,7 +1061,7 @@
   - 完整 clean verify 本轮 NOT RUN，沿用实施方修复后 B29-V2；S3、真实 Redis/Docker 恢复采样、ai-runtime、真实 LLM、CCG NOT RUN。TASK-082/083 的 Incident 结果迁移与 Verification 补派发/启动恢复仍属后续任务，本次 PASS 不表示完整恢复闭环验收完成。
   - Commit Recommendation：可进入本批提交步骤；本轮仅更新审查/交接记录，未修改实现、未提交、未推送。B29 与成员保持 REVIEW，按用户授权提交并回填真实 SHA 后才能 DONE，不提前开始 B30。
 - 修改文件：新增 application/recovery/{RecoveryVerificationCreator,RecoveryVerificationApplicationService,VerifyRecoveryCommand,VerifyRecoveryResult}、application/execution/ExecutionVerification、domain/timeline/RecoveryVerificationRequestedPayloadV1、web/recovery/{RecoveryController,VerifyRecoveryRequest}，测试 VerifyRecoveryIntegrationTest、RecoveryControllerTest、opspilot-boot ApplicationWiringTest（R1 回归）；修改 application/execution/{ActionExecutionRepository,ActionExecutionService,ActionExecutionRecoveryService}、application/recovery/RecoveryVerificationRepository、domain ErrorCode、TimelineEventType、infrastructure persistence/mybatis/execution/{ActionExecutionMapper,MyBatisActionExecutions}＋XML、persistence/mybatis/recovery/{RecoveryVerificationMapper,MyBatisRecoveryVerifications}＋XML，测试 ActionExecutionWorkerIntegrationTest、ActionExecutionReconciliationIntegrationTest、ExecutionStartupRecoveryIntegrationTest、InvestigationFixture；docs/dev。Migration：无（沿用 V006 recovery_verification 与唯一约束）；新增依赖：无
-- 提交：未提交；范围外问题：Verification 终态后 Incident 仍 VERIFYING（082）；Verification 补派发来源/启动恢复（083）
+- 提交：代码提交 cdc9f0eca566c9602bb904c702a8d0e97617c0ea（feat(recovery): execution success starts verification and manual verify-recovery (TASK-080–081)）；SHA 回填为后续 docs 提交；未推送；范围外问题：Verification 终态后 Incident 仍 VERIFYING（082）；Verification 补派发来源/启动恢复（083）
 
 ### TASK-039 修复 — 准入 step_no 分配并发死锁（B12-R1/R2 约定）
 
