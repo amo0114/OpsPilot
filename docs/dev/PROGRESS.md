@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-09-30（B25 REVIEW，Base 050aa1a；B25-V1 exit 0，B25-R1 PASS，未提交）
+> 最近更新：2026-09-30（B25 DONE，commit 90d80a2；B26 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -76,7 +76,7 @@
 | TASK-066 | B21 | Approval API | DONE | commit ef115c8（B21，Base 0edfb87） | B21-V1 verify exit 0＋RemediationApprovalIntegrationTest（查询/拒绝/撤回/批准复核/并发）、RemediationControllerTest；批准成功路径已由 TASK-069（B25）回填；B21-R1 PASS，待提交 |
 | TASK-067 | B24 | Approval 并发与历史方案保护 | DONE | commit 0b934ed（B24，Base bdfbaac） | B24-V1 verify exit 0＋RemediationApprovalIntegrationTest 13/13（真实 MySQL，含锁等待交错与并发）、RemediationControllerTest 16/16＋变异 3 项；B24-R1 PASS；批准成功路径属 TASK-069 |
 | TASK-068 | B22 | ActionExecution 数据结构 | DONE | commit 1a655fd（B22，Base 423baf7） | B22-V1 verify exit 0＋ActionExecutionSchemaTest 33/33（真实 MySQL）＋变异 2 项；B22-R1 PASS |
-| TASK-069 | B25 | Approve → Execution | REVIEW | 未提交（B25，Base 050aa1a）：批准成功路径、快照与执行上下文、Execution 仓储与 PENDING 补派发来源、批准 202/200 | B25-V1 verify exit 0＋RemediationApprovalIntegrationTest 18/18（真实 MySQL）、RemediationControllerTest 17/17＋变异 3 项；B25-R1 PASS，待提交 |
+| TASK-069 | B25 | Approve → Execution | DONE | commit 90d80a2（B25，Base 050aa1a） | B25-V1 verify exit 0＋RemediationApprovalIntegrationTest 18/18（真实 MySQL）、RemediationControllerTest 17/17＋变异 3 项；B25-R1 PASS；真实 Worker 前 Execution 保持 PENDING（TASK-071） |
 | TASK-070 | B26 | Docker service.restart Executor | TODO | — | NOT RUN |
 | TASK-071 | B26 | Execution Worker | TODO | — | NOT RUN |
 | TASK-072 | B27 | Execution Reconciliation | TODO | — | NOT RUN |
@@ -897,7 +897,7 @@
 
 ### B25 — 批准事务、执行前快照与派发
 
-- 状态：REVIEW（实现与针对性验证完成，B25-V1 exit 0；B25-R1 PASS，未提交）
+- 状态：DONE（B25-R1 PASS，已提交 90d80a2）
 - 成员及顺序：TASK-069；批外前置：TASK-067 DONE（0b934ed，B24-R1 PASS）、TASK-068/074 DONE（1a655fd）、TASK-075/076 DONE（e9d32c6）
 - Base SHA：050aa1a6168a028bbd356b15cadf6782cf808fec
 - 范围：application（批准成功路径：同一短事务在全部复核与策略选择之后冻结恢复合同快照与执行上下文、Approval PENDING → APPROVED、插入 PENDING ActionExecution、Incident AWAITING_APPROVAL → EXECUTING、APPROVAL_APPROVED 时间线，提交后派发；05 §43 相同决定重复提交返回原决定与既有 Execution；删除 B24 过渡分支 EXECUTION_NOT_AVAILABLE）；执行设置（opspilot.execution.max-reconciliation-attempts，默认 3，其余核对配置属 TASK-072）；infrastructure（ActionExecution 写入/查询 MyBatis、PENDING Execution 补派发来源、占位 Worker 不再抛出）；web（批准 202 首次 / 200 幂等命中，05 §39 响应体含 execution）；测试；docs/dev。明确不做：Docker restart 与 Worker（TASK-070/071）、核对与启动恢复（072/073，RUNNING 不在补派发来源中）、Verification 创建（成功完成事务，TASK-071 起）、谓词求值与采样（077～079）、UI/SSE、新迁移（沿用 V005/V006）、新依赖
@@ -918,7 +918,7 @@
   - 本轮实际验证：backend/ `./mvnw -B test -pl opspilot-infrastructure,opspilot-web -am -Dtest=RemediationApprovalIntegrationTest,RemediationControllerTest,JacksonSchemaCodecRegistryTest -Dsurefire.failIfNoSpecifiedTests=false`，exit 0；83 tests（真实 MySQL 审批 18＋Web 17＋Codec 48），0 失败/错误/跳过，包含独立连接证明提交后可见、事务回滚、重复/并发批准、派发失败后 PENDING 可重新发现。日志 `/tmp/b25-r1-tests.log`；`git diff --check` 通过。
   - 完整 clean verify 本轮 NOT RUN，沿用实施方 B25-V1；真实 Worker/Docker restart、reconciliation、Verification、ai-runtime、真实 LLM、S1～S3、CCG NOT RUN。当前批准后保持 PENDING/EXECUTING 是 TASK-070/071 前的已记录阶段限制，本次 PASS 不表示写操作与恢复闭环已完成。未修改实现代码、未提交、未推送；保持 REVIEW，提交并回填真实 SHA 后再 DONE。
 - 修改文件：新增 domain/execution/{ActionExecutionStatus,ActionExecutionIdentity}、domain/timeline/ApprovalApprovedPayloadV1、application/execution/{ActionExecutionRepository,ExecutionSettings,ServiceRestartExecutionContextV1}、application/recovery/RecoveryPolicySnapshotV1、infrastructure/config/{ExecutionProperties,ExecutionConfiguration}、infrastructure/persistence/mybatis/execution/{ActionExecutionMapper,MyBatisActionExecutions,MyBatisPendingExecutionWorkSource}＋ActionExecutionMapper.xml；修改 domain TimelineEventType、application/approval/{ApprovalApplicationService,ApprovalDecisionResult}、application/recovery/{RecoveryPolicySelector,RecoveryPolicyValidator}、infrastructure/dispatch/PlaceholderActionExecutionWorker、infrastructure/schema/JacksonSchemaCodecRegistry、web/remediation/{RemediationController,RemediationResponses}，测试 InvestigationFixture（清理 action_execution）、RemediationApprovalIntegrationTest、RemediationControllerTest；docs/dev。Migration：无；新增依赖：无
-- 提交：未提交（B25-R1 PASS，待用户提交）；范围外问题：无新增
+- 提交：代码提交 90d80a2d48399248632219d656aaa88a74073898（feat(approval): approve creates the pending execution with a frozen recovery contract (TASK-069)）；SHA 回填为后续 docs 提交；未推送；范围外问题：无新增
 
 ### TASK-039 修复 — 准入 step_no 分配并发死锁（B12-R1/R2 约定）
 
