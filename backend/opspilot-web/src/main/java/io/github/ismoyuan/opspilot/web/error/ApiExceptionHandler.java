@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -135,7 +136,11 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
             HttpServletRequest request) {
         ErrorResponse body =
                 new ErrorResponse(code.name(), code.defaultMessage(), RequestIdFilter.requestId(request), details);
-        return ResponseEntity.status(status).headers(headers).body(body);
+        // 预设 JSON：只接受 text/event-stream 的请求（05 §62）出错时也按统一包络返回，而不是内容协商失败
+        return ResponseEntity.status(status)
+                .headers(headers)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(body);
     }
 
     private static HttpServletRequest servletRequest(WebRequest request) {

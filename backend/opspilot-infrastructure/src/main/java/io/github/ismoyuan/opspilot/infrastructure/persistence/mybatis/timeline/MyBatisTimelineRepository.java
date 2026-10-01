@@ -1,11 +1,13 @@
 package io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.timeline;
 
+import io.github.ismoyuan.opspilot.application.timeline.IncidentTimelineAppended;
 import io.github.ismoyuan.opspilot.application.timeline.TimelineRepository;
 import io.github.ismoyuan.opspilot.domain.timeline.NewTimelineEvent;
 import io.github.ismoyuan.opspilot.domain.timeline.TimelinePayload;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Repository;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;
@@ -20,9 +22,11 @@ class MyBatisTimelineRepository implements TimelineRepository {
     private final JsonMapper json = JsonMapper.builder().build();
 
     private final TimelineEventMapper mapper;
+    private final ApplicationEventPublisher events;
 
-    MyBatisTimelineRepository(TimelineEventMapper mapper) {
+    MyBatisTimelineRepository(TimelineEventMapper mapper, ApplicationEventPublisher events) {
         this.mapper = mapper;
+        this.events = events;
     }
 
     @Override
@@ -38,6 +42,8 @@ class MyBatisTimelineRepository implements TimelineRepository {
                 event.correlationId(),
                 utc(event));
         mapper.insert(insert);
+        // 只是唤醒信号：监听方在提交之后才处理，回滚则不处理（07 §72、08 TASK-088）
+        events.publishEvent(new IncidentTimelineAppended(event.incidentId()));
         return insert.getId();
     }
 

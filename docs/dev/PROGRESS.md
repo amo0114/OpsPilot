@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-10-01（B31 DONE，commit 09d085e；B32 未开始）
+> 最近更新：2026-10-01（B32 REVIEW，Base b8b668b，B32-V1 exit 0，B32-R1 PASS，待提交）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -94,9 +94,9 @@
 | TASK-084 | B31 | Timeline Query | DONE | commit 09d085e（B31，Base a2a9827） | B31-V1 verify exit 0＋IncidentViewIntegrationTest Timeline 2 项＋IncidentApiContractTest 游标/400/404＋变异检查；B31-R1 PASS（独立测试 59/59；非阻塞 P3 见批次记录），待提交 |
 | TASK-085 | B31 | IncidentDetailView | DONE | commit 09d085e（B31，Base a2a9827） | B31-V1 verify exit 0＋IncidentViewIntegrationTest 详情 9 项（含中途并发提交的一致性读取）＋HTTP 详情各节＋变异检查；B31-R1 PASS（独立测试 59/59；非阻塞 P3 见批次记录），待提交 |
 | TASK-086 | B31 | availableActions | DONE | commit 09d085e（B31，Base a2a9827） | B31-V1 verify exit 0＋IncidentActionPolicyTest 2/2（全组合）＋IncidentViewIntegrationTest 5 项＋创建/详情 HTTP＋变异检查；B31-R1 PASS（独立测试 59/59；非阻塞 P3 见批次记录），待提交 |
-| TASK-087 | B32 | SSE Hub | TODO | — | NOT RUN |
-| TASK-088 | B32 | After Commit Event | TODO | — | NOT RUN |
-| TASK-089 | B32 | SSE Reconnect | TODO | — | NOT RUN |
+| TASK-087 | B32 | SSE Hub | REVIEW | 未提交（B32，Base b8b668b；文件见 PROGRESS「B32」） | B32-V1 verify exit 0＋IncidentEventStreamContractTest 6/6（首次补发、状态事件、404/400）＋变异检查；B32-R1 PASS（独立测试 22/22），待提交 |
+| TASK-088 | B32 | After Commit Event | REVIEW | 未提交（B32，Base b8b668b；文件见 PROGRESS「B32」） | B32-V1 verify exit 0＋IncidentEventStreamContractTest（未提交/回滚不推送、ACC-FINAL-15 顺序扰动）＋变异检查；B32-R1 PASS（独立测试 22/22），待提交 |
+| TASK-089 | B32 | SSE Reconnect | REVIEW | 未提交（B32，Base b8b668b；文件见 PROGRESS「B32」） | B32-V1 verify exit 0＋IncidentEventStreamContractTest（Snapshot 游标与 Last-Event-ID 续传）＋IncidentEventStreamHeartbeatTest 1/1（唤醒丢失自愈）＋变异检查；B32-R1 PASS（独立测试 22/22），待提交 |
 | TASK-090 | B33 | Fault Lab 基础模型 | TODO | — | NOT RUN |
 | TASK-091 | B33 | Ground Truth Isolation | TODO | — | NOT RUN |
 | TASK-092 | B33 | Fault Inject / Reset API | TODO | — | NOT RUN |
@@ -1092,6 +1092,37 @@
   - Commit Recommendation：可进入本批提交步骤；本轮仅更新审查/交接记录，未修改实现、未提交、未推送。B30 与成员保持 REVIEW，按用户授权提交并回填真实 SHA 后才能 DONE，不提前开始 B31。
 - 修改文件：新增 application/recovery/{RecoverySampleInterruptionRepository,RecoverySampleInterruptionRecorder}、domain/timeline/IncidentResolvedPayloadV1、infrastructure/persistence/mybatis/invocation/MyBatisRecoverySampleInterruptions、persistence/mybatis/recovery/MyBatisVerificationWorkSource；修改 application/investigation/InvestigationApplicationService、application/recovery/RecoveryVerificationService、application/dispatch/{DispatchableWorkSource,StartupRecoveryCoordinator}（注释）、application/investigation/recovery/InvocationInterruptionRepository（注释）、domain TimelineEventType、InvestigationStartedPayloadV1（注释）、infrastructure InvocationInterruptionMapper＋XML、RecoveryVerificationMapper＋XML，测试 RecoveryVerificationIntegrationTest；docs/dev。Migration：无；新增依赖：无
 - 提交：代码提交 39f9468ad8e362904a5cb4dbcc182cb4bffefd16（feat(recovery): verification outcome transitions and verification startup recovery (TASK-082–083)）；SHA 回填为后续 docs 提交；未推送
+
+### B32 — SSE、提交后通知与断线补发
+
+- 状态：REVIEW（实现与 B32-V1 完成，B32-R1 PASS；未提交）
+- 成员及顺序：TASK-087 → TASK-088 → TASK-089；批外前置：TASK-086 DONE（09d085e，B31-R1 PASS）；088 依赖 087、089 依赖 088（批内）
+- Base SHA：b8b668bf4ac3a89f09b9eefc4fb79c9b75ed5f1a
+- 范围：TASK-087——Spring MVC SseEmitter 的 IncidentSseHub（内存连接管理：incidentId → 订阅，Java 重启连接断开可接受）、`GET /api/v1/incidents/{incidentKey}/events`（text/event-stream）、timeline / incident-state / heartbeat 三种事件（05 §62～§66）。TASK-088——Timeline 追加在事务提交后（且只在提交后）唤醒发送端，发送端按订阅游标从数据库按 id 顺序补读，不以回调顺序或回调载荷为准；回滚不推送。TASK-089——Last-Event-ID（及首次连接的 Snapshot 游标）从 Timeline 补发，订阅先注册后追赶，消除 Snapshot→订阅、历史追赶→实时注册的空隙；覆盖 ACC-FINAL-15；不建 Outbox。允许目录：backend 的 application/timeline|incident/query、infrastructure persistence/mybatis/timeline、web（新增 sse 包）与相应测试；boot 测试；docs/dev。明确不做：Outbox、MQ、WebFlux、分布式/多实例推送、UI、新迁移、新依赖、修改写路径的锁与状态规则、B31 P3（整数格式化，另行处理）
+- 规格：08 TASK-087～089；05 §8、§10、§62～§67；07 §71～§74、ENG-INV-016/017；04 §55～§57；09 ACC-FINAL-15
+- 关键不变量：SSE 只表达已提交事实（ENG-INV-016），afterCommit 只是唤醒，发送内容一律重新从数据库按 (incident_id, id) 游标读取；同 Incident 的 Timeline 追加都先取 Incident 行锁（开工核对：全部 13 个追加点均经 findByIdForUpdate／IncidentLocks.lockByKey／ActiveInvestigation.lock／审批 lock 或在创建事务内插入新行），故 id 顺序即提交顺序、游标不会永久跳过；订阅先登记再补读；唤醒丢失、连接断开或进程重启不丢事实（客户端重连按 Last-Event-ID 补发）；SSE 投递不是提交成功的条件；Heartbeat 不产生 TimelineEvent；SSE 不代替 GET
+- 验证要求：真实 HTTP＋真实 MySQL（boot）：首次连接补发、Snapshot 游标与 Last-Event-ID 续传、状态事件、未提交不推送／回滚不推送、两事务提交与回调顺序扰动（ACC-FINAL-15）、唤醒丢失后的自愈、heartbeat、404/400；批尾 backend `./mvnw -B clean verify`
+- 开工已有修改：无（工作树干净）
+- 本批设计取值（记录供 Review）：① 端点 `GET /api/v1/incidents/{incidentKey}/events`（text/event-stream，不用 05 §8 包络）；游标优先级 Last-Event-ID 请求头 > `afterId` 查询参数（首次连接用 Snapshot 的 lastTimelineEventId；浏览器重连自动带 Last-Event-ID 且 URL 不变）> 0（从该 Incident 第一条事件补发，即 05 §65“服务端规定的起点”）；非法或负数游标 400，Incident 不存在 404，均在建立事件流之前；② 事件：`timeline`（id=Timeline id，data `{incidentKey, incidentStatus, event{id,eventType,occurredAt,actorType,summary}}`，不含载荷）、`incident-state`（无 id，data `{incidentKey,status,version,availableActions}`，连接追上后发送一次，此后仅在状态/版本/可用动作变化时发送）、`heartbeat`（无 id、空 data，不写 Timeline）；③ 唤醒：MyBatisTimelineRepository 每次追加发布 IncidentTimelineAppended（只含 incidentId），IncidentSseHub 以 @TransactionalEventListener(AFTER_COMMIT, fallbackExecution) 接收——回滚不唤醒、提交后才唤醒；唤醒只安排补读，补读在发送线程以新的 REPEATABLE READ 只读事务读取状态与游标之后的事件（IncidentChangesQueryService，同一快照），每批 200 条直到追上；④ 串行：同一 Incident 同时只有一个补读任务（running/dirty 标记合并唤醒），SseEmitter 不并发发送；发送线程池 2 个守护线程；⑤ heartbeat（opspilot.sse.heartbeat-interval，默认 15s）在同一串行任务中发送并顺带补读，唤醒丢失（线程池拒绝、监听异常、绕过应用的写入）在下一次 heartbeat 自愈；emitter 超时 opspilot.sse.emitter-timeout 默认 30 分钟；⑥ Hub 实现 SmartLifecycle（默认最高相位），停机时先完成全部连接再进入 Web 服务器优雅停机（首轮测试发现未完成的长连接使 JVM 退出等待 30 秒）；⑦ ApiExceptionHandler 统一预设 Content-Type application/json：只接受 text/event-stream 的请求出错时原先内容协商失败、变成 500 并在 ERROR 日志输出异常消息，现按 05 §9 包络返回；⑧ 连接断开在下一次发送失败时移除，SSE 投递不影响业务提交；connectionCount() 供 07 §101 指标，未接入指标系统（本批不加依赖）
+- 成员进度：
+  - TASK-087：实现与针对性验证完成。web/sse（IncidentSseHub、IncidentEventsController、SseProperties）；application/incident/query（IncidentChangesQueryService、IncidentChanges、IncidentStateView）；web/error/ApiExceptionHandler 预设 JSON
+  - TASK-088：实现与针对性验证完成。application/timeline/IncidentTimelineAppended、TimelineRepository 注释；infrastructure MyBatisTimelineRepository 发布唤醒；Hub AFTER_COMMIT 监听与按游标补读
+  - TASK-089：实现与针对性验证完成。Last-Event-ID／afterId 游标、先登记后补读、heartbeat 顺带补读
+- 开工核对（04 §57 前提）：全部 Timeline 追加点（IncidentApplicationService 2、InvestigationApplicationService 2、ApprovalApplicationService 2、CapabilityAdmissionService 2、CapabilityResultRecorder 2、RecoveryVerificationApplicationService 1、RecoveryVerificationService 2、RemediationApplicationService 2、ExecutionEvents（ActionExecutionService/ActionExecutionRecoveryService 调用）、Hypothesis/Evidence/Diagnosis 经 ActiveInvestigation.lock）均在同一事务先取 Incident 行锁，创建时为本事务插入的新行；本批未改写路径
+- 针对性验证（backend/，JDK 21＋Testcontainers mysql:8.4.11，真实 HTTP，2026-10-01）：
+  - `-pl opspilot-boot -Dtest='IncidentEventStream*'` → 6＋1。IncidentEventStreamContractTest（heartbeat 设 1 小时，收到的事件只能来自提交后唤醒）：无游标从第一条补发＋incident-state（CREATED/0/START、CANCEL），Start、Stop 后依次推送 timeline（id 递增、incidentStatus）与 incident-state（INVESTIGATING/1/STOP、CANCEL；INVESTIGATING/2/CANCEL），之后静默；Snapshot lastTimelineEventId 连接不重放已有事件，Last-Event-ID 优先于 afterId 并按序补发不重复；持锁未提交的追加 800ms 内不推送、回滚后永不出现、之后提交的正常推送；ACC-FINAL-15：A 持行锁追加时 B 等锁（800ms 内未追加），A 提交后其唤醒被阻塞，B 提交唤醒后客户端按 id 顺序收到 A、B，A 迟到唤醒不重复、与库内 id 一致；客户端断开后业务提交照常、连接被移除；不存在／大小写编号 404、Last-Event-ID abc／-1 与 afterId=-1 400（标准包络、requestId）。IncidentEventStreamHeartbeatTest（heartbeat 1s）：heartbeat 无 id、不写 Timeline；绕过应用直接插入、没有提交后唤醒的事件在下一次 heartbeat 补读送达
+  - 首轮失败与修复：① 只接受 text/event-stream 的 404 变成 500（错误处理器内容协商失败）→ ApiExceptionHandler 预设 JSON；② 未完成的 SSE 长连接使停机等待 30 秒 → Hub 改为 SmartLifecycle 先于 Web 服务器优雅停机完成连接
+  - 变异检查（均已还原，grep 确认）：监听改 BEFORE_COMMIT → 5 个用例失败（提交后唤醒读不到新事件）；afterId 优先于 Last-Event-ID → 续传用例失败；每次唤醒只读 1 条 → ACC-FINAL-15 与续传用例失败；错误处理器不预设 JSON 即首轮失败 ①
+  - 受影响：`-pl opspilot-web,opspilot-boot -Dtest='ApiErrorContractTest,*ControllerTest,IncidentApiContractTest,InvestigationApiContractTest,ApplicationWiringTest'` → web 51、boot 4＋2＋1 通过
+- B32-V1（最终代码树，本机实测）：backend/；`./mvnw -B clean verify`。第 1 次 2026-10-01 06:38:55～07:30:19 UTC exit 1：仅 boot 的 IncidentApiContractTest.lifecycleActions… Stop 返回 500（该类耗时 1478 秒），原因 CannotCreateTransactionException／Hikari 连接超时，同期 Testcontainers 报 MySQL “Could not start container”、连接被关闭，主机 15 分钟负载约 80；domain 43、infrastructure 865、web 51 均已通过。负载回落（约 1.7）后第 2 次（作为本批证据）2026-10-01 07:34:41～07:52:02 UTC，JDK 21＋Docker（Testcontainers）；exit 0，BUILD SUCCESS（17:19）；Enforcer 与 Spotless check 6 个模块均执行通过；domain 43、infrastructure 865、web 51、boot 14（B31 7＋7），均 0 失败 0 跳过；`git diff --check` 通过。日志（会话临时目录）b32-v1-attempt1.log、b32-v1.log。覆盖 TASK-087～089
+- 专项证据/NOT RUN：浏览器 EventSource 实机重连（UI 属 TASK-099/100）、多实例推送（V0.1 单实例，不做）、代理层空闲断开 NOT VERIFIED；07 §101 active SSE connections 只提供 connectionCount()，未接入指标系统；真实 Provider/LLM、S1～S3 NOT RUN；CCG 门禁 NOT RUN（本机 /root/.claude/skills/ccg 不存在）
+- B32-R1：**PASS**（2026-10-01 本地，独立 Reviewer：Codex 主代理，审查与验证由主代理完成）。范围：固定 Base `b8b668bf4ac3a89f09b9eefc4fb79c9b75ed5f1a` 至当前工作树全部 B32 变化，含 10 个未跟踪文件；TASK-087 → TASK-088 → TASK-089。未发现提交前阻塞问题或本批规格偏离。
+  - 代码核验：逐一追踪全部生产 Timeline 追加及 ExecutionEvents/HypothesisStatusRecorder 的调用链，确认同事务先持有 Incident 行锁，创建路径由新插入行持锁；Mapper 使用真实 `FOR UPDATE`，生产 Timeline INSERT 只有统一仓储入口。提交监听只安排异步补读，事件与状态由新的 REPEATABLE READ 事务读取，发送发生在查询事务结束后；不把回调顺序当事件顺序，不在业务提交线程发送。先登记订阅再追赶、running/dirty 合并唤醒、按游标分批读至追上、Last-Event-ID 优先、心跳补读与连接清理均符合 04 §57、05 §62～§67、07 §71～§74。
+  - 独立执行：backend/，`./mvnw -B test -pl opspilot-boot -am -Dtest=IncidentEventStreamContractTest,IncidentEventStreamHeartbeatTest,ApiErrorContractTest,IncidentApiContractTest,ApplicationWiringTest -Dsurefire.failIfNoSpecifiedTests=false`；JDK 21、真实 MySQL 8.4.11/Testcontainers 与真实 HTTP，2026-10-01 08:47:30 UTC 完成，耗时 1:43，exit 0。web 10＋boot 12＝**22 tests，0 failures/errors/skipped**：SSE 契约 6、心跳/丢失唤醒补读 1、错误响应 10、Incident HTTP 4、真实应用启动 1。覆盖 ACC-FINAL-15 回调逆序、未提交/回滚隔离、断线补发及断连不影响业务提交。日志 `/tmp/b32-r1-tests.log`；`git diff b8b668b --check` 通过。
+  - 验证边界：本轮未重跑完整 clean verify，复用 B32-V1 第 2 次成功记录；未重跑变异检查。真实浏览器 EventSource、代理空闲断开、真实 Provider/LLM、S1～S3、CCG 仍为 NOT RUN/NOT VERIFIED，不由本轮 PASS 代替验收。
+  - Commit Recommendation：可按计划分两次提交（审查通过的代码及进度记录；回填真实代码 SHA 并标 DONE 的文档）。本轮只更新审查/交接记录，未修改实现、未提交、未推送。B32 与成员保持 REVIEW 至提交；B31 P3 不混入本批，B32 提交后按后续安排单独处理 TASK-085 整数格式化，再开始 B33。
+- 修改文件：新增 application/incident/query/{IncidentChanges,IncidentChangesQueryService,IncidentStateView}、application/timeline/IncidentTimelineAppended、web/sse/{IncidentSseHub,IncidentEventsController,SseProperties}，测试 boot/{IncidentEventStreamContractTest,IncidentEventStreamHeartbeatTest,SseClient}；修改 application/timeline/TimelineRepository（注释）、infrastructure MyBatisTimelineRepository（发布唤醒）、web/error/ApiExceptionHandler（预设 JSON）；docs/dev。Migration：无；新增依赖：无
+- 提交：未提交；范围外问题：无新增（B31 P3 整数格式化仍待处理）
 
 ### B31 — Timeline、完整详情视图与 availableActions
 
