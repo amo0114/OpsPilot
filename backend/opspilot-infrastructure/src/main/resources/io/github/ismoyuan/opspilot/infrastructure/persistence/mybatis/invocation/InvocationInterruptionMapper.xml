@@ -15,6 +15,30 @@
         ORDER BY id
     </select>
 
+    <select id="selectRunningRecoverySamplesStartedBefore" resultType="long">
+        SELECT id
+        FROM capability_invocation
+        WHERE recovery_verification_id IS NOT NULL
+          AND status = 'RUNNING'
+          AND started_at &lt; #{startedBefore}
+        ORDER BY id
+    </select>
+
+    <!-- 只改状态与结束信息；样本身份（verificationId＋criterionKey＋sampleIndex）与 started_at 不变 -->
+    <update id="markInterruptedRecoverySamples">
+        UPDATE capability_invocation
+        SET status = 'FAILED',
+            error_code = #{errorCode},
+            error_message = #{errorMessage},
+            finished_at = #{finishedAt},
+            duration_ms = GREATEST(TIMESTAMPDIFF(MICROSECOND, started_at, #{finishedAt}) DIV 1000, 0),
+            updated_at = #{finishedAt}
+        WHERE id IN
+          <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+          AND recovery_verification_id IS NOT NULL
+          AND status = 'RUNNING'
+    </update>
+
     <update id="markInterrupted">
         UPDATE capability_invocation
         SET status = 'FAILED',

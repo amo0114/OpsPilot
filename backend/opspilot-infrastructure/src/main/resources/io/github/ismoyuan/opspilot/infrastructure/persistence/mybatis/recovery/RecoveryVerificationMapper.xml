@@ -15,6 +15,17 @@
         </constructor>
     </resultMap>
 
+    <resultMap id="dispatchableWork" type="io.github.ismoyuan.opspilot.application.dispatch.DispatchableWork$RecoveryVerification">
+        <constructor>
+            <arg column="id" javaType="_long"/>
+        </constructor>
+    </resultMap>
+
+    <!-- PENDING 与 RUNNING（07 §51）；终态不派发。按状态索引 idx_recovery_verification_status 扫描 -->
+    <select id="selectDispatchable" resultMap="dispatchableWork">
+        SELECT id FROM recovery_verification WHERE status IN ('PENDING', 'RUNNING') ORDER BY id
+    </select>
+
     <select id="selectById" resultMap="verificationRow">
         SELECT id, incident_id, verification_no, status, CAST(policy_snapshot AS CHAR) AS policy_snapshot,
                deadline_at, started_at, lock_version

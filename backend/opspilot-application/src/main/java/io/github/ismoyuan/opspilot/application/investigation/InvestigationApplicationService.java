@@ -10,6 +10,7 @@ import io.github.ismoyuan.opspilot.application.timeline.TimelineRepository;
 import io.github.ismoyuan.opspilot.domain.error.ErrorCode;
 import io.github.ismoyuan.opspilot.domain.incident.Incident;
 import io.github.ismoyuan.opspilot.domain.incident.IncidentStatus;
+import io.github.ismoyuan.opspilot.domain.incident.IncidentTransition;
 import io.github.ismoyuan.opspilot.domain.incident.IncidentTrigger;
 import io.github.ismoyuan.opspilot.domain.investigation.Investigation;
 import io.github.ismoyuan.opspilot.domain.investigation.InvestigationLimits;
@@ -25,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -34,7 +36,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 /**
  * 开始与继续调查（05 §24、§28，01 §9）。两者共用 {@link #resumeInvestigation}：一个短事务内按 Incident → Investigation
  * 锁序校验来源状态与版本、建立或复用唯一 Investigation 并进入新 run、条件迁移 Incident、追加时间线；提交后才派发。
- * 应用重启恢复不走这里（07 §52），VerificationFailed 回到调查在 TASK-082 接入。
+ * 应用重启恢复不走这里（07 §52）。Verification FAILED 回到调查经 {@link #resumeAfterFailedVerification} 复用同一新 run 逻辑（TASK-082）。
  */
 @Service
 public class InvestigationApplicationService {
@@ -44,7 +46,9 @@ public class InvestigationApplicationService {
     private final IncidentRepository incidents;
     private final InvestigationRepository investigations;
     private final TimelineRepository timeline;
-    private final WorkDispatcher dispatcher;
+    /** afterCommit 时才取得：Verification Worker 依赖本类，构造期直接依赖派发器会形成创建环（同 B29-R1）。 */
+    private final ObjectProvider<WorkDispatcher> dispatcher;
+
     private final InvestigationLimits limits;
     private final PendingApprovalQuery pendingApprovals;
     private final TransactionTemplate transaction;
@@ -54,7 +58,7 @@ public class InvestigationApplicationService {
             IncidentRepository incidents,
             InvestigationRepository investigations,
             TimelineRepository timeline,
-            WorkDispatcher dispatcher,
+            ObjectProvider<WorkDispatcher> dispatcher,
             InvestigationLimits limits,
             PendingApprovalQuery pendingApprovals,
             PlatformTransactionManager transactionManager,
@@ -160,43 +164,79 @@ public class InvestigationApplicationService {
                         Map.of("incidentKey", incident.incidentKey().value()));
             }
             var transition = incident.transitionFor(trigger, expectedVersion);
-
-            // 首次 Start 时 Investigation 尚不存在：不对它加锁读取（间隙锁会使不同 Incident 的并发首次 Start 死锁，TASK-016），
-            // 只在 Incident 行锁下以普通读判断后插入；已存在（Continue）时照旧排他锁定后进入下一 run
-            Investigation investigation = investigations.existsForIncident(incident.id())
-                    ? investigations
-                            .findByIncidentIdForUpdate(incident.id())
-                            .map(current -> investigations.saveNextRun(current, current.nextRun(now)))
-                            .orElseThrow()
-                    : investigations.insertFirstRun(incident.id(), limits, now);
-            int previousRunNo = investigation.currentRunNo() - 1;
-            Incident investigating = incidents.apply(transition, now);
-
-            timeline.append(new NewTimelineEvent(
-                    incident.id(),
-                    TimelineEventType.INVESTIGATION_STARTED,
-                    now,
-                    TimelineActorType.USER,
-                    actor,
-                    (trigger == IncidentTrigger.START_INVESTIGATION ? "开始调查" : "继续调查") + "（第 "
-                            + investigation.currentRunNo() + " 轮）",
-                    new InvestigationStartedPayloadV1(
-                            incident.incidentKey().value(),
-                            trigger.name(),
-                            previousRunNo,
-                            investigation.currentRunNo(),
-                            investigation.limits().maxCapabilityCalls(),
-                            investigation.limits().maxDurationSeconds()),
-                    Correlation.currentId()));
-
-            dispatchAfterCommit(incident.id(), investigation.currentRunNo());
-            return new InvestigationRunResult(
-                    investigating.incidentKey(),
-                    investigating.status(),
-                    investigating.version(),
-                    investigation.currentRunNo(),
-                    investigation.stopRequested());
+            return enterNextRun(incident, transition, trigger, TimelineActorType.USER, actor, now);
         });
+    }
+
+    /**
+     * Verification FAILED 回到调查（08 TASK-082、01 §30）：在调用方已持有 Incident 行锁的 Verification 终态事务内，以与 Start/Continue
+     * 相同的逻辑进入同一 Investigation 的下一 run 并 VERIFYING → INVESTIGATING，写 INVESTIGATION_STARTED（系统发起），提交后派发调查。
+     * 不重放任何 CHANGE；新的写操作仍需新 Action 与新 Approval。
+     *
+     * @param incident 本事务已锁定、仍为 VERIFYING 的 Incident
+     * @return 新的 runNo
+     * @throws IllegalStateException 不在事务内调用
+     */
+    public int resumeAfterFailedVerification(Incident incident, Instant now) {
+        if (!TransactionSynchronizationManager.isActualTransactionActive()) {
+            throw new IllegalStateException("must join the verification outcome transaction");
+        }
+        var transition = incident.transitionFor(IncidentTrigger.VERIFICATION_FAILED, incident.version());
+        return enterNextRun(
+                        incident, transition, IncidentTrigger.VERIFICATION_FAILED, TimelineActorType.SYSTEM, null, now)
+                .runNo();
+    }
+
+    /**
+     * 进入新 run 的唯一实现（01 §9）：建立或复用唯一 Investigation、迁移 Incident、写 INVESTIGATION_STARTED，提交后派发。调用方已在
+     * 事务内锁定 Incident 并校验来源状态与版本。
+     */
+    private InvestigationRunResult enterNextRun(
+            Incident incident,
+            IncidentTransition transition,
+            IncidentTrigger trigger,
+            TimelineActorType actorType,
+            String actor,
+            Instant now) {
+        // 首次 Start 时 Investigation 尚不存在：不对它加锁读取（间隙锁会使不同 Incident 的并发首次 Start 死锁，TASK-016），
+        // 只在 Incident 行锁下以普通读判断后插入；已存在（Continue）时照旧排他锁定后进入下一 run
+        Investigation investigation = investigations.existsForIncident(incident.id())
+                ? investigations
+                        .findByIncidentIdForUpdate(incident.id())
+                        .map(current -> investigations.saveNextRun(current, current.nextRun(now)))
+                        .orElseThrow()
+                : investigations.insertFirstRun(incident.id(), limits, now);
+        int previousRunNo = investigation.currentRunNo() - 1;
+        Incident investigating = incidents.apply(transition, now);
+
+        timeline.append(new NewTimelineEvent(
+                incident.id(),
+                TimelineEventType.INVESTIGATION_STARTED,
+                now,
+                actorType,
+                actor,
+                switch (trigger) {
+                            case START_INVESTIGATION -> "开始调查";
+                            case VERIFICATION_FAILED -> "恢复验证未通过，继续调查";
+                            default -> "继续调查";
+                        }
+                        + "（第 " + investigation.currentRunNo() + " 轮）",
+                new InvestigationStartedPayloadV1(
+                        incident.incidentKey().value(),
+                        trigger.name(),
+                        previousRunNo,
+                        investigation.currentRunNo(),
+                        investigation.limits().maxCapabilityCalls(),
+                        investigation.limits().maxDurationSeconds()),
+                Correlation.currentId()));
+
+        dispatchAfterCommit(incident.id(), investigation.currentRunNo());
+        return new InvestigationRunResult(
+                investigating.incidentKey(),
+                investigating.status(),
+                investigating.version(),
+                investigation.currentRunNo(),
+                investigation.stopRequested());
     }
 
     private Incident lockIncident(String incidentKey) {
@@ -211,7 +251,7 @@ public class InvestigationApplicationService {
             @Override
             public void afterCommit() {
                 try {
-                    dispatcher.dispatchInvestigation(incidentId, runNo);
+                    dispatcher.getObject().dispatchInvestigation(incidentId, runNo);
                 } catch (RuntimeException ex) {
                     log.warn(
                             "Investigation dispatch failed after commit: incidentId={} runNo={} exception={}",

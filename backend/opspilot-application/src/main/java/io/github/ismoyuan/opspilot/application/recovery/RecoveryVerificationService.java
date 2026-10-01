@@ -6,6 +6,7 @@ import io.github.ismoyuan.opspilot.application.capability.result.CapabilityResul
 import io.github.ismoyuan.opspilot.application.correlation.Correlation;
 import io.github.ismoyuan.opspilot.application.dispatch.RecoveryVerificationWorker;
 import io.github.ismoyuan.opspilot.application.incident.IncidentRepository;
+import io.github.ismoyuan.opspilot.application.investigation.InvestigationApplicationService;
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicySnapshotV1.SnapshotCriterion;
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryVerificationRepository.RecoveryVerificationRecord;
 import io.github.ismoyuan.opspilot.application.schema.SchemaCodecRegistry;
@@ -13,7 +14,9 @@ import io.github.ismoyuan.opspilot.application.schema.SchemaPayloadException;
 import io.github.ismoyuan.opspilot.application.timeline.TimelineRepository;
 import io.github.ismoyuan.opspilot.domain.incident.Incident;
 import io.github.ismoyuan.opspilot.domain.incident.IncidentStatus;
+import io.github.ismoyuan.opspilot.domain.incident.IncidentTrigger;
 import io.github.ismoyuan.opspilot.domain.recovery.RecoveryVerificationStatus;
+import io.github.ismoyuan.opspilot.domain.timeline.IncidentResolvedPayloadV1;
 import io.github.ismoyuan.opspilot.domain.timeline.NewTimelineEvent;
 import io.github.ismoyuan.opspilot.domain.timeline.RecoveryVerificationEventPayloadV1;
 import io.github.ismoyuan.opspilot.domain.timeline.TimelineActorType;
@@ -46,8 +49,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  *   <li>每个样本之后按同一求值器判断：required 明确 FALSE 即短路，后续检查不再执行并记 NOT_EXECUTED；UNKNOWN 不短路，继续后续
  *       检查以发现明确 FALSE。能力不可用记 NOT_ADMITTED，期限已到的剩余样本如实为不足。
  *   <li>终态短事务：重读 Verification 仍为本次持有，以持久化样本与当前时刻重新求值，写状态、recovery.verification.result / 1、
- *       result_summary、finished_at 与 RECOVERY_VERIFICATION_PASSED/FAILED/INCONCLUSIVE。按结果迁移 Incident 属 TASK-082，本类不改
- *       Incident 状态。
+ *       result_summary、finished_at 与 RECOVERY_VERIFICATION_PASSED/FAILED/INCONCLUSIVE，并在同一事务内按结果迁移 Incident
+ *       （PASSED → RESOLVED、FAILED → INVESTIGATING 新 run、INCONCLUSIVE → DIAGNOSED，TASK-082）。
  * </ol>
  * 等待被中断时停止并保持 RUNNING，由启动恢复或补派发按持久化槽位继续（TASK-083）。
  */
@@ -65,6 +68,7 @@ public class RecoveryVerificationService implements RecoveryVerificationWorker {
     private final RecoverySampler sampler;
     private final SchemaCodecRegistry codecs;
     private final TimelineRepository timeline;
+    private final InvestigationApplicationService investigations;
     private final TransactionTemplate transaction;
     private final Clock clock;
 
@@ -75,6 +79,7 @@ public class RecoveryVerificationService implements RecoveryVerificationWorker {
             RecoverySampler sampler,
             SchemaCodecRegistry codecs,
             TimelineRepository timeline,
+            InvestigationApplicationService investigations,
             PlatformTransactionManager transactionManager,
             Clock clock) {
         this.verifications = verifications;
@@ -83,6 +88,7 @@ public class RecoveryVerificationService implements RecoveryVerificationWorker {
         this.sampler = sampler;
         this.codecs = codecs;
         this.timeline = timeline;
+        this.investigations = investigations;
         this.transaction = new TransactionTemplate(transactionManager);
         this.clock = clock;
     }
@@ -279,7 +285,44 @@ public class RecoveryVerificationService implements RecoveryVerificationWorker {
                     summary(result),
                     result.overallResult().name(),
                     now);
+            transitionIncident(incident, current, result.overallResult(), now);
         });
+    }
+
+    /**
+     * 同一终态事务内按结果迁移 Incident（08 TASK-082、01 §30～§31）：PASSED → RESOLVED（写 resolved_at）并写 INCIDENT_RESOLVED；
+     * FAILED → INVESTIGATING，经调查服务的统一新 run 入口，提交后派发，不重放 CHANGE；INCONCLUSIVE → DIAGNOSED，不自动开启新 run。
+     * Incident 不在 VERIFYING（生命周期上不应出现）时只记录告警，不迁移。
+     */
+    private void transitionIncident(
+            Incident incident, RecoveryVerificationRecord verification, RecoveryOutcome outcome, Instant now) {
+        if (incident.status() != IncidentStatus.VERIFYING) {
+            log.warn(
+                    "Verification finished for an incident not VERIFYING, incident left unchanged: verificationId={}"
+                            + " status={}",
+                    verification.id(),
+                    incident.status());
+            return;
+        }
+        switch (outcome) {
+            case PASSED -> {
+                incidents.apply(incident.transitionFor(IncidentTrigger.VERIFICATION_PASSED, incident.version()), now);
+                timeline.append(new NewTimelineEvent(
+                        incident.id(),
+                        TimelineEventType.INCIDENT_RESOLVED,
+                        now,
+                        TimelineActorType.SYSTEM,
+                        null,
+                        "恢复验证通过，故障已解决",
+                        new IncidentResolvedPayloadV1(
+                                incident.incidentKey().value(), verification.id(), verification.verificationNo()),
+                        Correlation.currentId()));
+            }
+            case FAILED -> investigations.resumeAfterFailedVerification(incident, now);
+            case INCONCLUSIVE ->
+                incidents.apply(
+                        incident.transitionFor(IncidentTrigger.VERIFICATION_INCONCLUSIVE, incident.version()), now);
+        }
     }
 
     /**

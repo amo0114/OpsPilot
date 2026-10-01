@@ -12,6 +12,15 @@ interface InvocationInterruptionMapper {
     /** 不加锁读取；随后按 id 条件更新，只锁这些行。 */
     List<Long> selectRunningInvestigationCallsStartedBefore(@Param("startedBefore") LocalDateTime startedBefore);
 
+    /** 恢复样本调用（TASK-083）；不加锁读取，随后按 id 条件更新。 */
+    List<Long> selectRunningRecoverySamplesStartedBefore(@Param("startedBefore") LocalDateTime startedBefore);
+
+    int markInterruptedRecoverySamples(
+            @Param("ids") Collection<Long> ids,
+            @Param("errorCode") String errorCode,
+            @Param("errorMessage") String errorMessage,
+            @Param("finishedAt") LocalDateTime finishedAt);
+
     int markInterrupted(
             @Param("ids") Collection<Long> ids,
             @Param("errorCode") String errorCode,

@@ -5,7 +5,7 @@ import java.util.Objects;
 /**
  * INVESTIGATION_STARTED 载荷：timeline.investigation-started / 1。记录来源、旧轮号、新轮号和本轮预算（01 §9）。
  *
- * @param source 进入调查的迁移触发，如 START_INVESTIGATION、CONTINUE_INVESTIGATION
+ * @param source 进入调查的迁移触发：START_INVESTIGATION、CONTINUE_INVESTIGATION 或 VERIFICATION_FAILED（TASK-082）
  * @param previousRunNo 首次开始为 0
  */
 public record InvestigationStartedPayloadV1(

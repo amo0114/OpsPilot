@@ -1,6 +1,8 @@
 package io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.recovery;
 
+import io.github.ismoyuan.opspilot.application.dispatch.DispatchableWork;
 import java.time.LocalDateTime;
+import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -9,6 +11,8 @@ import org.apache.ibatis.annotations.Param;
 interface RecoveryVerificationMapper {
 
     VerificationRow selectById(@Param("id") long id);
+
+    List<DispatchableWork.RecoveryVerification> selectDispatchable();
 
     int insertPending(@Param("key") GeneratedKey key, @Param("v") PendingInsert verification);
 

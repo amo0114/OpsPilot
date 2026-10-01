@@ -2,6 +2,8 @@ package io.github.ismoyuan.opspilot.infrastructure.investigation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
@@ -30,6 +32,11 @@ import io.github.ismoyuan.opspilot.application.capability.result.ServiceInspectR
 import io.github.ismoyuan.opspilot.application.capability.result.ServiceInspectResultV1.HealthStatus;
 import io.github.ismoyuan.opspilot.application.capability.result.ServiceInspectResultV1.RuntimeState;
 import io.github.ismoyuan.opspilot.application.capability.sanitize.Sanitizer;
+import io.github.ismoyuan.opspilot.application.dispatch.DispatchableWork;
+import io.github.ismoyuan.opspilot.application.dispatch.DispatchableWorkSource;
+import io.github.ismoyuan.opspilot.application.dispatch.StartupRecoveryCoordinator;
+import io.github.ismoyuan.opspilot.application.dispatch.WorkDispatcher;
+import io.github.ismoyuan.opspilot.application.investigation.InvestigationApplicationService;
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryCriterionV1;
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryOutcome;
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicyActivationService;
@@ -39,6 +46,7 @@ import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicySnapshotV1
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicyValidator;
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryPredicateV1;
 import io.github.ismoyuan.opspilot.application.recovery.RecoverySample;
+import io.github.ismoyuan.opspilot.application.recovery.RecoverySampleInterruptionRecorder;
 import io.github.ismoyuan.opspilot.application.recovery.RecoverySampler;
 import io.github.ismoyuan.opspilot.application.recovery.RecoverySamplingV1;
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryVerificationResultV1;
@@ -47,6 +55,8 @@ import io.github.ismoyuan.opspilot.application.schema.SchemaCodecRegistry;
 import io.github.ismoyuan.opspilot.application.system.ManagedResourceRepository;
 import io.github.ismoyuan.opspilot.domain.capability.CapabilityKey;
 import io.github.ismoyuan.opspilot.domain.error.ErrorCode;
+import io.github.ismoyuan.opspilot.infrastructure.dispatch.InProcessWorkDispatcher;
+import io.github.ismoyuan.opspilot.infrastructure.dispatch.SingleFlightRegistry;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Timestamp;
@@ -63,6 +73,9 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
@@ -101,6 +114,8 @@ import org.testcontainers.mysql.MySQLContainer;
     Sanitizer.class,
     ObservationExtractor.class,
     ObserveResultPipeline.class,
+    InvestigationApplicationService.class,
+    RecoverySampleInterruptionRecorder.class,
     ClockConfiguration.class
 })
 class RecoveryVerificationIntegrationTest {
@@ -124,6 +139,12 @@ class RecoveryVerificationIntegrationTest {
     RecoverySampler sampler;
 
     @Autowired
+    RecoverySampleInterruptionRecorder interruptions;
+
+    @Autowired
+    List<DispatchableWorkSource> workSources;
+
+    @Autowired
     RecoveryPolicyActivationService recoveryPolicies;
 
     @Autowired
@@ -144,6 +165,12 @@ class RecoveryVerificationIntegrationTest {
     @MockitoBean
     CapabilityInvoker invoker;
 
+    /** 结果迁移派发调查的替身（TASK-082）：记录派发时独立连接看到的调查轮号，证明派发在提交之后。 */
+    @MockitoBean
+    WorkDispatcher dispatcher;
+
+    final List<String> runSeenAtDispatch = new CopyOnWriteArrayList<>();
+
     RemediationFixture seeded;
 
     /** 按能力排队的替身结果：CapabilityResult 为成功，ErrorCode 为调用失败；最后一个重复使用。 */
@@ -155,6 +182,22 @@ class RecoveryVerificationIntegrationTest {
     @BeforeEach
     void seed() {
         seeded = RemediationFixture.seed(jdbc);
+        runSeenAtDispatch.clear();
+        doAnswer(invocation -> {
+                    try (Connection other = DriverManager.getConnection(
+                                    MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword());
+                            var query = other.prepareStatement(
+                                    "SELECT current_run_no FROM investigation WHERE incident_id = ?")) {
+                        query.setLong(1, invocation.getArgument(0));
+                        try (var rs = query.executeQuery()) {
+                            rs.next();
+                            runSeenAtDispatch.add(invocation.getArgument(1) + "/" + rs.getInt(1));
+                        }
+                    }
+                    return null;
+                })
+                .when(dispatcher)
+                .dispatchInvestigation(anyLong(), anyInt());
         answers.clear();
         transactionActiveDuringProvider.clear();
         doAnswer(invocation -> {
@@ -226,9 +269,12 @@ class RecoveryVerificationIntegrationTest {
                 .containsExactly(
                         org.assertj.core.groups.Tuple.tuple(1, RecoverySample.Status.SUCCEEDED),
                         org.assertj.core.groups.Tuple.tuple(2, RecoverySample.Status.SUCCEEDED));
-        assertThat(incident()).isEqualTo("VERIFYING");
         assertThat(verificationEvents())
                 .containsExactly("RECOVERY_VERIFICATION_STARTED/-", "RECOVERY_VERIFICATION_PASSED/PASSED");
+        // TASK-082：同一终态事务 VERIFYING → RESOLVED 并写 resolved_at 与 INCIDENT_RESOLVED；不开启新 run
+        assertThat(incident()).isEqualTo("RESOLVED/8/resolved");
+        assertThat(lastEvent()).isEqualTo("INCIDENT_RESOLVED/SYSTEM");
+        verify(dispatcher, never()).dispatchInvestigation(anyLong(), anyInt());
     }
 
     /** ACC-FINAL-09 TRUE+UNKNOWN：lag 为空（不当 0）而服务运行 → INCONCLUSIVE，摘要说明原因。 */
@@ -245,6 +291,10 @@ class RecoveryVerificationIntegrationTest {
                 .containsEntry("result_summary", "恢复验证无法确认：积压达标（stream-lag-drained）VALUE_UNKNOWN");
         assertThat(checkResults(verificationId))
                 .containsExactly("stream-lag-drained/UNKNOWN/VALUE_UNKNOWN", "consumer-running/TRUE/SATISFIED");
+        // TASK-082：INCONCLUSIVE → DIAGNOSED，不自动开启新 run，用户可再次请求验证
+        assertThat(incident()).isEqualTo("DIAGNOSED/8/-");
+        assertThat(investigationRow().get("current_run_no").toString()).isEqualTo("1");
+        verify(dispatcher, never()).dispatchInvestigation(anyLong(), anyInt());
     }
 
     /** ACC-FINAL-09 FALSE+UNKNOWN：UNKNOWN 不短路，继续执行后续检查以发现明确 FALSE → FAILED。 */
@@ -264,6 +314,17 @@ class RecoveryVerificationIntegrationTest {
                 .as("明确 FALSE 在第 1 个样本出现即短路，不再采第 2 个")
                 .containsExactly("consumer-running#1/SUCCEEDED", "stream-lag-drained#1/FAILED");
         assertThat(verificationEvents()).last().isEqualTo("RECOVERY_VERIFICATION_FAILED/FAILED");
+        // TASK-082：FAILED → INVESTIGATING，同一 Investigation 进入第 2 轮（统一新 run 逻辑，系统发起），提交后才派发；不重放 CHANGE
+        assertThat(incident()).isEqualTo("INVESTIGATING/8/-");
+        assertThat(investigationRow().get("current_run_no").toString()).isEqualTo("2");
+        assertThat(lastEvent()).isEqualTo("INVESTIGATION_STARTED/SYSTEM");
+        assertThat(jdbc.queryForObject(
+                        "SELECT payload->>'$.source' FROM incident_timeline_event ORDER BY id DESC LIMIT 1",
+                        String.class))
+                .isEqualTo("VERIFICATION_FAILED");
+        assertThat(runSeenAtDispatch).containsExactly("2/2");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM action_execution", Long.class))
+                .isZero();
     }
 
     /** required 明确 FALSE 可以短路：后续检查不执行，如实记 UNKNOWN / NOT_EXECUTED，没有样本。 */
@@ -613,6 +674,248 @@ class RecoveryVerificationIntegrationTest {
         throw new AssertionError("the sample never waited for the incident lock");
     }
 
+    // ---------------------------------------------------------------- TASK-083 启动恢复与补派发
+
+    /** 创建已提交、派发丢失的 PENDING：启动恢复经 Verification 来源唤醒并执行到终态；之后的补派发不再派发终态。 */
+    @Test
+    void aPendingVerificationWhoseDispatchWasLostRunsAfterStartup() throws Exception {
+        long verificationId = verification(policy(1));
+        answer("queue.inspect", queue(0L, 0));
+        answer("service.inspect", service(RuntimeState.RUNNING));
+        StartupRecoveryCoordinator coordinator = coordinator(pool());
+
+        assertThat(coordinator.recoverAfterStartup()).isEqualTo(1);
+        awaitStatus(verificationId, "PASSED");
+
+        assertThat(coordinator.redispatchPending()).isZero();
+        assertThat(incident()).isEqualTo("RESOLVED/8/resolved");
+    }
+
+    /**
+     * ACC-FINAL-10：旧进程留下的 RUNNING 样本在启动时标 FAILED/PROCESS_INTERRUPTED（身份与开始时间不变），不在同一槽位重试；已成功
+     * 且仍有效的样本复用（不再采 lag）；剩余未准入样本继续；deadline 不刷新；按同一矩阵收束为 INCONCLUSIVE / SAMPLE_FAILED。
+     */
+    @Test
+    void aLeftoverRunningSampleIsMarkedInterruptedAndNeverRetried() throws Exception {
+        long verificationId = verification(policy(1));
+        jdbc.update(
+                "UPDATE recovery_verification SET status = 'RUNNING', started_at = UTC_TIMESTAMP(3) - INTERVAL 20 SECOND"
+                        + " WHERE id = ?",
+                verificationId);
+        long lag = storedSample(
+                verificationId,
+                "stream-lag-drained",
+                "queue.inspect",
+                seeded.investigation().streamId(),
+                1,
+                queue(0L, 0),
+                15);
+        long interrupted = runningSample(verificationId, "consumer-running", seeded.consumer(), 1, 10);
+        Map<String, Object> before = verificationRow(verificationId);
+        Object startedBefore = sampleTimes(interrupted).get("started_at");
+        answer("service.inspect", service(RuntimeState.RUNNING));
+
+        coordinator(pool()).recoverAfterStartup();
+        awaitStatus(verificationId, "INCONCLUSIVE");
+
+        assertThat(jdbc.queryForMap(
+                        "SELECT status, error_code, started_at FROM capability_invocation WHERE id = ?", interrupted))
+                .containsEntry("status", "FAILED")
+                .containsEntry("error_code", "PROCESS_INTERRUPTED")
+                .containsEntry("started_at", startedBefore);
+        assertThat(samples(verificationId))
+                .extracting(row -> row.get("criterion_key") + "#" + row.get("sample_index") + "/" + row.get("id"))
+                .containsExactly(
+                        "consumer-running#1/" + interrupted,
+                        "consumer-running#2/" + samples(verificationId).get(1).get("id"),
+                        "stream-lag-drained#1/" + lag);
+        assertThat(checkResults(verificationId))
+                .containsExactly("stream-lag-drained/TRUE/SATISFIED", "consumer-running/UNKNOWN/SAMPLE_FAILED");
+        assertThat(verificationRow(verificationId)).containsEntry("deadline_at", before.get("deadline_at"));
+        assertThat(incident()).isEqualTo("DIAGNOSED/8/-");
+    }
+
+    /**
+     * 重启时已过冻结 deadline：不再采样，按持久化样本收束；仍有效的明确 FALSE 不被覆盖（FAILED → 新 run），只有 TRUE 而样本不足则
+     * INCONCLUSIVE。
+     */
+    @Test
+    void anExpiredVerificationIsSettledFromPersistedSamplesWithoutSampling() throws Exception {
+        for (Object[] scenario : new Object[][] {
+            {"stopped", "FAILED", "consumer-running/FALSE/VIOLATED", "INVESTIGATING/8/-"},
+            {"lag-only", "INCONCLUSIVE", "consumer-running/UNKNOWN/INSUFFICIENT_SAMPLES", "DIAGNOSED/8/-"}
+        }) {
+            seed();
+            clearInvocations(invoker);
+            long verificationId = verification(policy(1));
+            jdbc.update(
+                    "UPDATE recovery_verification SET status = 'RUNNING', started_at = UTC_TIMESTAMP(3) - INTERVAL 70"
+                            + " SECOND, created_at = UTC_TIMESTAMP(3) - INTERVAL 70 SECOND,"
+                            + " deadline_at = UTC_TIMESTAMP(3) - INTERVAL 1 SECOND WHERE id = ?",
+                    verificationId);
+            storedSample(
+                    verificationId,
+                    "stream-lag-drained",
+                    "queue.inspect",
+                    seeded.investigation().streamId(),
+                    1,
+                    queue(0L, 0),
+                    30);
+            if (scenario[0].equals("stopped")) {
+                storedSample(
+                        verificationId,
+                        "consumer-running",
+                        "service.inspect",
+                        seeded.consumer(),
+                        1,
+                        service(RuntimeState.STOPPED),
+                        20);
+            }
+
+            coordinator(pool()).recoverAfterStartup();
+            awaitStatus(verificationId, (String) scenario[1]);
+
+            assertThat(checkResults(verificationId)).as((String) scenario[0]).contains((String) scenario[2]);
+            assertThat(incident()).as((String) scenario[0]).isEqualTo(scenario[3]);
+            verify(invoker, never()).invoke(any());
+        }
+    }
+
+    /** 线程池拒绝不丢弃已提交事实：Verification 保持 PENDING、不采样；下一次周期补派发唤醒并执行。 */
+    @Test
+    void aRejectedDispatchIsRecoveredByTheNextRescan() throws Exception {
+        long verificationId = verification(policy(1));
+        answer("queue.inspect", queue(0L, 0));
+        answer("service.inspect", service(RuntimeState.RUNNING));
+        java.util.concurrent.atomic.AtomicBoolean rejectNext = new java.util.concurrent.atomic.AtomicBoolean(true);
+        ThreadPoolExecutor rejectingOnce =
+                new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>()) {
+                    @Override
+                    public void execute(Runnable command) {
+                        if (rejectNext.getAndSet(false)) {
+                            throw new RejectedExecutionException("pool full");
+                        }
+                        super.execute(command);
+                    }
+                };
+        StartupRecoveryCoordinator coordinator = coordinator(rejectingOnce);
+
+        coordinator.recoverAfterStartup();
+        assertThat(verificationRow(verificationId)).containsEntry("status", "PENDING");
+        verify(invoker, never()).invoke(any());
+
+        assertThat(coordinator.redispatchPending()).isEqualTo(1);
+        awaitStatus(verificationId, "PASSED");
+    }
+
+    /** 中断记录只处理界限之前开始的恢复样本调用；之后开始的（本进程）与调查调用都不受影响。 */
+    @Test
+    void onlySamplesStartedBeforeTheBoundAreMarked() {
+        long verificationId = verification(policy(1));
+        jdbc.update(
+                "UPDATE recovery_verification SET status = 'RUNNING', started_at = UTC_TIMESTAMP(3) WHERE id = ?",
+                verificationId);
+        long old = runningSample(verificationId, "consumer-running", seeded.consumer(), 1, 30);
+        long current = runningSample(
+                verificationId, "stream-lag-drained", seeded.investigation().streamId(), 1, 1);
+
+        assertThat(interruptions.recordInterrupted(Instant.now().minusSeconds(10)))
+                .isEqualTo(1);
+
+        assertThat(jdbc.queryForObject("SELECT status FROM capability_invocation WHERE id = ?", String.class, old))
+                .isEqualTo("FAILED");
+        assertThat(jdbc.queryForObject("SELECT status FROM capability_invocation WHERE id = ?", String.class, current))
+                .isEqualTo("RUNNING");
+    }
+
+    private StartupRecoveryCoordinator coordinator(ThreadPoolExecutor pool) {
+        InProcessWorkDispatcher real = new InProcessWorkDispatcher(
+                pool, new SingleFlightRegistry(), (incidentId, runNo) -> {}, executionId -> {}, runner);
+        DispatchableWorkSource verificationWork = () -> workSources.stream()
+                .flatMap(source -> source.findDispatchable().stream())
+                .filter(DispatchableWork.RecoveryVerification.class::isInstance)
+                .toList();
+        return new StartupRecoveryCoordinator(
+                List.of(verificationWork), List.of(interruptions), real, Clock.systemUTC());
+    }
+
+    private static ThreadPoolExecutor pool() {
+        return new ThreadPoolExecutor(2, 2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
+    }
+
+    private void awaitStatus(long verificationId, String expected) throws InterruptedException {
+        for (int i = 0;
+                i < 300 && !expected.equals(verificationRow(verificationId).get("status"));
+                i++) {
+            Thread.sleep(100);
+        }
+        assertThat(verificationRow(verificationId)).containsEntry("status", expected);
+    }
+
+    /** 已成功的样本槽位：类型化结果按 Codec 编码，开始/完成于 secondsAgo 秒前。 */
+    private long storedSample(
+            long verificationId,
+            String criterionKey,
+            String capability,
+            long resourceId,
+            int sampleIndex,
+            CapabilityResult result,
+            int secondsAgo) {
+        jdbc.update(
+                "INSERT INTO capability_invocation (incident_id, recovery_verification_id, criterion_key, sample_index,"
+                        + " capability_key, managed_resource_id, status, request_schema_name, request_schema_version,"
+                        + " request_payload, response_schema_name, response_schema_version, response_payload, started_at,"
+                        + " finished_at, duration_ms, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'SUCCEEDED', ?, 1,"
+                        + " '{}', ?, ?, ?, UTC_TIMESTAMP(3) - INTERVAL ? SECOND, UTC_TIMESTAMP(3) - INTERVAL ? SECOND, 5,"
+                        + " UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
+                seeded.investigation().incidentId(),
+                verificationId,
+                criterionKey,
+                sampleIndex,
+                capability,
+                resourceId,
+                capability + ".request",
+                result.resultSchema().name(),
+                result.resultSchema().version(),
+                codecs.encode(
+                        result.resultSchema().name(), result.resultSchema().version(), result),
+                secondsAgo,
+                secondsAgo);
+        return slotId(verificationId, criterionKey, sampleIndex);
+    }
+
+    /** 旧进程留下的 RUNNING 样本槽位，secondsAgo 秒前开始。 */
+    private long runningSample(
+            long verificationId, String criterionKey, long resourceId, int sampleIndex, int secondsAgo) {
+        jdbc.update(
+                "INSERT INTO capability_invocation (incident_id, recovery_verification_id, criterion_key, sample_index,"
+                        + " capability_key, managed_resource_id, status, request_schema_name, request_schema_version,"
+                        + " request_payload, started_at, created_at, updated_at) VALUES (?, ?, ?, ?, 'service.inspect', ?,"
+                        + " 'RUNNING', 'service.inspect.request', 1, '{}', UTC_TIMESTAMP(3) - INTERVAL ? SECOND,"
+                        + " UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
+                seeded.investigation().incidentId(),
+                verificationId,
+                criterionKey,
+                sampleIndex,
+                resourceId,
+                secondsAgo);
+        return slotId(verificationId, criterionKey, sampleIndex);
+    }
+
+    private long slotId(long verificationId, String criterionKey, int sampleIndex) {
+        return jdbc.queryForObject(
+                "SELECT id FROM capability_invocation WHERE recovery_verification_id = ? AND criterion_key = ?"
+                        + " AND sample_index = ?",
+                Long.class,
+                verificationId,
+                criterionKey,
+                sampleIndex);
+    }
+
+    private Map<String, Object> sampleTimes(long invocationId) {
+        return jdbc.queryForMap("SELECT started_at FROM capability_invocation WHERE id = ?", invocationId);
+    }
+
     // ---------------------------------------------------------------- helpers
 
     /** lag ≤ 20（1 样本）→ consumer-running（2 样本，间隔 intervalSeconds），可再追加检查。 */
@@ -742,11 +1045,20 @@ class RecoveryVerificationIntegrationTest {
                 seeded.investigation().investigationId());
     }
 
+    /** 状态/版本/resolved_at 是否存在。 */
     private String incident() {
         return jdbc.queryForObject(
-                "SELECT status FROM incident WHERE id = ?",
+                "SELECT CONCAT(status, '/', lock_version, '/', IF(resolved_at IS NULL, '-', 'resolved'))"
+                        + " FROM incident WHERE id = ?",
                 String.class,
                 seeded.investigation().incidentId());
+    }
+
+    /** 最后一个时间线事件的类型/发起方。 */
+    private String lastEvent() {
+        return jdbc.queryForObject(
+                "SELECT CONCAT(event_type, '/', actor_type) FROM incident_timeline_event ORDER BY id DESC LIMIT 1",
+                String.class);
     }
 
     /** RECOVERY_VERIFICATION_* 事件类型/整体结果（无则 -）。 */

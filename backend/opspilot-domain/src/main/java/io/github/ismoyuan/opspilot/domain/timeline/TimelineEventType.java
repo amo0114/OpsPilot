@@ -56,6 +56,8 @@ public enum TimelineEventType {
     RECOVERY_VERIFICATION_FAILED,
     /** 没有 FALSE 但至少一项 required 检查 UNKNOWN。 */
     RECOVERY_VERIFICATION_INCONCLUSIVE,
+    /** Verification PASSED 的同一事务内 VERIFYING → RESOLVED 并写 resolved_at（01 §31、§35）；RESOLVED 只能来自 PASSED。 */
+    INCIDENT_RESOLVED,
     /** Approval 被拒绝，Incident 回到 DIAGNOSED（01 §24.2）。 */
     APPROVAL_REJECTED,
     /** Approval 被撤回（05 §42），Incident 回到 DIAGNOSED；01 §35 最低清单之外的补充类型。 */
