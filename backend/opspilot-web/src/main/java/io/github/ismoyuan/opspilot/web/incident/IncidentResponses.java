@@ -314,10 +314,19 @@ final class IncidentResponses {
                     sample.errorCode());
         }
 
-        /** 整数值（如积压条数）按整数输出，不写成 2180.0。 */
+        /**
+         * 整数值（如积压条数）按整数输出，不写成 2180.0；含小数或不在 long 范围 [-2^63, 2^63) 内的值按小数输出。用 if/else 而不是条件表达式：
+         * {@code cond ? Long : Double} 会把两侧拆箱并提升为 double，整数也会变成 2180.0（B31-R1 P3）。
+         */
         private static Number number(double value) {
-            long whole = (long) value;
-            return whole == value ? Long.valueOf(whole) : Double.valueOf(value);
+            // 先限定在 long 范围 [-2^63, 2^63)：(long) 2^63 会饱和为 Long.MAX_VALUE，比较时又提升回 2^63，误判为整数
+            if (value >= -0x1.0p63 && value < 0x1.0p63) {
+                long whole = (long) value;
+                if (whole == value) {
+                    return whole;
+                }
+            }
+            return value;
         }
 
         /** 01 §3 的中文状态名。 */

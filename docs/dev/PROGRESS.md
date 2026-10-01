@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-10-01（B32 DONE，commit addb5df；B31 P3 待单独处理，B33 未开始）
+> 最近更新：2026-10-01（TASK-085 修复：FIX-R2 PASS，REVIEW 待提交；Base 4144e44；B33 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -92,7 +92,7 @@
 | TASK-082 | B30 | Verification Outcome Transition | DONE | commit 39f9468（B30，Base dab0a20） | B30-V1 verify exit 0＋RecoveryVerificationIntegrationTest 18/18（三种结果迁移）＋变异 2 项；B30-R1 PASS（独立测试 40/40），待提交 |
 | TASK-083 | B30 | Verification Startup Recovery | DONE | commit 39f9468（B30，Base dab0a20） | B30-V1 verify exit 0＋RecoveryVerificationIntegrationTest 18/18（启动恢复 5 项）＋变异 2 项；B30-R1 PASS（独立测试 40/40），待提交 |
 | TASK-084 | B31 | Timeline Query | DONE | commit 09d085e（B31，Base a2a9827） | B31-V1 verify exit 0＋IncidentViewIntegrationTest Timeline 2 项＋IncidentApiContractTest 游标/400/404＋变异检查；B31-R1 PASS（独立测试 59/59；非阻塞 P3 见批次记录），待提交 |
-| TASK-085 | B31 | IncidentDetailView | DONE | commit 09d085e（B31，Base a2a9827） | B31-V1 verify exit 0＋IncidentViewIntegrationTest 详情 9 项（含中途并发提交的一致性读取）＋HTTP 详情各节＋变异检查；B31-R1 PASS（独立测试 59/59；非阻塞 P3 见批次记录），待提交 |
+| TASK-085 | B31 | IncidentDetailView | DONE | commit 09d085e（B31，Base a2a9827） | B31-V1 verify exit 0＋IncidentViewIntegrationTest 详情 9 项（含中途并发提交的一致性读取）＋HTTP 详情各节＋变异检查；B31-R1 PASS（独立测试 59/59；非阻塞 P3 见批次记录），待提交；B31-R1 P3 独立修复 REVIEW（Base 4144e44，未提交）；TASK-085-FIX-R2 PASS：整数表示与 long 上界回归通过，待用户授权提交，见「TASK-085 修复」 |
 | TASK-086 | B31 | availableActions | DONE | commit 09d085e（B31，Base a2a9827） | B31-V1 verify exit 0＋IncidentActionPolicyTest 2/2（全组合）＋IncidentViewIntegrationTest 5 项＋创建/详情 HTTP＋变异检查；B31-R1 PASS（独立测试 59/59；非阻塞 P3 见批次记录），待提交 |
 | TASK-087 | B32 | SSE Hub | DONE | commit addb5df（B32，Base b8b668b） | B32-V1 verify exit 0＋IncidentEventStreamContractTest 6/6（首次补发、状态事件、404/400）＋变异检查；B32-R1 PASS（独立测试 22/22），待提交 |
 | TASK-088 | B32 | After Commit Event | DONE | commit addb5df（B32，Base b8b668b） | B32-V1 verify exit 0＋IncidentEventStreamContractTest（未提交/回滚不推送、ACC-FINAL-15 顺序扰动）＋变异检查；B32-R1 PASS（独立测试 22/22），待提交 |
@@ -1093,6 +1093,45 @@
 - 修改文件：新增 application/recovery/{RecoverySampleInterruptionRepository,RecoverySampleInterruptionRecorder}、domain/timeline/IncidentResolvedPayloadV1、infrastructure/persistence/mybatis/invocation/MyBatisRecoverySampleInterruptions、persistence/mybatis/recovery/MyBatisVerificationWorkSource；修改 application/investigation/InvestigationApplicationService、application/recovery/RecoveryVerificationService、application/dispatch/{DispatchableWorkSource,StartupRecoveryCoordinator}（注释）、application/investigation/recovery/InvocationInterruptionRepository（注释）、domain TimelineEventType、InvestigationStartedPayloadV1（注释）、infrastructure InvocationInterruptionMapper＋XML、RecoveryVerificationMapper＋XML，测试 RecoveryVerificationIntegrationTest；docs/dev。Migration：无；新增依赖：无
 - 提交：代码提交 39f9468ad8e362904a5cb4dbcc182cb4bffefd16（feat(recovery): verification outcome transitions and verification startup recovery (TASK-082–083)）；SHA 回填为后续 docs 提交；未推送
 
+### TASK-085 修复 — 详情恢复样本整数格式化（B31-R1 P3）
+
+- 状态：REVIEW（TASK-085-FIX-R2 PASS，已通过，待用户授权提交；未提交）
+- 归属：TASK-085（B31 已 DONE，不重开 B31，不并入 B33）；在 B32 DONE 之后、B33 开始之前单独修复
+- Base SHA：4144e44fa9b62a3481facfae2f6c37379f5ad8a4（B32 docs 提交后的 HEAD；开工时工作树干净）
+- 范围：只改 web/incident/IncidentResponses 的样本数值格式化（`cond ? Long.valueOf(..) : Double.valueOf(..)` 两侧装箱类型触发二元数值提升，整数也输出为 2180.0）＋JSON 回归测试；docs/dev。明确不做：改变投影、判定或其他字段；新依赖；B33
+- 关键不变量：数值不变，只改 JSON 表示；在 long 范围内的整数输出为 JSON 整数，含小数或超出范围的值保持 Double。显式检查 [-2^63, 2^63)，排除 R1 发现的正上界误判；FIX-R2 已复核
+- 验证要求：web MVC JSON 回归（2180 → `2180`、小数保持）；受影响 web/boot 测试；`git diff --check`；修复前先确认回归在原代码失败
+- 开工已有修改：无（工作树干净）
+- 最终实现：IncidentResponses.IncidentDetailResponse.number 先检查 [-2^63, 2^63)，仅在范围内截断为 long 并比较；相等返回 Long，其余返回 Double。保留独立 return，消除条件表达式的数值提升；R1 的范围遗漏已修复，历史发现与证据保留如下
+- 修改文件：web/incident/IncidentResponses（number 方法及注释）；新增测试 web/incident/IncidentDetailJsonTest；docs/dev。Migration：无；新增依赖：无
+- 验证（backend/，JDK 21，2026-10-01 本机实测）：
+  - 回归先在原代码确认失败：`./mvnw -B -o test -pl opspilot-web -Dtest=IncidentDetailJsonTest` → 1 失败，响应体为 `"value":2180.0`、`"value":0.0`（12.5、1.0E19 原本正确）
+  - 修复后 `./mvnw -B -o install -pl opspilot-web -am` → BUILD SUCCESS：domain 43/43、web 52/52（含 IncidentDetailJsonTest 1/1：2180 → `2180`、0 → `0`、12.5 保持 `12.5`、1.0E19 保持小数、枚举文本 `"RUNNING"`、未知值 `null`＋valueUnknownCause），Spotless check（domain、application、web）通过
+  - `./mvnw -B -o test -pl opspilot-boot -Dtest='IncidentApiContractTest,ApplicationWiringTest'` → 4＋1 通过（真实 HTTP＋MySQL 详情契约与应用装配）
+  - `git diff --check` 通过
+  - NOT RUN：完整 `clean verify`（只改 web 的 JSON 表示，按本修复要求运行受影响测试）；infrastructure 测试（未改动）；CCG 门禁（本机 runner 缺失）
+- TASK-085-FIX-R1：**NEEDS CHANGES**（2026-10-01，独立 Reviewer：Codex 主代理）。范围：Base `4144e44fa9b62a3481facfae2f6c37379f5ad8a4` 至当前工作树全部变化，包括未跟踪的 IncidentDetailJsonTest；1 项阻塞 P2。
+  - **[P2] long 正上界被误判为可无损转换，改变 JSON 数值。** `web/incident/IncidentResponses.java:322–324`：输入 `0x1.0p63`（2^63，double 为 `9.223372036854776E18`）时，强转 long 饱和为 `9223372036854775807`，但 `whole == value` 又把 long 提升为 double、舍入到 2^63，因此条件成立。旧代码输出 Double `9.223372036854776E18`，新代码输出整数 `9223372036854775807`。这是表示修复引入的数值改变；ProjectedValue.Number 与 metrics.query.latest 接受该有限 double，边界没有被上游排除。`1.0E19` 距离上界较远，现有用例捕捉不到。
+  - 修复建议：保留显式分支，先保证 `value >= -0x1.0p63 && value < 0x1.0p63`，再进行整数相等判断；不能用 `value <= Long.MAX_VALUE` 代替，上界会再次提升并舍入。新增 JSON 回归覆盖 2^63、其前一个可表示 double、-2^63 及负下界外相邻值，保留原有整数/小数用例；修正文档与注释中的范围判断说明。
+  - 独立验证：backend/，`./mvnw -B test -pl opspilot-web -am -Dtest=IncidentDetailJsonTest,IncidentControllerTest -Dsurefire.failIfNoSpecifiedTests=false`，2026-10-01 10:54:56 UTC 完成，exit 0；实际匹配并执行 IncidentDetailJsonTest **1/1，0 failures/errors/skipped**（IncidentControllerTest 无匹配），日志 `/tmp/task085-fix-r1-tests.log`。随后在 JDK 21 JShell 反射调用当前编译产物的实际 number 方法并由 Jackson JsonMapper 序列化，复现上述 old/new 差异；2180、0、12.5、1e19、正上界前相邻值、负下界及其外相邻值亦逐项检查，日志 `/tmp/task085-fix-r1-boundary.log`。`git diff 4144e44 --check` 通过。
+  - 本轮未修改生产代码或测试，仅更新审查/交接记录。完整 clean verify、boot/数据库回归、CCG 本轮 NOT RUN；不批准当前修复提交。沿用原基线修复后送 TASK-085-FIX-R2，不重开 B31，不启动 B33。
+  - 追加独立复核（2026-10-01 20:07 +08:00，同一 Base 与未变更的生产代码/测试）：`backend/` 执行 `./mvnw -B -o verify -pl opspilot-web -am -Dtest=IncidentDetailJsonTest -Dsurefire.failIfNoSpecifiedTests=false` → exit 0，IncidentDetailJsonTest 1/1，Enforcer 与 domain/application/web 的 Spotless 检查通过；此命令只选择该回归，不代表全套测试。日志 `/tmp/task085-review-recheck-tests.log`。
+  - 追加边界复现：`python3` 从当前 Surefire XML 读取测试 classpath，以 JDK 21 执行 `/tmp/Task085ReviewBoundary.java`，反射调用当前生产 `number` 并经 Jackson 序列化，与基线表达式比较；exit 0，确认 `9.223372036854776E18` 从原 Double 输出变为 `9223372036854775807`。同时检查原有四个数值、正上界内外相邻 double、负下界及其外相邻值；日志 `/tmp/task085-review-recheck-boundary.log`。`ProjectedValue.Number`、`RecoveryProjection.LATEST` 与 Prometheus 解析未排除该正有限值。`git diff --check 4144e44fa9b62a3481facfae2f6c37379f5ad8a4` 通过。结论维持 NEEDS CHANGES；本次仅补充记录，完整 clean verify、boot/MySQL 回归与 CCG 本次 NOT RUN。
+- FIX-R1 P2 修复（沿用 Base 4144e44，2026-10-01）：
+  - 实现：number 先判断 `value >= -0x1.0p63 && value < 0x1.0p63`，在 long 范围内才截断并比较相等，相等返回 Long，其余（含小数、2^63 及以上、-2^63 以下）返回 Double；仍为显式 if/else，无条件表达式；注释同步为 long 范围 [-2^63, 2^63)
+  - 回归补充：IncidentDetailJsonTest 增加 5 个边界样本——2^63 → `9.223372036854776E18` 且响应中不出现 `9223372036854775807`；2^63 前一个 double → `9223372036854774784`；-2^63 → `-9223372036854775808`（即 Long.MIN_VALUE，精确）；-2^63 前一个 double → `-9.223372036854778E18`；-2^63 后一个 double → `-9223372036854774784`
+  - 先在 FIX-R1 代码上确认失败：`./mvnw -B -o test -pl opspilot-web -Dtest=IncidentDetailJsonTest` → 1 失败，2^63 输出为 `9223372036854775807`（其余 4 个边界原已正确）
+  - 修复后 `./mvnw -B -o install -pl opspilot-web -am` → BUILD SUCCESS：domain 43/43、web 52/52（IncidentDetailJsonTest 1/1 含全部原断言与 5 个边界），Spotless check 通过；`./mvnw -B -o test -pl opspilot-boot -Dtest='IncidentApiContractTest,ApplicationWiringTest'` → 4＋1 通过；`git diff --check` 通过
+  - NOT RUN：完整 clean verify、infrastructure 测试（未改动）、CCG 门禁
+- TASK-085-FIX-R2：**PASS**（2026-10-01 20:26 +08:00，独立 Reviewer：Codex 主代理）。范围：Base `4144e44fa9b62a3481facfae2f6c37379f5ad8a4` 至当前工作树全部变化，包括未跟踪的 IncidentDetailJsonTest；仅 TASK-085 独立修复，不重开 B31，不涉及 B33。无 P0/P1/P2 阻塞项，无新增非阻塞代码问题。
+  - 复核：原 P3 的整数表示与 FIX-R1 P2 的正上界误判均已解决；范围判断先于强转，上界严格排除 2^63，下界包含 Long.MIN_VALUE。原始 JSON 断言覆盖原有整数、零、小数、1.0E19、文本、未知值与全部五个新增边界；未改变数值投影、恢复判定或其他响应字段。
+  - 独立验证（backend/，JDK 21）：`./mvnw -B -o install -pl opspilot-web -am` → exit 0，domain 43/43、web 52/52，均无失败/错误/跳过；新增 MVC JSON 测试 1/1；执行了 verify 阶段，Enforcer 与 domain/application/web Spotless 通过。日志 `/tmp/task085-fix-r2-web.log`，20:25:27 +08:00 完成。
+  - 独立验证（backend/，使用上一命令安装的当前 web 产物）：`./mvnw -B -o test -pl opspilot-boot -Dtest=IncidentApiContractTest,ApplicationWiringTest` → exit 0，IncidentApiContractTest 4/4、ApplicationWiringTest 1/1，均无失败/错误/跳过；真实 HTTP＋Testcontainers MySQL 8.4.11。日志 `/tmp/task085-fix-r2-boot.log`，20:26:27 +08:00 完成。
+  - 受测文件 SHA-256：IncidentResponses.java `d2662a8ab19741d0a2737e6951dc5e4d9b6fd16ddb3454a326b15ba29e3ef4e1`；IncidentDetailJsonTest.java `4ccc3b61a1ad2539b29d8e59172c7141dd21542e1aa082c1b5119a4fff561c33`。`git diff --check 4144e44fa9b62a3481facfae2f6c37379f5ad8a4` 通过；本轮仅更新 PROGRESS/CURRENT 的 Review 与交接记录，未修改生产代码或测试；新依赖、Migration 均无。
+  - NOT RUN：完整 clean verify、infrastructure 测试与 CCG 门禁。本结论限于已约定的 JSON 表示修复范围及受影响验证，不作为 B31/B32 全批次重新验收。Commit Recommendation：可按用户授权提交本独立修复；当前保持 REVIEW（已通过，待提交），不自动提交或推送，不启动 B33。
+- 提交：未提交
+
+
 ### B32 — SSE、提交后通知与断线补发
 
 - 状态：DONE（B32-R1 PASS，已提交 addb5df）
@@ -1333,7 +1372,7 @@
 | 05 §45～§48 执行记录、执行历史、恢复验证列表与单次验证详情的独立 GET（/executions/{id}、/incidents/{key}/executions、/incidents/{key}/recovery-verifications[/{no}]）在 08 中无明确归属 Task；B31 只在故障详情中给出最新方案/执行与最新验证（含三值检查与样本） | web、application/recovery、application/incident/query | 与 §57～§58 同样须在 TASK-102/103（只含前端）前明确承接其后端的批次；可复用 RecoveryStatusReader 与 IncidentQueryMapper 的投影，不得返回凭据或执行上下文 | 待确认（TASK-102 前） |
 | B31：只有创建响应按 05 §20 返回 availableActions；Start/Stop/Continue/Cancel、请求处理建议、审批与 verify-recovery 的响应不含（05 示例未列），前端在动作后 GET 详情或接收 SSE incident-state（05 §64，TASK-087～089）获得 | web/incident、web/remediation、web/recovery | 如需各动作响应直接返回，由 AvailableActionsResolver 在同一事务计算后补充，不在前端推导 | TASK-087～089 或需要时 |
 | B31：action_execution 没有 result_summary 列，详情的 Execution 只给状态、起止时间与错误码（05 §45 示例有 resultSummary） | application/incident/query/RemediationView | 如需执行摘要，由 05 §45 独立 GET 的承接批次按 result_payload 生成，不新增列 | 05 §45 承接批次 |
-| B31-R1 非阻塞 P3：样本整数格式化的 Long/Double 三元表达式因数值提升始终返回 Double，2180 实际为 2180.0，与注释及设计取值不符；不影响数值或恢复判定 | web/incident/IncidentResponses.java:320 | 下次触及该展示映射时用显式分支保留预期类型并检查 long 范围，或统一小数表示并修正文档；JDK 21 JShell 与当前编译产物已确认 | 后续触及展示映射的 Task |
+| （已修复并复核，TASK-085 独立修复 REVIEW，FIX-R2 PASS，待提交）B31-R1 P3 整数表示及 FIX-R1 P2 正上界误判均已解决 | web/incident/IncidentResponses.java:321 | 显式检查 [-2^63, 2^63) 后按独立分支转换；原有样本与五个边界的原始 JSON 回归通过，证据见 TASK-085-FIX-R2 | TASK-085 独立修复（B33 前） |
 | （已关闭，B24/TASK-067：经公开用例，ACTIVE Plan 只在 AWAITING_APPROVAL 期间存在——此时继续调查被拒、不会产生新 Diagnosis，审批一经决定或撤回方案即 CANCELLED——因此真实流程中 Superseder 不会遇到 ACTIVE Plan，是防御性保护；其对 ACTIVE Plan 的行为由 DiagnosisIntegrationTest（B20）断言，旧 Diagnosis 方案不可批准由 approvalIsRechecked… 断言。原记录：实现已替换，B20/TASK-062：ACTIVE→SUPERSEDED 并有集成断言；真实方案端到端仍属 TASK-067）RemediationPlanSuperseder 为占位 no-op（Plan 表不存在，无可失效方案） | infrastructure/remediation/NoRemediationPlanSuperseder | TASK-062 建表后以真实 supersede 替换并删除本类，TASK-067 补真实 Plan 的集成断言（08 TASK-026 不得把 no-op 留到 Release） | TASK-062/067 |
 | Diagnosis 创建一律要求 TerminationReason（库列可空）；DIAGNOSIS_CREATED 发起方 AGENT_COMPLETED 为 AI_RUNTIME、其余为 SYSTEM；主假设当前状态（如 REFUTED）不作限制（规格未要求） | application/diagnosis | TASK-040/042 调用时按实际收束原因传入；如规格要求主假设状态约束再加入 DiagnosisDraft.checkReferences | TASK-040/042 |
 | createDiagnosis 只核对 INVESTIGATING 与 run 号，不核对 Stop/deadline（01 §11 允许同轮 Stop 与到期收束）；旧 run 用 STALE_RUN_RESULT（内部处置，CONFLICT）拒绝 | DiagnosisApplicationService | TASK-039～042 决定何时允许收束、何时生成 UNDETERMINED，并把 STALE_RUN_RESULT 记入 AgentStep 审计（独立事务） | TASK-039～042 |
