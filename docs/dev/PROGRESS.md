@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-10-01（B33 REVIEW：B33-R2 PASS，R1 三项已解决，1 项非阻塞测试稳定性 P3；Base 0afaecc，待用户授权提交）
+> 最近更新：2026-10-01（B33 DONE，commit e296fd6；B34 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -97,9 +97,9 @@
 | TASK-087 | B32 | SSE Hub | DONE | commit addb5df（B32，Base b8b668b） | B32-V1 verify exit 0＋IncidentEventStreamContractTest 6/6（首次补发、状态事件、404/400）＋变异检查；B32-R1 PASS（独立测试 22/22），待提交 |
 | TASK-088 | B32 | After Commit Event | DONE | commit addb5df（B32，Base b8b668b） | B32-V1 verify exit 0＋IncidentEventStreamContractTest（未提交/回滚不推送、ACC-FINAL-15 顺序扰动）＋变异检查；B32-R1 PASS（独立测试 22/22），待提交 |
 | TASK-089 | B32 | SSE Reconnect | DONE | commit addb5df（B32，Base b8b668b） | B32-V1 verify exit 0＋IncidentEventStreamContractTest（Snapshot 游标与 Last-Event-ID 续传）＋IncidentEventStreamHeartbeatTest 1/1（唤醒丢失自愈）＋变异检查；B32-R1 PASS（独立测试 22/22），待提交 |
-| TASK-090 | B33 | Fault Lab 基础模型 | REVIEW | 未提交（B33，Base 0afaecc；文件见 PROGRESS「B33」） | B33-V2 verify exit 0（R1 修复后）＋FaultLabIntegrationTest（V007 约束 9 例、生命周期）＋变异检查；B33-R2 PASS（R1 三项已解决；独立 36/36；非阻塞 P3 见批次记录），待提交 |
-| TASK-091 | B33 | Ground Truth Isolation | REVIEW | 未提交（B33，Base 0afaecc；文件见 PROGRESS「B33」） | B33-V2 verify exit 0（R1 修复后）＋GroundTruthIsolationTest 3/3（类依赖、Mapper SQL、三场景真实上下文序列化无答案标记）＋变异检查；B33-R2 PASS（R1 三项已解决；独立 36/36；非阻塞 P3 见批次记录），待提交 |
-| TASK-092 | B33 | Fault Inject / Reset API | REVIEW | 未提交（B33，Base 0afaecc；文件见 PROGRESS「B33」） | B33-V2 verify exit 0（R1 修复后）＋FaultLabIntegrationTest 13/13＋FaultLabApiContractTest 3/3（HTTP 契约、错误码）＋变异检查；B33-R2 PASS（R1 三项已解决；独立 36/36；非阻塞 P3 见批次记录），待提交 |
+| TASK-090 | B33 | Fault Lab 基础模型 | DONE | commit e296fd6（B33，Base 0afaecc） | B33-V2 verify exit 0（R1 修复后）＋FaultLabIntegrationTest（V007 约束 9 例、生命周期）＋变异检查；B33-R2 PASS（R1 三项已解决；独立 36/36；非阻塞 P3 见批次记录），待提交 |
+| TASK-091 | B33 | Ground Truth Isolation | DONE | commit e296fd6（B33，Base 0afaecc） | B33-V2 verify exit 0（R1 修复后）＋GroundTruthIsolationTest 3/3（类依赖、Mapper SQL、三场景真实上下文序列化无答案标记）＋变异检查；B33-R2 PASS（R1 三项已解决；独立 36/36；非阻塞 P3 见批次记录），待提交 |
+| TASK-092 | B33 | Fault Inject / Reset API | DONE | commit e296fd6（B33，Base 0afaecc） | B33-V2 verify exit 0（R1 修复后）＋FaultLabIntegrationTest 13/13＋FaultLabApiContractTest 3/3（HTTP 契约、错误码）＋变异检查；B33-R2 PASS（R1 三项已解决；独立 36/36；非阻塞 P3 见批次记录），待提交 |
 | TASK-093 | B34 | Statistics Consumer Stop Injector | TODO | — | NOT RUN |
 | TASK-094 | B35 | Redis Latency Injector | TODO | — | NOT RUN |
 | TASK-095 | B36 | MySQL Slow Query Injector | TODO | — | NOT RUN |
@@ -1095,7 +1095,7 @@
 
 ### B33 — Fault Lab 模型、Ground Truth 隔离与 API
 
-- 状态：REVIEW（B33-R2 PASS；B33-V2 通过，已通过，待用户授权提交；未提交）
+- 状态：DONE（B33-R2 PASS，已提交 e296fd6）
 - 成员及顺序：TASK-090 → TASK-091 → TASK-092；批外前置：TASK-089 DONE（addb5df，B32-R1 PASS）；091 依赖 090、092 依赖 091（批内）
 - Base SHA：0afaeccf515fad4fa7514362a3356e6852ab36bb
 - 范围：TASK-090——迁移 fault_experiment（04 §63：场景、系统、目标资源、可空 incident、INJECTING/ACTIVE/RESETTING/RESET/FAILED、注入/重置时间、Ground Truth schema＋载荷、错误信息）与代码定义的三个场景（redis-latency、mysql-slow-query、statistics-consumer-stop；只含症状的 Incident 模板与 09 §20 Ground Truth）。TASK-091——Ground Truth 只经 Fault Lab／Evaluation 代码路径读取；证明 InvestigationContextBuilder 及 AI 请求永远读不到（结构＋真实数据行为两层）。TASK-092——`GET /api/v1/fault-lab/scenarios`、`POST …/scenarios/{scenarioKey}/actions/inject`、`POST /api/v1/fault-lab/experiments/{experimentId}/actions/reset`；只允许 DEMO/TEST 环境的系统，其余 FAULT_SCENARIO_NOT_ALLOWED；注入→确认生效后才在同一事务标 ACTIVE 并创建 CREATED Incident，失败标 FAILED 且不建 Incident；注入/重置的外部动作在事务外；注入器为端口，真实实现属 TASK-093～095。允许目录：backend domain/application/infrastructure/web 的 faultlab 包、V007 迁移、IncidentApplicationService（Fault Lab 同事务创建 Incident 的入口）、ErrorCode、相应测试；docs/dev。明确不做：真实 Docker/Toxiproxy/慢查询注入器与 Gate（093～095）、Ground Truth 公开读取接口、UI、新依赖、扩大生产控制面
@@ -1139,7 +1139,7 @@
   - V2 证据核验：已读取实际 b33-v2.log（16:58、BUILD SUCCESS、exit=0）及重跑前 Surefire XML 汇总（domain 43、infrastructure 881、web 52、boot 17，0 failures/errors/skipped）。本 Reviewer 未独立重跑完整 clean verify，也未重做实施者的变异检查；真实注入器/Gate、部署日志隔离、S1～S3、真实 LLM、UI、CCG 仍为前述 NOT RUN/NOT VERIFIED。
   - 受审代码清单 `/tmp/b33-r2-code.sha256`，清单 SHA-256 `631af8ac45b8cb8a1c19a668c76e275afc36259e7fdc9e56dd84e03afe9235f5`；`git diff --check 0afaeccf515fad4fa7514362a3356e6852ab36bb` 通过。本轮仅更新 PROGRESS/CURRENT，未改生产代码、测试或 V007；新依赖无，批次 Migration 为 V007。Commit Recommendation：可按用户授权提交本批；未提交前保持 REVIEW，不推送、不开始 B34。
 - 修改文件：新增 V007__create_fault_lab_table.sql；domain/faultlab/FaultExperimentStatus；application/faultlab/{FaultCause,FaultGroundTruthV1,FaultScenario,FaultScenarioCatalog,FaultInjector,FaultTarget,FaultInjectionException,FaultExperimentRepository,FaultLabApplicationService,FaultExperimentInterruptionRecorder,InjectFaultCommand,InjectFaultResult,ResetFaultResult}、application/faultlab/evaluation/{GroundTruthQuery,FaultEvaluationService}；infrastructure persistence/mybatis/faultlab/{FaultExperimentMapper(+XML),MyBatisFaultExperimentRepository,MyBatisGroundTruthQuery}；web/faultlab/FaultLabController；测试 infrastructure faultlab/{FaultLabIntegrationTest,GroundTruthIsolationTest,ScriptedFaultInjector}、boot FaultLabApiContractTest；修改 domain/error/ErrorCode（5 个 Fault Lab 码）、application/incident/IncidentApplicationService（同事务创建入口）、infrastructure/schema/JacksonSchemaCodecRegistry（注册 Ground Truth Schema）；docs/dev。Migration：V007；新增依赖：无
-- 提交：未提交；范围外问题：见待处理问题更新的 3 行（createIncident 事务契约已关闭、S3 受影响资源、Fault Lab 时间线发起方沿用）
+- 提交：代码提交 e296fd60c3e50f74c1d1c03e70927c31707bb27f（feat(faultlab): fault lab experiments, ground truth isolation and inject/reset API (TASK-090–092)）；SHA 回填为后续 docs 提交；未推送；范围外问题：见待处理问题（含 B33-R2 非阻塞 P3：Reset/注入竞争测试可加闩锁使 Reset 保持进行中）
 
 
 ### TASK-085 修复 — 详情恢复样本整数格式化（B31-R1 P3）
