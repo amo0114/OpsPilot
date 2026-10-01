@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-10-01（B31 REVIEW，Base a2a9827，B31-R1 PASS，B31-V1 exit 0，待提交）
+> 最近更新：2026-10-01（B31 DONE，commit 09d085e；B32 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -91,9 +91,9 @@
 | TASK-081 | B29 | Manual Verify Recovery | DONE | commit cdc9f0e（B29，Base c0eb35c） | B29-V1 verify exit 0＋VerifyRecoveryIntegrationTest 4/4、RecoveryControllerTest 12/12＋变异 1 项；B29-R1 NEEDS CHANGES → 已修复，B29-V2 verify exit 0（含 ApplicationWiringTest），B29-R2 PASS（独立测试 50/50），待提交 |
 | TASK-082 | B30 | Verification Outcome Transition | DONE | commit 39f9468（B30，Base dab0a20） | B30-V1 verify exit 0＋RecoveryVerificationIntegrationTest 18/18（三种结果迁移）＋变异 2 项；B30-R1 PASS（独立测试 40/40），待提交 |
 | TASK-083 | B30 | Verification Startup Recovery | DONE | commit 39f9468（B30，Base dab0a20） | B30-V1 verify exit 0＋RecoveryVerificationIntegrationTest 18/18（启动恢复 5 项）＋变异 2 项；B30-R1 PASS（独立测试 40/40），待提交 |
-| TASK-084 | B31 | Timeline Query | REVIEW | 未提交（B31，Base a2a9827；文件见 PROGRESS「B31」） | B31-V1 verify exit 0＋IncidentViewIntegrationTest Timeline 2 项＋IncidentApiContractTest 游标/400/404＋变异检查；B31-R1 PASS（独立测试 59/59；非阻塞 P3 见批次记录），待提交 |
-| TASK-085 | B31 | IncidentDetailView | REVIEW | 未提交（B31，Base a2a9827；文件见 PROGRESS「B31」） | B31-V1 verify exit 0＋IncidentViewIntegrationTest 详情 9 项（含中途并发提交的一致性读取）＋HTTP 详情各节＋变异检查；B31-R1 PASS（独立测试 59/59；非阻塞 P3 见批次记录），待提交 |
-| TASK-086 | B31 | availableActions | REVIEW | 未提交（B31，Base a2a9827；文件见 PROGRESS「B31」） | B31-V1 verify exit 0＋IncidentActionPolicyTest 2/2（全组合）＋IncidentViewIntegrationTest 5 项＋创建/详情 HTTP＋变异检查；B31-R1 PASS（独立测试 59/59；非阻塞 P3 见批次记录），待提交 |
+| TASK-084 | B31 | Timeline Query | DONE | commit 09d085e（B31，Base a2a9827） | B31-V1 verify exit 0＋IncidentViewIntegrationTest Timeline 2 项＋IncidentApiContractTest 游标/400/404＋变异检查；B31-R1 PASS（独立测试 59/59；非阻塞 P3 见批次记录），待提交 |
+| TASK-085 | B31 | IncidentDetailView | DONE | commit 09d085e（B31，Base a2a9827） | B31-V1 verify exit 0＋IncidentViewIntegrationTest 详情 9 项（含中途并发提交的一致性读取）＋HTTP 详情各节＋变异检查；B31-R1 PASS（独立测试 59/59；非阻塞 P3 见批次记录），待提交 |
+| TASK-086 | B31 | availableActions | DONE | commit 09d085e（B31，Base a2a9827） | B31-V1 verify exit 0＋IncidentActionPolicyTest 2/2（全组合）＋IncidentViewIntegrationTest 5 项＋创建/详情 HTTP＋变异检查；B31-R1 PASS（独立测试 59/59；非阻塞 P3 见批次记录），待提交 |
 | TASK-087 | B32 | SSE Hub | TODO | — | NOT RUN |
 | TASK-088 | B32 | After Commit Event | TODO | — | NOT RUN |
 | TASK-089 | B32 | SSE Reconnect | TODO | — | NOT RUN |
@@ -1095,7 +1095,7 @@
 
 ### B31 — Timeline、完整详情视图与 availableActions
 
-- 状态：REVIEW（B31-R1 PASS，B31-V1 通过，待提交）
+- 状态：DONE（B31-R1 PASS，已提交 09d085e）
 - 成员及顺序：TASK-084 → TASK-085 → TASK-086；批外前置：TASK-083 DONE（39f9468，B30-R1 PASS）；085 依赖 084、086 依赖 085（批内）
 - Base SHA：a2a9827c2fbd24de7b27458fa00a3594ea4a7127
 - 范围：TASK-084——`GET /api/v1/incidents/{incidentKey}/timeline?afterId&limit`，按 (incident_id, id) 游标只读追加事件，返回人类可读 summary 与 nextAfterId。TASK-085——`GET /api/v1/incidents/{incidentKey}` 由阶段版本扩为 IncidentDetailView：当前影响、状态、当前判断（最新 Diagnosis 及其冻结 Evidence 摘要）、处理建议（最新 Plan/Action/Approval/Execution）、恢复情况（最新 Verification 的三值检查、样本与整体状态）、调查（runNo、stopRequested、本轮预算与历史累计分开）、lastTimelineEventId，全部来自同一一致性读取。TASK-086——Java 依当前真实状态计算 availableActions（六个动作），详情与创建响应返回；前端不复制状态机。允许目录：backend 的 domain/incident、application/incident|timeline|recovery（样本读取共用）、infrastructure persistence/mybatis/incident|timeline|invocation、web/incident|timeline 与相应测试；docs/dev。明确不做：SSE（087～089）、05 §45～§48 执行/验证独立 GET（08 无归属 Task，记录问题）、UI、新迁移、新依赖、改动写路径规则
@@ -1123,7 +1123,7 @@
   - 完整 clean verify 本轮 NOT RUN，沿用实施方 B31-V1；SSE、独立执行/验证 GET、真实 Provider/LLM、ai-runtime、S1～S3、CCG NOT RUN。未重做实施方变异检查。
   - Commit Recommendation：可进入本批提交步骤；本轮仅更新审查/交接记录，未修改实现、未提交、未推送。B31 与成员保持 REVIEW，按用户授权提交并回填真实 SHA 后才能 DONE，不提前开始 B32。
 - 修改文件：新增 domain/incident/{IncidentAction,IncidentActionPolicy}、application/incident/query/{AvailableActionsResolver,CurrentAssessmentView,IncidentSnapshot,RemediationView}、application/recovery/{RecoverySampleReader,RecoveryStatusReader,RecoveryStatusView,RecoveryVerificationQuery}、application/timeline/query/{TimelineEventView,TimelinePage,TimelineQueryRepository,TimelineQueryService}、infrastructure persistence/mybatis/recovery/MyBatisRecoveryVerificationQuery、persistence/mybatis/timeline/{TimelineQueryMapper(+XML),MyBatisTimelineQueryRepository}、web/timeline/TimelineController，测试 IncidentActionPolicyTest、IncidentViewIntegrationTest；修改 application/capability/RecoverySampleInvocation、incident/{CreateIncidentResult,IncidentApplicationService}、incident/query/{IncidentDetailView,IncidentQueryRepository,IncidentQueryService}、recovery/RecoveryVerificationService（样本读取改用 RecoverySampleReader）、infrastructure incident/{IncidentDetailRow,IncidentQueryMapper(+XML),MyBatisIncidentQueryRepository}、invocation/{CapabilityInvocationMapper(+XML),MyBatisCapabilityInvocationRepository}、recovery/RecoveryVerificationMapper(+XML)、web/incident/{IncidentController,IncidentResponses}，测试 CreateIncidentIntegrationTest、RecoveryVerificationIntegrationTest（@Import 共用读取器）、IncidentApiContractTest、InvestigationApiContractTest（版本改为读库）；删除 application/incident/query/InvestigationRunView；docs/dev。Migration：无；新增依赖：无
-- 提交：未提交；范围外问题：见待处理问题新增 3 行（05 §45～§48 独立 GET 归属、其余动作响应不含 availableActions、Execution 无摘要列）
+- 提交：代码提交 09d085edcd8963003c826c25661b02262a837185（feat(incident): timeline query, full incident detail view and available actions (TASK-084–086)）；SHA 回填为后续 docs 提交；未推送；范围外问题：见待处理问题（05 §45～§48 独立 GET 归属、其余动作响应不含 availableActions、Execution 无摘要列、B31-R1 P3 整数格式化）
 
 ### TASK-039 修复 — 准入 step_no 分配并发死锁（B12-R1/R2 约定）
 
