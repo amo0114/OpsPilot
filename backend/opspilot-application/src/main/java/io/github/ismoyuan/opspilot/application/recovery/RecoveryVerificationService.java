@@ -2,7 +2,6 @@ package io.github.ismoyuan.opspilot.application.recovery;
 
 import io.github.ismoyuan.opspilot.application.capability.CapabilityInvocationRepository;
 import io.github.ismoyuan.opspilot.application.capability.RecoverySampleInvocation;
-import io.github.ismoyuan.opspilot.application.capability.result.CapabilityResult;
 import io.github.ismoyuan.opspilot.application.correlation.Correlation;
 import io.github.ismoyuan.opspilot.application.dispatch.RecoveryVerificationWorker;
 import io.github.ismoyuan.opspilot.application.incident.IncidentRepository;
@@ -10,7 +9,6 @@ import io.github.ismoyuan.opspilot.application.investigation.InvestigationApplic
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicySnapshotV1.SnapshotCriterion;
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryVerificationRepository.RecoveryVerificationRecord;
 import io.github.ismoyuan.opspilot.application.schema.SchemaCodecRegistry;
-import io.github.ismoyuan.opspilot.application.schema.SchemaPayloadException;
 import io.github.ismoyuan.opspilot.application.timeline.TimelineRepository;
 import io.github.ismoyuan.opspilot.domain.incident.Incident;
 import io.github.ismoyuan.opspilot.domain.incident.IncidentStatus;
@@ -66,6 +64,7 @@ public class RecoveryVerificationService implements RecoveryVerificationWorker {
     private final IncidentRepository incidents;
     private final CapabilityInvocationRepository invocations;
     private final RecoverySampler sampler;
+    private final RecoverySampleReader sampleReader;
     private final SchemaCodecRegistry codecs;
     private final TimelineRepository timeline;
     private final InvestigationApplicationService investigations;
@@ -77,6 +76,7 @@ public class RecoveryVerificationService implements RecoveryVerificationWorker {
             IncidentRepository incidents,
             CapabilityInvocationRepository invocations,
             RecoverySampler sampler,
+            RecoverySampleReader sampleReader,
             SchemaCodecRegistry codecs,
             TimelineRepository timeline,
             InvestigationApplicationService investigations,
@@ -86,6 +86,7 @@ public class RecoveryVerificationService implements RecoveryVerificationWorker {
         this.incidents = incidents;
         this.invocations = invocations;
         this.sampler = sampler;
+        this.sampleReader = sampleReader;
         this.codecs = codecs;
         this.timeline = timeline;
         this.investigations = investigations;
@@ -373,45 +374,8 @@ public class RecoveryVerificationService implements RecoveryVerificationWorker {
                 .toList();
     }
 
-    /** 持久化槽位 → 样本：成功样本按注册投影取值，时间取 Observation 的 observed_at（没有时取完成时间）。 */
     private List<RecoverySample> samples(SnapshotCriterion criterion, List<RecoverySampleInvocation> slots) {
-        RecoveryCriterionV1 definition = criterion.criterion();
-        List<RecoverySample> samples = new ArrayList<>();
-        for (RecoverySampleInvocation slot : slots) {
-            RecoverySample.Status status = switch (slot.status()) {
-                case "SUCCEEDED" -> RecoverySample.Status.SUCCEEDED;
-                case "FAILED" -> RecoverySample.Status.FAILED;
-                default -> RecoverySample.Status.RUNNING;
-            };
-            if (status != RecoverySample.Status.SUCCEEDED) {
-                samples.add(new RecoverySample(slot.sampleIndex(), slot.id(), status, null, null));
-                continue;
-            }
-            Instant sampledAt = slot.observedAt() != null ? slot.observedAt() : slot.finishedAt();
-            samples.add(new RecoverySample(
-                    slot.sampleIndex(),
-                    slot.id(),
-                    status,
-                    sampledAt,
-                    project(slot, definition.field(), criterion.consumerGroup())));
-        }
-        return samples;
-    }
-
-    private ProjectedValue project(RecoverySampleInvocation slot, RecoveryField field, String consumerGroup) {
-        if (slot.responseSchemaName() == null
-                || slot.responseSchemaVersion() == null
-                || slot.responsePayload() == null) {
-            return new ProjectedValue.Unknown(ProjectedValue.Unknown.RESULT_MISMATCH);
-        }
-        Class<? extends CapabilityResult> type = RecoveryProjection.resultType(field.capability());
-        try {
-            CapabilityResult result = codecs.decode(
-                    slot.responseSchemaName(), slot.responseSchemaVersion(), slot.responsePayload(), type);
-            return RecoveryProjection.project(result, field, consumerGroup);
-        } catch (SchemaPayloadException ex) {
-            return new ProjectedValue.Unknown(ProjectedValue.Unknown.RESULT_MISMATCH);
-        }
+        return sampleReader.samples(criterion, slots);
     }
 
     /** 上一实际样本的完成时间；仍在进行的遗留调用以开始时间计。 */

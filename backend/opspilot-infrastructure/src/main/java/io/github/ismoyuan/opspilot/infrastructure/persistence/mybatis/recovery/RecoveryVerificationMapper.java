@@ -14,6 +14,8 @@ interface RecoveryVerificationMapper {
 
     List<DispatchableWork.RecoveryVerification> selectDispatchable();
 
+    LatestRow selectLatest(@Param("incidentId") long incidentId);
+
     int insertPending(@Param("key") GeneratedKey key, @Param("v") PendingInsert verification);
 
     Integer selectMaxVerificationNo(@Param("incidentId") long incidentId);
@@ -66,4 +68,19 @@ interface RecoveryVerificationMapper {
             LocalDateTime deadlineAt,
             LocalDateTime startedAt,
             long lockVersion) {}
+
+    /** 页面投影（{@code RecoveryVerificationQuery}）；时间为 UTC。 */
+    record LatestRow(
+            long id,
+            int verificationNo,
+            String status,
+            Long actionExecutionId,
+            String resourceKey,
+            String resourceName,
+            String policySnapshot,
+            String resultSummary,
+            String resultPayload,
+            LocalDateTime deadlineAt,
+            LocalDateTime startedAt,
+            LocalDateTime finishedAt) {}
 }

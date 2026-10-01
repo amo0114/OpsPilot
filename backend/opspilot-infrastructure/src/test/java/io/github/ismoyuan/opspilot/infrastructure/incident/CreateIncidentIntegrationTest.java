@@ -15,6 +15,7 @@ import io.github.ismoyuan.opspilot.domain.error.DomainException;
 import io.github.ismoyuan.opspilot.domain.error.ErrorCode;
 import io.github.ismoyuan.opspilot.domain.error.OpsPilotException;
 import io.github.ismoyuan.opspilot.domain.incident.Incident;
+import io.github.ismoyuan.opspilot.domain.incident.IncidentAction;
 import io.github.ismoyuan.opspilot.domain.incident.IncidentKey;
 import io.github.ismoyuan.opspilot.domain.incident.IncidentSource;
 import io.github.ismoyuan.opspilot.domain.incident.IncidentStatus;
@@ -133,7 +134,11 @@ class CreateIncidentIntegrationTest {
         }
 
         assertThat(result)
-                .isEqualTo(new CreateIncidentResult(new IncidentKey("INC-20260927-0001"), IncidentStatus.CREATED, 0));
+                .isEqualTo(new CreateIncidentResult(
+                        new IncidentKey("INC-20260927-0001"),
+                        IncidentStatus.CREATED,
+                        0,
+                        List.of(IncidentAction.START_INVESTIGATION, IncidentAction.CANCEL_INCIDENT)));
         Incident incident = incidents.findByKey(result.incidentKey()).orElseThrow();
         assertThat(incident.title()).isEqualTo("短链接跳转明显变慢");
         assertThat(incident.description()).isNull();

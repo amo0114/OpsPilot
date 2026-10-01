@@ -156,12 +156,9 @@ class InvestigationApiContractTest {
                 List.of(e1),
                 TerminationReason.AGENT_COMPLETED);
 
-        // Continue 进入 run 2 后新增的 Evidence 不改变 v1 的冻结依据
-        long version = get("/api/v1/incidents/" + key)
-                .body()
-                .path("data")
-                .path("version")
-                .asLong();
+        // Continue 进入 run 2 后新增的 Evidence 不改变 v1 的冻结依据。版本直接读库：上面预置的恢复观测挂在一条只为本测试构造、
+        // 快照并非正式 recovery.policy.snapshot 的 Verification 上，故障详情（TASK-085）会解码该快照
+        long version = jdbc.queryForObject("SELECT lock_version FROM incident WHERE id = ?", Long.class, incidentId);
         assertThat(action(key, "continue-investigation", version).status()).isEqualTo(202);
         long e3 = link(incidentId, consumer, h1, EvidenceRelation.CONTEXT, null);
         Diagnosis v2 = diagnose(

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 时间线页面投影（05 §60、07 §24）。外部输入的编号在索引等值之外再按字节比较；事件按 INDEX(incident_id, id) 游标读取（04 §57）。 -->
+<mapper namespace="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.timeline.TimelineQueryMapper">
+
+    <resultMap id="timelineEventRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.timeline.TimelineQueryMapper$TimelineEventRow">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="event_type" javaType="String"/>
+            <arg column="occurred_at" javaType="java.time.LocalDateTime"/>
+            <arg column="actor_type" javaType="String"/>
+            <arg column="summary" javaType="String"/>
+        </constructor>
+    </resultMap>
+
+    <select id="selectIncidentId" resultType="java.lang.Long">
+        SELECT id
+        FROM incident
+        WHERE incident_key = #{incidentKey}
+          AND CAST(incident_key AS BINARY) = CAST(#{incidentKey} AS BINARY)
+    </select>
+
+    <select id="selectAfter" resultMap="timelineEventRow">
+        SELECT id, event_type, occurred_at, actor_type, summary
+        FROM incident_timeline_event
+        WHERE incident_id = #{incidentId}
+          AND id &gt; #{afterId}
+        ORDER BY id
+        LIMIT #{limit}
+    </select>
+</mapper>

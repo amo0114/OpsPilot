@@ -82,7 +82,8 @@ class MyBatisCapabilityInvocationRepository implements CapabilityInvocationRepos
                         instant(row.observedAt()),
                         row.responseSchemaName(),
                         row.responseSchemaVersion(),
-                        row.responsePayload()))
+                        row.responsePayload(),
+                        row.errorCode()))
                 .toList();
     }
 

@@ -67,7 +67,8 @@ interface CapabilityInvocationMapper {
             LocalDateTime observedAt,
             String responseSchemaName,
             Integer responseSchemaVersion,
-            String responsePayload) {}
+            String responsePayload,
+            String errorCode) {}
 
     /** MyBatis 回填自增主键的载体。 */
     final class GeneratedKey {

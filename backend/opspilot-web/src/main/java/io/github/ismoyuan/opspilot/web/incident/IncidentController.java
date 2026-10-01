@@ -14,6 +14,7 @@ import io.github.ismoyuan.opspilot.application.investigation.StartInvestigationC
 import io.github.ismoyuan.opspilot.application.investigation.StopInvestigationCommand;
 import io.github.ismoyuan.opspilot.domain.incident.IncidentSource;
 import io.github.ismoyuan.opspilot.domain.incident.IncidentStatus;
+import io.github.ismoyuan.opspilot.web.incident.IncidentResponses.CreateIncidentResponse;
 import io.github.ismoyuan.opspilot.web.incident.IncidentResponses.IncidentDetailResponse;
 import io.github.ismoyuan.opspilot.web.incident.IncidentResponses.IncidentStateResponse;
 import io.github.ismoyuan.opspilot.web.incident.IncidentResponses.IncidentSummaryResponse;
@@ -64,7 +65,7 @@ public class IncidentController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public ApiResponse<IncidentStateResponse> create(
+    public ApiResponse<CreateIncidentResponse> create(
             @Valid @RequestBody CreateIncidentRequest body, HttpServletRequest request) {
         CreateIncidentResult result = incidents.createIncident(new CreateIncidentCommand(
                 body.systemKey(),
@@ -76,7 +77,9 @@ public class IncidentController {
                 IncidentSource.MANUAL,
                 DEMO_USER));
         return respond(
-                new IncidentStateResponse(result.incidentKey().value(), result.status(), result.version()), request);
+                new CreateIncidentResponse(
+                        result.incidentKey().value(), result.status(), result.version(), result.availableActions()),
+                request);
     }
 
     @GetMapping

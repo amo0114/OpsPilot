@@ -18,6 +18,7 @@
     <resultMap id="incidentDetailRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.incident.IncidentDetailRow">
         <constructor>
             <idArg column="id" javaType="_long"/>
+            <arg column="managed_system_id" javaType="_long"/>
             <arg column="incident_key" javaType="String"/>
             <arg column="title" javaType="String"/>
             <arg column="description" javaType="String"/>
@@ -31,6 +32,7 @@
             <arg column="resolved_at" javaType="java.time.LocalDateTime"/>
             <arg column="current_run_no" javaType="Integer"/>
             <arg column="stop_requested_at" javaType="java.time.LocalDateTime"/>
+            <arg column="last_timeline_event_id" javaType="_long"/>
         </constructor>
     </resultMap>
 
@@ -39,6 +41,46 @@
             <arg column="resource_key" javaType="String"/>
             <arg column="name" javaType="String"/>
             <arg column="resource_type" javaType="io.github.ismoyuan.opspilot.domain.system.ResourceType"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="diagnosisRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.incident.IncidentQueryMapper$DiagnosisRow">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="version_no" javaType="_int"/>
+            <arg column="run_no" javaType="_int"/>
+            <arg column="conclusion_type" javaType="String"/>
+            <arg column="summary" javaType="String"/>
+            <arg column="termination_reason" javaType="String"/>
+            <arg column="created_at" javaType="java.time.LocalDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="remediationRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.incident.IncidentQueryMapper$RemediationRow">
+        <constructor>
+            <idArg column="plan_id" javaType="_long"/>
+            <arg column="plan_title" javaType="String"/>
+            <arg column="plan_summary" javaType="String"/>
+            <arg column="plan_status" javaType="String"/>
+            <arg column="plan_created_at" javaType="java.time.LocalDateTime"/>
+            <arg column="action_id" javaType="_long"/>
+            <arg column="capability_key" javaType="String"/>
+            <arg column="target_resource_key" javaType="String"/>
+            <arg column="target_resource_name" javaType="String"/>
+            <arg column="action_summary" javaType="String"/>
+            <arg column="risk_level" javaType="String"/>
+            <arg column="expected_impact_summary" javaType="String"/>
+            <arg column="requires_approval" javaType="_boolean"/>
+            <arg column="approval_id" javaType="Long"/>
+            <arg column="approval_status" javaType="String"/>
+            <arg column="approval_version" javaType="Long"/>
+            <arg column="requested_at" javaType="java.time.LocalDateTime"/>
+            <arg column="decided_at" javaType="java.time.LocalDateTime"/>
+            <arg column="execution_id" javaType="Long"/>
+            <arg column="execution_status" javaType="String"/>
+            <arg column="execution_started_at" javaType="java.time.LocalDateTime"/>
+            <arg column="execution_finished_at" javaType="java.time.LocalDateTime"/>
+            <arg column="execution_error_code" javaType="String"/>
         </constructor>
     </resultMap>
 
@@ -70,10 +112,13 @@
         LIMIT #{limit} OFFSET #{offset}
     </select>
 
+    <!-- 详情 Snapshot：状态、版本、run、Stop 与 Timeline 游标在同一条语句中读取（05 §65、§67） -->
     <select id="selectDetail" resultMap="incidentDetailRow">
-        SELECT i.id, i.incident_key, i.title, i.description, s.system_key, s.name AS system_name, i.status,
-               i.lock_version, i.impact_summary, i.started_at, i.detected_at, i.resolved_at,
-               v.current_run_no, v.stop_requested_at
+        SELECT i.id, i.managed_system_id, i.incident_key, i.title, i.description, s.system_key, s.name AS system_name,
+               i.status, i.lock_version, i.impact_summary, i.started_at, i.detected_at, i.resolved_at,
+               v.current_run_no, v.stop_requested_at,
+               COALESCE((SELECT MAX(t.id) FROM incident_timeline_event t WHERE t.incident_id = i.id), 0)
+                   AS last_timeline_event_id
         FROM incident i
         JOIN managed_system s ON s.id = i.managed_system_id
         LEFT JOIN investigation v ON v.incident_id = i.id
@@ -87,5 +132,46 @@
         JOIN managed_resource r ON r.id = a.managed_resource_id
         WHERE a.incident_id = #{incidentId}
         ORDER BY r.resource_key
+    </select>
+
+    <!-- 最新版本（01 §19） -->
+    <select id="selectLatestDiagnosis" resultMap="diagnosisRow">
+        SELECT d.id, d.version_no, d.run_no, d.conclusion_type, d.summary, d.termination_reason, d.created_at
+        FROM diagnosis d
+        JOIN investigation v ON v.id = d.investigation_id
+        WHERE v.incident_id = #{incidentId}
+        ORDER BY d.version_no DESC
+        LIMIT 1
+    </select>
+
+    <!-- 只取该 Diagnosis 冻结的 SUPPORTS 引用（03 §38），摘要来自所依据的 Observation -->
+    <select id="selectSupportingSummaries" resultType="String">
+        SELECT o.summary
+        FROM diagnosis_evidence_ref r
+        JOIN evidence e ON e.id = r.evidence_id
+        JOIN observation o ON o.id = e.observation_id
+        WHERE r.diagnosis_id = #{diagnosisId}
+          AND e.relation = 'SUPPORTS'
+        ORDER BY e.id
+    </select>
+
+    <!-- 最新的 Plan（一 Plan 一 Action，Action 最多一条 Approval 与一条 Execution：uk_remediation_action_plan 等） -->
+    <select id="selectLatestRemediation" resultMap="remediationRow">
+        SELECT p.id AS plan_id, p.title AS plan_title, p.summary AS plan_summary, p.status AS plan_status,
+               p.created_at AS plan_created_at, a.id AS action_id, a.capability_key,
+               r.resource_key AS target_resource_key, r.name AS target_resource_name, a.summary AS action_summary,
+               a.risk_level, a.expected_impact_summary, a.requires_approval,
+               ap.id AS approval_id, ap.status AS approval_status, ap.lock_version AS approval_version,
+               ap.requested_at, ap.decided_at,
+               x.id AS execution_id, x.status AS execution_status, x.started_at AS execution_started_at,
+               x.finished_at AS execution_finished_at, x.error_code AS execution_error_code
+        FROM remediation_plan p
+        JOIN remediation_action a ON a.remediation_plan_id = p.id
+        JOIN managed_resource r ON r.id = a.target_resource_id
+        LEFT JOIN approval_request ap ON ap.remediation_action_id = a.id
+        LEFT JOIN action_execution x ON x.remediation_action_id = a.id
+        WHERE p.incident_id = #{incidentId}
+        ORDER BY p.id DESC
+        LIMIT 1
     </select>
 </mapper>

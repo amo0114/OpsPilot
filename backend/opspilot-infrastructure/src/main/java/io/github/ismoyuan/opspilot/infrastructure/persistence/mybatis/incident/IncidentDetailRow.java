@@ -2,9 +2,12 @@ package io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.incident;
 
 import java.time.LocalDateTime;
 
-/** 详情投影行；id 只用于继续查询受影响资源。runNo 为空表示尚未开始调查。 */
+/**
+ * 详情 Snapshot 投影行（同一条查询）；时间为 UTC。runNo 为空表示尚未开始调查；lastTimelineEventId 没有事件为 0。
+ */
 record IncidentDetailRow(
         long id,
+        long managedSystemId,
         String incidentKey,
         String title,
         String description,
@@ -17,4 +20,5 @@ record IncidentDetailRow(
         LocalDateTime detectedAt,
         LocalDateTime resolvedAt,
         Integer runNo,
-        LocalDateTime stopRequestedAt) {}
+        LocalDateTime stopRequestedAt,
+        long lastTimelineEventId) {}

@@ -8,6 +8,7 @@ import java.time.Instant;
  * @param finishedAt 未结束为空
  * @param observedAt 该调用 Observation 的最早 observed_at；没有 Observation 时为空
  * @param responsePayload 成功时的结构化结果，其余为空
+ * @param errorCode 失败时的错误码（如 TIMEOUT、PROCESS_INTERRUPTED），其余为空
  */
 public record RecoverySampleInvocation(
         long id,
@@ -19,4 +20,5 @@ public record RecoverySampleInvocation(
         Instant observedAt,
         String responseSchemaName,
         Integer responseSchemaVersion,
-        String responsePayload) {}
+        String responsePayload,
+        String errorCode) {}

@@ -8,6 +8,7 @@ import io.github.ismoyuan.opspilot.application.system.ManagedSystemRepository;
 import io.github.ismoyuan.opspilot.application.timeline.TimelineRepository;
 import io.github.ismoyuan.opspilot.domain.error.ErrorCode;
 import io.github.ismoyuan.opspilot.domain.incident.Incident;
+import io.github.ismoyuan.opspilot.domain.incident.IncidentActionPolicy;
 import io.github.ismoyuan.opspilot.domain.incident.IncidentKey;
 import io.github.ismoyuan.opspilot.domain.incident.IncidentSource;
 import io.github.ismoyuan.opspilot.domain.incident.IncidentStatus;
@@ -173,7 +174,12 @@ public class IncidentApplicationService {
                         incident.createdSource(),
                         affected.stream().map(ManagedResource::resourceKey).toList()),
                 Correlation.currentId()));
-        return new CreateIncidentResult(key, incident.status(), incident.version());
+        // 新建 Incident 尚无调查、审批或诊断（05 §20）；规则与详情相同，只由 Java 给出
+        return new CreateIncidentResult(
+                key,
+                incident.status(),
+                incident.version(),
+                IncidentActionPolicy.available(incident.status(), false, false, false));
     }
 
     /** 受影响资源必须全部属于该系统（05 §21）；在 Java 内按键精确比较。 */

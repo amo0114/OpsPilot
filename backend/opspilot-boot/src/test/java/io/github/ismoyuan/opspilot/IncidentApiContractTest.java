@@ -29,7 +29,8 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * 真实 HTTP＋真实 MySQL（demo Seed）上的 Incident API 契约（05 §8～§11、§20～§28、§33、§93～§94，08 TASK-020）。
+ * 真实 HTTP＋真实 MySQL（demo Seed）上的 Incident API 契约（05 §8～§11、§20～§28、§33、§59～§61、§93～§94，08 TASK-020、
+ * TASK-084～086）。
  * 只验证已实现的动作与事务合同；202 不表示后台调查已完成。派发器为替身：后台调查会在未配置 AI 时按失败阈值收束为 DIAGNOSED，
  * 与这里逐步断言的状态和版本竞争；调查循环、收束与恢复由 infrastructure 的编排集成测试与真实进程冒烟覆盖。
  */
@@ -92,6 +93,7 @@ class IncidentApiContractTest {
         assertThat(key).matches("INC-\\d{8}-0001");
         assertThat(data.path("status").asString()).isEqualTo("CREATED");
         assertThat(data.path("version").asLong()).isZero();
+        assertThat(actions(data)).containsExactly("START_INVESTIGATION", "CANCEL_INCIDENT");
 
         Response list = get("/api/v1/incidents?systemKey=shortlink-platform&status=CREATED&page=0&size=20");
         assertThat(list.status()).isEqualTo(200);
@@ -116,8 +118,12 @@ class IncidentApiContractTest {
         assertThat(detail.path("affectedResources").path(0).path("resourceKey").asString())
                 .isEqualTo("redirect-service");
         assertThat(detail.path("investigation").isNull()).isTrue();
+        assertThat(detail.path("currentAssessment").isNull()).isTrue();
+        assertThat(detail.path("remediation").isNull()).isTrue();
+        assertThat(detail.path("recovery").isNull()).isTrue();
+        assertThat(detail.path("lastTimelineEventId").asLong()).isPositive();
         assertThat(detail.has("id")).isFalse();
-        assertThat(detail.has("availableActions")).isFalse();
+        assertThat(actions(detail)).containsExactly("START_INVESTIGATION", "CANCEL_INCIDENT");
 
         Response started = action(key, "start-investigation", 0);
         assertThat(started.status()).isEqualTo(202);
@@ -142,13 +148,20 @@ class IncidentApiContractTest {
             assertThat(stopData.path("runNo").asInt()).isEqualTo(1);
             assertThat(stopData.path("stopRequested").asBoolean()).isTrue();
         }
-        assertThat(get("/api/v1/incidents/" + key)
-                        .body()
-                        .path("data")
-                        .path("investigation")
-                        .path("stopRequested")
-                        .asBoolean())
+        JsonNode stopping = get("/api/v1/incidents/" + key).body().path("data");
+        assertThat(stopping.path("investigation").path("stopRequested").asBoolean())
                 .isTrue();
+        assertThat(stopping.path("investigation").path("runNo").asInt()).isEqualTo(1);
+        JsonNode budget = stopping.path("investigation").path("budget");
+        assertThat(budget.path("scope").asString()).isEqualTo("ACTIVE_RUN");
+        assertThat(budget.path("capabilityCallsUsed").asInt()).isZero();
+        assertThat(budget.path("capabilityCallsLimit").asInt()).isEqualTo(12);
+        assertThat(budget.path("durationLimitSeconds").asInt()).isEqualTo(480);
+        assertThat(stopping.path("investigation").path("totalCapabilityCalls").asLong())
+                .isZero();
+        assertThat(stopping.path("investigation").path("currentRunStartedAt").asString())
+                .matches(ISO_MILLIS);
+        assertThat(actions(stopping)).containsExactly("CANCEL_INCIDENT");
 
         // 收束为 DIAGNOSED 属于调查 Worker（TASK-041/042）；这里直接设置事实以验证 Continue 的 HTTP 合同
         jdbc.update("UPDATE incident SET status = 'DIAGNOSED', lock_version = 3 WHERE incident_key = ?", key);
@@ -179,6 +192,40 @@ class IncidentApiContractTest {
                         "INVESTIGATION_STOP_REQUESTED",
                         "INVESTIGATION_STARTED",
                         "INCIDENT_CANCELLED");
+
+        // Timeline（05 §60）：afterId 游标与 limit 分段，按 id 升序；人类可读 summary，默认不返回载荷
+        Response page = get("/api/v1/incidents/" + key + "/timeline?limit=2");
+        assertThat(page.status()).isEqualTo(200);
+        assertThat(page.body().path("requestId").asString()).isEqualTo(page.header("X-Request-Id"));
+        JsonNode events = page.body().path("data");
+        assertThat(events.size()).isEqualTo(2);
+        assertThat(events.path(0).path("eventType").asString()).isEqualTo("INCIDENT_CREATED");
+        assertThat(events.path(0).path("actorType").asString()).isEqualTo("USER");
+        assertThat(events.path(0).path("summary").asString()).isEqualTo("创建故障：短链接跳转明显变慢");
+        assertThat(events.path(0).path("occurredAt").asString()).matches(ISO_MILLIS);
+        assertThat(events.path(0).has("payload")).isFalse();
+        long cursor = page.body().path("nextAfterId").asLong();
+        assertThat(cursor).isEqualTo(events.path(1).path("id").asLong());
+        JsonNode rest = get("/api/v1/incidents/" + key + "/timeline?afterId=" + cursor + "&limit=50")
+                .body();
+        assertThat(rest.path("data").size()).isEqualTo(3);
+        long last = rest.path("data").path(2).path("id").asLong();
+        assertThat(rest.path("nextAfterId").asLong()).isEqualTo(last);
+        JsonNode drained =
+                get("/api/v1/incidents/" + key + "/timeline?afterId=" + last).body();
+        assertThat(drained.path("data").size()).isZero();
+        assertThat(drained.path("nextAfterId").asLong()).isEqualTo(last);
+        JsonNode cancelledDetail = get("/api/v1/incidents/" + key).body().path("data");
+        assertThat(cancelledDetail.path("lastTimelineEventId").asLong()).isEqualTo(last);
+        assertThat(actions(cancelledDetail)).isEmpty();
+    }
+
+    private static List<String> actions(JsonNode data) {
+        assertThat(data.path("availableActions").isArray()).isTrue();
+        return data.path("availableActions")
+                .valueStream()
+                .map(JsonNode::asString)
+                .toList();
     }
 
     /** 应用装配使用真实调查编排，而不是基础设施模块的未装配兜底（08 TASK-040）。 */
@@ -287,6 +334,10 @@ class IncidentApiContractTest {
         assertError(get("/api/v1/incidents/" + key.toLowerCase()), 404, "INCIDENT_NOT_FOUND");
         assertError(get("/api/v1/incidents?status=OPEN"), 400, "REQUEST_VALIDATION_FAILED");
         assertError(get("/api/v1/incidents?size=0"), 400, "REQUEST_VALIDATION_FAILED");
+        assertError(get("/api/v1/incidents/INC-20990101-0001/timeline"), 404, "INCIDENT_NOT_FOUND");
+        for (String query : new String[] {"limit=0", "limit=201", "afterId=-1", "afterId=x"}) {
+            assertError(get("/api/v1/incidents/" + key + "/timeline?" + query), 400, "REQUEST_VALIDATION_FAILED");
+        }
     }
 
     private static String createBody(String systemKey, String titleJson, String resourcesJson) {

@@ -1,20 +1,20 @@
 # 当前工作
 
-更新时间：2026-10-01（本地，B30 DONE）
+更新时间：2026-10-01（本地，B31-R1 PASS）
 仓库/分支：/root/projects/OpsPilot-V0.1-IMPLEMENTATION，main；无 remote
-当前批次/状态：B30 DONE（代码 39f9468，B30-R1 PASS）；B31 未开始
-成员 Task 及顺序：B30 = TASK-082 → 083（均 DONE）；下一批 B31 = TASK-084 → 085 → 086
-固定 Base SHA：B30 为 dab0a2027c54a9d1fc6066ef7531ec5bbe4dbc00；B31 开工时读取当时 HEAD
-批外前置核实：B31 开工时按 08 核对其成员的批外前置
-允许目录 / 明确不做 / 关键不变量：B31 开工时按 BATCH-PLAN 与 08 固定
-本批规格章节及 PROGRESS 记录：PROGRESS「B30」
-当前成员及位置：无进行中批次
-已实现并针对性验证的成员：B01～B30 全部，及 B13 前的独立修复；恢复控制流（批准→执行→核对→验证→结果迁移→启动恢复）已闭合，真实场景验收待 TASK-105～109
-未完成 / 未执行验证：Timeline/详情视图/availableActions（084～086）；SSE（087～089）；真实 Provider 恢复采样与 S3 端到端 NOT RUN；CCG 门禁工具本机缺失；其余见 PROGRESS 待处理问题；Redis < 7.2、MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
-未提交文件（含既有无关修改）：无（本交接卡与 PROGRESS 回填随 docs(progress) 提交）
-共同验证及独立 Review 证据编号：B30-V1、B30-R1
+当前批次/状态：B31 REVIEW（B31-R1 PASS，B31-V1 通过，待提交）
+成员 Task 及顺序：B31 = TASK-084 → 085 → 086
+固定 Base SHA：a2a9827c2fbd24de7b27458fa00a3594ea4a7127
+批外前置核实：TASK-083 DONE（39f9468，B30-R1 PASS）
+允许目录 / 明确不做 / 关键不变量：见 PROGRESS「B31」范围；不做 SSE、05 §45～§48 独立 GET、UI、新迁移/依赖
+本批规格章节及 PROGRESS 记录：PROGRESS「B31」
+当前成员及位置：084～086 均 REVIEW，独立 Review PASS；B31-V1 clean verify exit 0（2026-10-01 03:36～03:50 UTC）
+已实现并针对性验证的成员：B01～B30 全部（DONE），B31 的 084～086（REVIEW，未提交），及 B13 前的独立修复；恢复控制流（批准→执行→核对→验证→结果迁移→启动恢复）已闭合，真实场景验收待 TASK-105～109
+未完成 / 未执行验证：B31 提交与 SHA 回填；非阻塞 P3：样本整数格式化的三元表达式仍返回 Double（见 B31-R1）；SSE（087～089）；05 §45～§48 独立 GET 无归属 Task（待确认）；真实 Provider 恢复采样与 S3 端到端 NOT RUN；CCG 门禁工具本机缺失；其余见 PROGRESS 待处理问题；Redis < 7.2、MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
+未提交文件（含既有无关修改）：开工时无；本批修改（含未跟踪新文件）见 git status 与 PROGRESS「B31」成员进度
+共同验证及独立 Review 证据编号：B31-V1（exit 0）；B31-R1（PASS，独立测试 59/59，日志 /tmp/b31-r1-tests.log）
 下一步具体动作：
-1. 开始 B31（TASK-084 Timeline → 085 完整详情视图 → 086 availableActions），按 BATCH-PLAN 固定基线
+1. B31-R1 已 PASS，可按用户授权进入代码与进度文档提交步骤，回填真实 SHA 后将 B31 与 TASK-084～086 一起标 DONE；不提前开始 B32
 2. 不推送
 
 本地启动 Demo 配置：在 OPSPILOT_DB_* 环境变量基础上加 --spring.profiles.active=demo

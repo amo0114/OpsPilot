@@ -38,6 +38,7 @@
             <arg column="response_schema_name" javaType="String"/>
             <arg column="response_schema_version" javaType="Integer"/>
             <arg column="response_payload" javaType="String"/>
+            <arg column="error_code" javaType="String"/>
         </constructor>
     </resultMap>
 
@@ -60,7 +61,7 @@
         SELECT ci.id, ci.criterion_key, ci.sample_index, ci.status, ci.started_at, ci.finished_at,
                (SELECT MIN(o.observed_at) FROM observation o WHERE o.capability_invocation_id = ci.id) AS observed_at,
                ci.response_schema_name, ci.response_schema_version,
-               CAST(ci.response_payload AS CHAR) AS response_payload
+               CAST(ci.response_payload AS CHAR) AS response_payload, ci.error_code
         FROM capability_invocation ci
         WHERE ci.recovery_verification_id = #{verificationId}
         ORDER BY ci.criterion_key, ci.sample_index

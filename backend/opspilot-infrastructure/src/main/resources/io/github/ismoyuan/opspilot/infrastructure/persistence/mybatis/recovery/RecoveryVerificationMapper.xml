@@ -15,6 +15,23 @@
         </constructor>
     </resultMap>
 
+    <resultMap id="latestRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.recovery.RecoveryVerificationMapper$LatestRow">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="verification_no" javaType="_int"/>
+            <arg column="status" javaType="String"/>
+            <arg column="action_execution_id" javaType="Long"/>
+            <arg column="resource_key" javaType="String"/>
+            <arg column="resource_name" javaType="String"/>
+            <arg column="policy_snapshot" javaType="String"/>
+            <arg column="result_summary" javaType="String"/>
+            <arg column="result_payload" javaType="String"/>
+            <arg column="deadline_at" javaType="java.time.LocalDateTime"/>
+            <arg column="started_at" javaType="java.time.LocalDateTime"/>
+            <arg column="finished_at" javaType="java.time.LocalDateTime"/>
+        </constructor>
+    </resultMap>
+
     <resultMap id="dispatchableWork" type="io.github.ismoyuan.opspilot.application.dispatch.DispatchableWork$RecoveryVerification">
         <constructor>
             <arg column="id" javaType="_long"/>
@@ -24,6 +41,18 @@
     <!-- PENDING 与 RUNNING（07 §51）；终态不派发。按状态索引 idx_recovery_verification_status 扫描 -->
     <select id="selectDispatchable" resultMap="dispatchableWork">
         SELECT id FROM recovery_verification WHERE status IN ('PENDING', 'RUNNING') ORDER BY id
+    </select>
+
+    <!-- 页面投影：该 Incident 编号最大的一次（uk_recovery_verification_incident_no） -->
+    <select id="selectLatest" resultMap="latestRow">
+        SELECT v.id, v.verification_no, v.status, v.action_execution_id, r.resource_key, r.name AS resource_name,
+               CAST(v.policy_snapshot AS CHAR) AS policy_snapshot, v.result_summary,
+               CAST(v.result_payload AS CHAR) AS result_payload, v.deadline_at, v.started_at, v.finished_at
+        FROM recovery_verification v
+        JOIN managed_resource r ON r.id = v.managed_resource_id
+        WHERE v.incident_id = #{incidentId}
+        ORDER BY v.verification_no DESC
+        LIMIT 1
     </select>
 
     <select id="selectById" resultMap="verificationRow">

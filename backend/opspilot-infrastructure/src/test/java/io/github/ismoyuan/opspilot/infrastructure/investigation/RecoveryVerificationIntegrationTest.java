@@ -47,6 +47,7 @@ import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicyValidator;
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryPredicateV1;
 import io.github.ismoyuan.opspilot.application.recovery.RecoverySample;
 import io.github.ismoyuan.opspilot.application.recovery.RecoverySampleInterruptionRecorder;
+import io.github.ismoyuan.opspilot.application.recovery.RecoverySampleReader;
 import io.github.ismoyuan.opspilot.application.recovery.RecoverySampler;
 import io.github.ismoyuan.opspilot.application.recovery.RecoverySamplingV1;
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryVerificationResultV1;
@@ -102,6 +103,7 @@ import org.testcontainers.mysql.MySQLContainer;
 @Import({
     RecoveryVerificationService.class,
     RecoverySampler.class,
+    RecoverySampleReader.class,
     RecoveryPolicySelector.class,
     RecoveryPolicyValidator.class,
     RecoveryPolicyActivationService.class,
