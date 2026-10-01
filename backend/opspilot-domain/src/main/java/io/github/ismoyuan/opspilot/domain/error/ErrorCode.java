@@ -99,6 +99,16 @@ public enum ErrorCode {
      * 表示结果未知，不声称远端一定没有发生，不由公开 API 返回。
      */
     EXECUTION_RESULT_UNCERTAIN(ErrorCategory.INTERNAL, "无法确认重启操作是否生效，系统没有再次执行。"),
+
+    // Fault Lab（05 §68～§72、§93）
+    FAULT_SCENARIO_NOT_FOUND(ErrorCategory.NOT_FOUND, "故障场景不存在。"),
+    /** 只对 DEMO/TEST 环境开放（05 §68）；场景所需资源不在该系统时同样不允许。 */
+    FAULT_SCENARIO_NOT_ALLOWED(ErrorCategory.RULE_VIOLATION, "该业务系统不允许执行此故障实验。"),
+    /** 故障没有确认生效，实验为 FAILED 且没有创建 Incident（05 §71）。 */
+    FAULT_INJECTION_FAILED(ErrorCategory.DEPENDENCY_INVALID_RESPONSE, "故障没有成功注入，未创建故障记录。"),
+    FAULT_EXPERIMENT_STATE_CONFLICT(ErrorCategory.CONFLICT, "故障实验当前状态不允许该操作。"),
+    FAULT_RESET_FAILED(ErrorCategory.DEPENDENCY_INVALID_RESPONSE, "实验环境没有成功恢复，请稍后重试。"),
+
     /** credentialRef 无法解析为可用凭据（08 TASK-009）；属部署配置错误，不在 05 §93 公开目录。 */
     SECRET_NOT_FOUND(ErrorCategory.INTERNAL, "所需凭据未配置，请检查部署环境。"),
     /** 未预期的程序错误；不属于 05 §93 业务目录，仅作兜底。 */

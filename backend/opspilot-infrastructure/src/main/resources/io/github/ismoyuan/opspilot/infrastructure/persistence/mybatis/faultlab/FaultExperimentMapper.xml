@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- fault_experiment（04 §63）。状态只按来源状态条件推进；ground_truth_payload 只由 selectGroundTruth 读取（04 §64）。 -->
+<mapper namespace="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.faultlab.FaultExperimentMapper">
+
+    <resultMap id="experimentRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.faultlab.FaultExperimentMapper$ExperimentRow">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="scenario_key" javaType="String"/>
+            <arg column="managed_system_id" javaType="_long"/>
+            <arg column="system_key" javaType="String"/>
+            <arg column="environment" javaType="String"/>
+            <arg column="target_resource_id" javaType="_long"/>
+            <arg column="resource_key" javaType="String"/>
+            <arg column="incident_id" javaType="Long"/>
+            <arg column="status" javaType="String"/>
+            <arg column="injected_at" javaType="java.time.LocalDateTime"/>
+            <arg column="reset_at" javaType="java.time.LocalDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="groundTruthRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.faultlab.FaultExperimentMapper$GroundTruthRow">
+        <constructor>
+            <arg column="ground_truth_schema_name" javaType="String"/>
+            <arg column="ground_truth_schema_version" javaType="_int"/>
+            <arg column="ground_truth_payload" javaType="String"/>
+        </constructor>
+    </resultMap>
+
+    <select id="lockSystem" resultType="java.lang.Long">
+        SELECT id FROM managed_system WHERE id = #{systemId} FOR UPDATE
+    </select>
+
+    <!--
+      当前读（FOR SHARE）：调用方事务的一致性快照可能早于系统行锁建立（之前已读过系统），普通 SELECT 会漏掉其他事务在等锁期间提交的实验
+      （B33-R1 P1）；持有系统行锁后的当前读才能看到它们
+    -->
+    <select id="countInProgress" resultType="int">
+        SELECT COUNT(*) FROM fault_experiment
+        WHERE managed_system_id = #{systemId}
+          AND status IN ('INJECTING', 'ACTIVE', 'RESETTING')
+        <if test="exceptId != null">
+          AND id &lt;&gt; #{exceptId}
+        </if>
+        FOR SHARE
+    </select>
+
+    <insert id="insertInjecting" useGeneratedKeys="true" keyProperty="key.id" keyColumn="id">
+        INSERT INTO fault_experiment (scenario_key, managed_system_id, target_resource_id, status,
+                                      ground_truth_schema_name, ground_truth_schema_version, ground_truth_payload,
+                                      created_at, updated_at)
+        VALUES (#{e.scenarioKey}, #{e.managedSystemId}, #{e.targetResourceId}, 'INJECTING', #{e.groundTruthSchemaName},
+                #{e.groundTruthSchemaVersion}, #{e.groundTruthPayload}, #{e.createdAt}, #{e.createdAt})
+    </insert>
+
+    <select id="selectSystemId" resultType="java.lang.Long">
+        SELECT managed_system_id FROM fault_experiment WHERE id = #{id}
+    </select>
+
+    <select id="selectForUpdate" resultMap="experimentRow">
+        SELECT f.id, f.scenario_key, f.managed_system_id, s.system_key, s.environment, f.target_resource_id,
+               r.resource_key, f.incident_id, f.status, f.injected_at, f.reset_at
+        FROM fault_experiment f
+        JOIN managed_system s ON s.id = f.managed_system_id
+        JOIN managed_resource r ON r.id = f.target_resource_id
+        WHERE f.id = #{id}
+        FOR UPDATE OF f
+    </select>
+
+    <update id="markActive">
+        UPDATE fault_experiment
+        SET status = 'ACTIVE', incident_id = #{incidentId}, injected_at = #{injectedAt}, updated_at = #{now}
+        WHERE id = #{id} AND status = 'INJECTING'
+    </update>
+
+    <update id="markFailed">
+        UPDATE fault_experiment
+        SET status = 'FAILED', error_message = #{message}, updated_at = #{now}
+        WHERE id = #{id} AND status = #{from}
+    </update>
+
+    <update id="markResetting">
+        UPDATE fault_experiment
+        SET status = 'RESETTING', updated_at = #{now}
+        WHERE id = #{id} AND status = #{from}
+    </update>
+
+    <update id="markReset">
+        UPDATE fault_experiment
+        SET status = 'RESET', reset_at = #{resetAt}, updated_at = #{resetAt}
+        WHERE id = #{id} AND status = 'RESETTING'
+    </update>
+
+    <!-- 只在启动路径：本进程启动前最后一次更新、仍停在注入或重置中的实验（状态索引 idx_fault_experiment_status） -->
+    <update id="markInterrupted">
+        UPDATE fault_experiment
+        SET status = 'FAILED', error_message = #{message}, updated_at = #{now}
+        WHERE status IN ('INJECTING', 'RESETTING') AND updated_at &lt; #{startedBefore}
+    </update>
+
+    <!-- Evaluation 专用（GroundTruthQuery）；其他语句都不读取 Ground Truth -->
+    <select id="selectGroundTruth" resultMap="groundTruthRow">
+        SELECT ground_truth_schema_name, ground_truth_schema_version,
+               CAST(ground_truth_payload AS CHAR) AS ground_truth_payload
+        FROM fault_experiment
+        WHERE id = #{id}
+    </select>
+</mapper>

@@ -32,10 +32,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /** Incident 用例（05 §20～§21）。事务只包含数据库操作（07 §37）。 */
@@ -75,10 +77,35 @@ public class IncidentApplicationService {
 
     /** Incident、受影响资源与 INCIDENT_CREATED 时间线在同一事务内一起提交或一起回滚。 */
     public CreateIncidentResult createIncident(CreateIncidentCommand command) {
+        return createIncident(command, null, incident -> {});
+    }
+
+    /**
+     * Fault Lab 确认故障生效后创建 Incident（05 §70、09 §19）：detected_at 取确认时间；{@code sameTransaction} 的写入与 Incident、受影响资源、
+     * INCIDENT_CREATED 在同一事务提交或回滚。编号冲突时整个事务（含回调）在新事务中重做，因此不得在外层事务中调用（B01-R1 记录的事务
+     * 契约）。
+     *
+     * @param detectedAt 为空时取当前时间
+     * @throws IllegalStateException 在已有事务中调用
+     */
+    public CreateIncidentResult createIncident(
+            CreateIncidentCommand command, Instant detectedAt, Consumer<Incident> sameTransaction) {
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            throw new IllegalStateException("createIncident retries in its own transactions; call it outside one");
+        }
         List<String> resourceKeys = requireDistinctResourceKeys(command.affectedResourceKeys());
         for (int attempt = 1; ; attempt++) {
             try {
-                return transaction.execute(status -> createInTransaction(command, resourceKeys));
+                return transaction.execute(status -> {
+                    Incident incident = createInTransaction(command, resourceKeys, detectedAt);
+                    sameTransaction.accept(incident);
+                    return new CreateIncidentResult(
+                            incident.incidentKey(),
+                            incident.status(),
+                            incident.version(),
+                            // 新建 Incident 尚无调查、审批或诊断（05 §20）；规则与详情相同，只由 Java 给出
+                            IncidentActionPolicy.available(incident.status(), false, false, false));
+                });
             } catch (IncidentKeyTakenException ex) {
                 if (attempt >= MAX_KEY_ATTEMPTS) {
                     throw ex;
@@ -131,7 +158,7 @@ public class IncidentApplicationService {
         return text;
     }
 
-    private CreateIncidentResult createInTransaction(CreateIncidentCommand command, List<String> resourceKeys) {
+    private Incident createInTransaction(CreateIncidentCommand command, List<String> resourceKeys, Instant detectedAt) {
         Instant now = clock.instant().truncatedTo(ChronoUnit.MILLIS);
         ManagedSystem system = systems.findBySystemKey(command.systemKey())
                 .orElseThrow(() -> new ApplicationException(
@@ -153,7 +180,7 @@ public class IncidentApplicationService {
                 command.createdSource(),
                 command.createdBy(),
                 command.startedAt(),
-                now);
+                detectedAt == null ? now : detectedAt.truncatedTo(ChronoUnit.MILLIS));
 
         LocalDate day = LocalDate.ofInstant(now, ZoneOffset.UTC);
         IncidentKey key = IncidentKey.of(day, incidents.lastSequenceOn(day) + 1);
@@ -174,12 +201,7 @@ public class IncidentApplicationService {
                         incident.createdSource(),
                         affected.stream().map(ManagedResource::resourceKey).toList()),
                 Correlation.currentId()));
-        // 新建 Incident 尚无调查、审批或诊断（05 §20）；规则与详情相同，只由 Java 给出
-        return new CreateIncidentResult(
-                key,
-                incident.status(),
-                incident.version(),
-                IncidentActionPolicy.available(incident.status(), false, false, false));
+        return incident;
     }
 
     /** 受影响资源必须全部属于该系统（05 §21）；在 Java 内按键精确比较。 */

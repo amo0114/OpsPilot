@@ -15,6 +15,7 @@ import io.github.ismoyuan.opspilot.application.capability.result.ServiceInspectR
 import io.github.ismoyuan.opspilot.application.execution.ServiceRestartExecutionContextV1;
 import io.github.ismoyuan.opspilot.application.execution.ServiceRestartReconciliationResultV1;
 import io.github.ismoyuan.opspilot.application.execution.ServiceRestartResultV1;
+import io.github.ismoyuan.opspilot.application.faultlab.FaultGroundTruthV1;
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicyCriteriaV1;
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryPolicySnapshotV1;
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryVerificationResultV1;
@@ -155,7 +156,9 @@ class JacksonSchemaCodecRegistry implements SchemaCodecRegistry {
             entry(
                     ServiceRestartReconciliationResultV1.SCHEMA_NAME,
                     ServiceRestartReconciliationResultV1.SCHEMA_VERSION,
-                    ServiceRestartReconciliationResultV1.class));
+                    ServiceRestartReconciliationResultV1.class),
+            // Fault Lab 实验答案（04 §64）：只经 Fault Lab 写入、Evaluation 读取
+            entry(FaultGroundTruthV1.SCHEMA_NAME, FaultGroundTruthV1.SCHEMA_VERSION, FaultGroundTruthV1.class));
 
     private final JsonMapper mapper = JsonMapper.builder()
             .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
