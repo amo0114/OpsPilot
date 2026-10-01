@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-10-01（TASK-085 修复：FIX-R2 PASS，REVIEW 待提交；Base 4144e44；B33 未开始）
+> 最近更新：2026-10-01（TASK-085 修复 DONE，commit d6c5255；B33 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -92,7 +92,7 @@
 | TASK-082 | B30 | Verification Outcome Transition | DONE | commit 39f9468（B30，Base dab0a20） | B30-V1 verify exit 0＋RecoveryVerificationIntegrationTest 18/18（三种结果迁移）＋变异 2 项；B30-R1 PASS（独立测试 40/40），待提交 |
 | TASK-083 | B30 | Verification Startup Recovery | DONE | commit 39f9468（B30，Base dab0a20） | B30-V1 verify exit 0＋RecoveryVerificationIntegrationTest 18/18（启动恢复 5 项）＋变异 2 项；B30-R1 PASS（独立测试 40/40），待提交 |
 | TASK-084 | B31 | Timeline Query | DONE | commit 09d085e（B31，Base a2a9827） | B31-V1 verify exit 0＋IncidentViewIntegrationTest Timeline 2 项＋IncidentApiContractTest 游标/400/404＋变异检查；B31-R1 PASS（独立测试 59/59；非阻塞 P3 见批次记录），待提交 |
-| TASK-085 | B31 | IncidentDetailView | DONE | commit 09d085e（B31，Base a2a9827） | B31-V1 verify exit 0＋IncidentViewIntegrationTest 详情 9 项（含中途并发提交的一致性读取）＋HTTP 详情各节＋变异检查；B31-R1 PASS（独立测试 59/59；非阻塞 P3 见批次记录），待提交；B31-R1 P3 独立修复 REVIEW（Base 4144e44，未提交）；TASK-085-FIX-R2 PASS：整数表示与 long 上界回归通过，待用户授权提交，见「TASK-085 修复」 |
+| TASK-085 | B31 | IncidentDetailView | DONE | commit 09d085e（B31，Base a2a9827） | B31-V1 verify exit 0＋IncidentViewIntegrationTest 详情 9 项（含中途并发提交的一致性读取）＋HTTP 详情各节＋变异检查；B31-R1 PASS（独立测试 59/59；非阻塞 P3 见批次记录），待提交；B31-R1 P3 独立修复 DONE（commit d6c5255，FIX-R2 PASS） |
 | TASK-086 | B31 | availableActions | DONE | commit 09d085e（B31，Base a2a9827） | B31-V1 verify exit 0＋IncidentActionPolicyTest 2/2（全组合）＋IncidentViewIntegrationTest 5 项＋创建/详情 HTTP＋变异检查；B31-R1 PASS（独立测试 59/59；非阻塞 P3 见批次记录），待提交 |
 | TASK-087 | B32 | SSE Hub | DONE | commit addb5df（B32，Base b8b668b） | B32-V1 verify exit 0＋IncidentEventStreamContractTest 6/6（首次补发、状态事件、404/400）＋变异检查；B32-R1 PASS（独立测试 22/22），待提交 |
 | TASK-088 | B32 | After Commit Event | DONE | commit addb5df（B32，Base b8b668b） | B32-V1 verify exit 0＋IncidentEventStreamContractTest（未提交/回滚不推送、ACC-FINAL-15 顺序扰动）＋变异检查；B32-R1 PASS（独立测试 22/22），待提交 |
@@ -1095,7 +1095,7 @@
 
 ### TASK-085 修复 — 详情恢复样本整数格式化（B31-R1 P3）
 
-- 状态：REVIEW（TASK-085-FIX-R2 PASS，已通过，待用户授权提交；未提交）
+- 状态：DONE（TASK-085-FIX-R2 PASS，已提交 d6c5255）
 - 归属：TASK-085（B31 已 DONE，不重开 B31，不并入 B33）；在 B32 DONE 之后、B33 开始之前单独修复
 - Base SHA：4144e44fa9b62a3481facfae2f6c37379f5ad8a4（B32 docs 提交后的 HEAD；开工时工作树干净）
 - 范围：只改 web/incident/IncidentResponses 的样本数值格式化（`cond ? Long.valueOf(..) : Double.valueOf(..)` 两侧装箱类型触发二元数值提升，整数也输出为 2180.0）＋JSON 回归测试；docs/dev。明确不做：改变投影、判定或其他字段；新依赖；B33
@@ -1129,7 +1129,7 @@
   - 独立验证（backend/，使用上一命令安装的当前 web 产物）：`./mvnw -B -o test -pl opspilot-boot -Dtest=IncidentApiContractTest,ApplicationWiringTest` → exit 0，IncidentApiContractTest 4/4、ApplicationWiringTest 1/1，均无失败/错误/跳过；真实 HTTP＋Testcontainers MySQL 8.4.11。日志 `/tmp/task085-fix-r2-boot.log`，20:26:27 +08:00 完成。
   - 受测文件 SHA-256：IncidentResponses.java `d2662a8ab19741d0a2737e6951dc5e4d9b6fd16ddb3454a326b15ba29e3ef4e1`；IncidentDetailJsonTest.java `4ccc3b61a1ad2539b29d8e59172c7141dd21542e1aa082c1b5119a4fff561c33`。`git diff --check 4144e44fa9b62a3481facfae2f6c37379f5ad8a4` 通过；本轮仅更新 PROGRESS/CURRENT 的 Review 与交接记录，未修改生产代码或测试；新依赖、Migration 均无。
   - NOT RUN：完整 clean verify、infrastructure 测试与 CCG 门禁。本结论限于已约定的 JSON 表示修复范围及受影响验证，不作为 B31/B32 全批次重新验收。Commit Recommendation：可按用户授权提交本独立修复；当前保持 REVIEW（已通过，待提交），不自动提交或推送，不启动 B33。
-- 提交：未提交
+- 提交：代码提交 d6c5255d9055f815c4e5127e23ab20c324ed1140（fix(incident): keep integral recovery sample values as JSON integers (TASK-085)）；SHA 回填为后续 docs 提交；未推送
 
 
 ### B32 — SSE、提交后通知与断线补发
@@ -1372,7 +1372,7 @@
 | 05 §45～§48 执行记录、执行历史、恢复验证列表与单次验证详情的独立 GET（/executions/{id}、/incidents/{key}/executions、/incidents/{key}/recovery-verifications[/{no}]）在 08 中无明确归属 Task；B31 只在故障详情中给出最新方案/执行与最新验证（含三值检查与样本） | web、application/recovery、application/incident/query | 与 §57～§58 同样须在 TASK-102/103（只含前端）前明确承接其后端的批次；可复用 RecoveryStatusReader 与 IncidentQueryMapper 的投影，不得返回凭据或执行上下文 | 待确认（TASK-102 前） |
 | B31：只有创建响应按 05 §20 返回 availableActions；Start/Stop/Continue/Cancel、请求处理建议、审批与 verify-recovery 的响应不含（05 示例未列），前端在动作后 GET 详情或接收 SSE incident-state（05 §64，TASK-087～089）获得 | web/incident、web/remediation、web/recovery | 如需各动作响应直接返回，由 AvailableActionsResolver 在同一事务计算后补充，不在前端推导 | TASK-087～089 或需要时 |
 | B31：action_execution 没有 result_summary 列，详情的 Execution 只给状态、起止时间与错误码（05 §45 示例有 resultSummary） | application/incident/query/RemediationView | 如需执行摘要，由 05 §45 独立 GET 的承接批次按 result_payload 生成，不新增列 | 05 §45 承接批次 |
-| （已修复并复核，TASK-085 独立修复 REVIEW，FIX-R2 PASS，待提交）B31-R1 P3 整数表示及 FIX-R1 P2 正上界误判均已解决 | web/incident/IncidentResponses.java:321 | 显式检查 [-2^63, 2^63) 后按独立分支转换；原有样本与五个边界的原始 JSON 回归通过，证据见 TASK-085-FIX-R2 | TASK-085 独立修复（B33 前） |
+| （已关闭，TASK-085 独立修复 d6c5255，FIX-R2 PASS）B31-R1 P3 整数表示及 FIX-R1 P2 正上界误判均已解决 | web/incident/IncidentResponses.java:321 | 显式检查 [-2^63, 2^63) 后按独立分支转换；原有样本与五个边界的原始 JSON 回归通过，证据见 TASK-085-FIX-R2 | TASK-085 独立修复（B33 前） |
 | （已关闭，B24/TASK-067：经公开用例，ACTIVE Plan 只在 AWAITING_APPROVAL 期间存在——此时继续调查被拒、不会产生新 Diagnosis，审批一经决定或撤回方案即 CANCELLED——因此真实流程中 Superseder 不会遇到 ACTIVE Plan，是防御性保护；其对 ACTIVE Plan 的行为由 DiagnosisIntegrationTest（B20）断言，旧 Diagnosis 方案不可批准由 approvalIsRechecked… 断言。原记录：实现已替换，B20/TASK-062：ACTIVE→SUPERSEDED 并有集成断言；真实方案端到端仍属 TASK-067）RemediationPlanSuperseder 为占位 no-op（Plan 表不存在，无可失效方案） | infrastructure/remediation/NoRemediationPlanSuperseder | TASK-062 建表后以真实 supersede 替换并删除本类，TASK-067 补真实 Plan 的集成断言（08 TASK-026 不得把 no-op 留到 Release） | TASK-062/067 |
 | Diagnosis 创建一律要求 TerminationReason（库列可空）；DIAGNOSIS_CREATED 发起方 AGENT_COMPLETED 为 AI_RUNTIME、其余为 SYSTEM；主假设当前状态（如 REFUTED）不作限制（规格未要求） | application/diagnosis | TASK-040/042 调用时按实际收束原因传入；如规格要求主假设状态约束再加入 DiagnosisDraft.checkReferences | TASK-040/042 |
 | createDiagnosis 只核对 INVESTIGATING 与 run 号，不核对 Stop/deadline（01 §11 允许同轮 Stop 与到期收束）；旧 run 用 STALE_RUN_RESULT（内部处置，CONFLICT）拒绝 | DiagnosisApplicationService | TASK-039～042 决定何时允许收束、何时生成 UNDETERMINED，并把 STALE_RUN_RESULT 记入 AgentStep 审计（独立事务） | TASK-039～042 |
