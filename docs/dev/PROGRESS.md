@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-10-01（B32 REVIEW，Base b8b668b，B32-V1 exit 0，B32-R1 PASS，待提交）
+> 最近更新：2026-10-01（B32 DONE，commit addb5df；B31 P3 待单独处理，B33 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -94,9 +94,9 @@
 | TASK-084 | B31 | Timeline Query | DONE | commit 09d085e（B31，Base a2a9827） | B31-V1 verify exit 0＋IncidentViewIntegrationTest Timeline 2 项＋IncidentApiContractTest 游标/400/404＋变异检查；B31-R1 PASS（独立测试 59/59；非阻塞 P3 见批次记录），待提交 |
 | TASK-085 | B31 | IncidentDetailView | DONE | commit 09d085e（B31，Base a2a9827） | B31-V1 verify exit 0＋IncidentViewIntegrationTest 详情 9 项（含中途并发提交的一致性读取）＋HTTP 详情各节＋变异检查；B31-R1 PASS（独立测试 59/59；非阻塞 P3 见批次记录），待提交 |
 | TASK-086 | B31 | availableActions | DONE | commit 09d085e（B31，Base a2a9827） | B31-V1 verify exit 0＋IncidentActionPolicyTest 2/2（全组合）＋IncidentViewIntegrationTest 5 项＋创建/详情 HTTP＋变异检查；B31-R1 PASS（独立测试 59/59；非阻塞 P3 见批次记录），待提交 |
-| TASK-087 | B32 | SSE Hub | REVIEW | 未提交（B32，Base b8b668b；文件见 PROGRESS「B32」） | B32-V1 verify exit 0＋IncidentEventStreamContractTest 6/6（首次补发、状态事件、404/400）＋变异检查；B32-R1 PASS（独立测试 22/22），待提交 |
-| TASK-088 | B32 | After Commit Event | REVIEW | 未提交（B32，Base b8b668b；文件见 PROGRESS「B32」） | B32-V1 verify exit 0＋IncidentEventStreamContractTest（未提交/回滚不推送、ACC-FINAL-15 顺序扰动）＋变异检查；B32-R1 PASS（独立测试 22/22），待提交 |
-| TASK-089 | B32 | SSE Reconnect | REVIEW | 未提交（B32，Base b8b668b；文件见 PROGRESS「B32」） | B32-V1 verify exit 0＋IncidentEventStreamContractTest（Snapshot 游标与 Last-Event-ID 续传）＋IncidentEventStreamHeartbeatTest 1/1（唤醒丢失自愈）＋变异检查；B32-R1 PASS（独立测试 22/22），待提交 |
+| TASK-087 | B32 | SSE Hub | DONE | commit addb5df（B32，Base b8b668b） | B32-V1 verify exit 0＋IncidentEventStreamContractTest 6/6（首次补发、状态事件、404/400）＋变异检查；B32-R1 PASS（独立测试 22/22），待提交 |
+| TASK-088 | B32 | After Commit Event | DONE | commit addb5df（B32，Base b8b668b） | B32-V1 verify exit 0＋IncidentEventStreamContractTest（未提交/回滚不推送、ACC-FINAL-15 顺序扰动）＋变异检查；B32-R1 PASS（独立测试 22/22），待提交 |
+| TASK-089 | B32 | SSE Reconnect | DONE | commit addb5df（B32，Base b8b668b） | B32-V1 verify exit 0＋IncidentEventStreamContractTest（Snapshot 游标与 Last-Event-ID 续传）＋IncidentEventStreamHeartbeatTest 1/1（唤醒丢失自愈）＋变异检查；B32-R1 PASS（独立测试 22/22），待提交 |
 | TASK-090 | B33 | Fault Lab 基础模型 | TODO | — | NOT RUN |
 | TASK-091 | B33 | Ground Truth Isolation | TODO | — | NOT RUN |
 | TASK-092 | B33 | Fault Inject / Reset API | TODO | — | NOT RUN |
@@ -1095,7 +1095,7 @@
 
 ### B32 — SSE、提交后通知与断线补发
 
-- 状态：REVIEW（实现与 B32-V1 完成，B32-R1 PASS；未提交）
+- 状态：DONE（B32-R1 PASS，已提交 addb5df）
 - 成员及顺序：TASK-087 → TASK-088 → TASK-089；批外前置：TASK-086 DONE（09d085e，B31-R1 PASS）；088 依赖 087、089 依赖 088（批内）
 - Base SHA：b8b668bf4ac3a89f09b9eefc4fb79c9b75ed5f1a
 - 范围：TASK-087——Spring MVC SseEmitter 的 IncidentSseHub（内存连接管理：incidentId → 订阅，Java 重启连接断开可接受）、`GET /api/v1/incidents/{incidentKey}/events`（text/event-stream）、timeline / incident-state / heartbeat 三种事件（05 §62～§66）。TASK-088——Timeline 追加在事务提交后（且只在提交后）唤醒发送端，发送端按订阅游标从数据库按 id 顺序补读，不以回调顺序或回调载荷为准；回滚不推送。TASK-089——Last-Event-ID（及首次连接的 Snapshot 游标）从 Timeline 补发，订阅先注册后追赶，消除 Snapshot→订阅、历史追赶→实时注册的空隙；覆盖 ACC-FINAL-15；不建 Outbox。允许目录：backend 的 application/timeline|incident/query、infrastructure persistence/mybatis/timeline、web（新增 sse 包）与相应测试；boot 测试；docs/dev。明确不做：Outbox、MQ、WebFlux、分布式/多实例推送、UI、新迁移、新依赖、修改写路径的锁与状态规则、B31 P3（整数格式化，另行处理）
@@ -1122,7 +1122,7 @@
   - 验证边界：本轮未重跑完整 clean verify，复用 B32-V1 第 2 次成功记录；未重跑变异检查。真实浏览器 EventSource、代理空闲断开、真实 Provider/LLM、S1～S3、CCG 仍为 NOT RUN/NOT VERIFIED，不由本轮 PASS 代替验收。
   - Commit Recommendation：可按计划分两次提交（审查通过的代码及进度记录；回填真实代码 SHA 并标 DONE 的文档）。本轮只更新审查/交接记录，未修改实现、未提交、未推送。B32 与成员保持 REVIEW 至提交；B31 P3 不混入本批，B32 提交后按后续安排单独处理 TASK-085 整数格式化，再开始 B33。
 - 修改文件：新增 application/incident/query/{IncidentChanges,IncidentChangesQueryService,IncidentStateView}、application/timeline/IncidentTimelineAppended、web/sse/{IncidentSseHub,IncidentEventsController,SseProperties}，测试 boot/{IncidentEventStreamContractTest,IncidentEventStreamHeartbeatTest,SseClient}；修改 application/timeline/TimelineRepository（注释）、infrastructure MyBatisTimelineRepository（发布唤醒）、web/error/ApiExceptionHandler（预设 JSON）；docs/dev。Migration：无；新增依赖：无
-- 提交：未提交；范围外问题：无新增（B31 P3 整数格式化仍待处理）
+- 提交：代码提交 addb5dfa8ab53124c095f7dee03079b45c4c2ada（feat(sse): incident event stream with after-commit push and reconnect catch-up (TASK-087–089)）；SHA 回填为后续 docs 提交；未推送；范围外问题：无新增（B31 P3 整数格式化待单独处理）
 
 ### B31 — Timeline、完整详情视图与 availableActions
 

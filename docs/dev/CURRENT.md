@@ -1,21 +1,21 @@
 # 当前工作
 
-更新时间：2026-10-01（本地，B32-R1 PASS，待提交）
+更新时间：2026-10-01（本地，B32 DONE）
 仓库/分支：/root/projects/OpsPilot-V0.1-IMPLEMENTATION，main；无 remote
-当前批次/状态：B32 REVIEW（实现与 B32-V1 完成，B32-R1 PASS；未提交）
-成员 Task 及顺序：B32 = TASK-087 → 088 → 089
-固定 Base SHA：b8b668bf4ac3a89f09b9eefc4fb79c9b75ed5f1a
-批外前置核实：TASK-086 DONE（09d085e，B31-R1 PASS）
-允许目录 / 明确不做 / 关键不变量：见 PROGRESS「B32」范围；不做 Outbox/MQ/WebFlux、UI、新迁移/依赖
+当前批次/状态：B32 DONE（代码 addb5df，B32-R1 PASS）；B33 未开始
+成员 Task 及顺序：B32 = TASK-087 → 088 → 089（均 DONE）；下一批 B33 = TASK-090 → 091 → 092
+固定 Base SHA：B32 为 b8b668bf4ac3a89f09b9eefc4fb79c9b75ed5f1a；B33 开工时读取当时 HEAD
+批外前置核实：B33 开工时按 08 核对其成员的批外前置
+允许目录 / 明确不做 / 关键不变量：B33 开工时按 BATCH-PLAN 与 08 固定
 本批规格章节及 PROGRESS 记录：PROGRESS「B32」
-当前成员及位置：087～089 均 REVIEW；B32-V1 clean verify 第 2 次 exit 0（2026-10-01 07:34～07:52 UTC；第 1 次因主机负载约 80 时 MySQL 容器/连接失败）
-已实现并针对性验证的成员：B01～B30 全部（DONE），B31 的 084～086（DONE，09d085e），B32 的 087～089（REVIEW，未提交），及 B13 前的独立修复；恢复控制流（批准→执行→核对→验证→结果迁移→启动恢复）已闭合，真实场景验收待 TASK-105～109
-未完成 / 未执行验证：B32 提交及 SHA 回填；非阻塞 P3：样本整数格式化的三元表达式仍返回 Double（见 B31-R1，B32 提交后单独处理）；05 §45～§48 独立 GET 无归属 Task（待确认）；真实浏览器 EventSource 重连、代理空闲断开、真实 Provider 恢复采样与 S3 端到端 NOT RUN/NOT VERIFIED；CCG 门禁工具本机缺失；其余见 PROGRESS 待处理问题；Redis < 7.2、MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
-未提交文件（含既有无关修改）：开工时无；本批修改（含未跟踪新文件）见 git status 与 PROGRESS「B32」
-共同验证及独立 Review 证据编号：B32-V1 第 2 次（完整 clean verify exit 0）；B32-R1 PASS（主代理独立审查 base 至工作树及全部 10 个未跟踪文件；独立测试 22/22，日志 /tmp/b32-r1-tests.log；未重跑完整构建）
+当前成员及位置：无进行中批次
+已实现并针对性验证的成员：B01～B30 全部（DONE），B31 的 084～086（DONE，09d085e），B32 的 087～089（DONE，addb5df），及 B13 前的独立修复；恢复控制流（批准→执行→核对→验证→结果迁移→启动恢复）已闭合，真实场景验收待 TASK-105～109
+未完成 / 未执行验证：非阻塞 P3：样本整数格式化的三元表达式仍返回 Double（见 B31-R1，B32 提交后单独处理）；05 §45～§48 独立 GET 无归属 Task（待确认）；真实浏览器 EventSource 重连、代理空闲断开、真实 Provider 恢复采样与 S3 端到端 NOT RUN/NOT VERIFIED；CCG 门禁工具本机缺失；其余见 PROGRESS 待处理问题；Redis < 7.2、MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
+未提交文件（含既有无关修改）：无（本交接卡与 PROGRESS 回填随 docs(progress) 提交）
+共同验证及独立 Review 证据编号：B32-V1（第 2 次 exit 0）、B32-R1 PASS
 下一步具体动作：
-1. B32-R1 已 PASS，可按计划分两次提交：审查通过的代码与进度记录；回填真实代码 SHA 并将 B32/TASK-087～089 一起标 DONE 的文档。提交前保持 REVIEW
-2. B32 提交后，单独处理 TASK-085/B31 P3 整数格式化修复及必要回归，不混入 SSE 提交；完成后再开始 B33
+1. 单独处理 B31-R1 P3（TASK-085 详情样本整数格式化：Long/Double 三元表达式数值提升为 Double），独立修复＋必要回归与 Review，不混入其他批次
+2. 之后开始 B33（TASK-090 → 091 → 092），按 BATCH-PLAN 固定基线
 3. 不推送
 
 本地启动 Demo 配置：在 OPSPILOT_DB_* 环境变量基础上加 --spring.profiles.active=demo
