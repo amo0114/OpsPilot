@@ -10,7 +10,7 @@
 本批规格章节及 PROGRESS 记录：最近完成：PROGRESS「B33」
 当前成员及位置：无进行中批次
 已实现并针对性验证的成员：B01～B30 全部（DONE），B31 的 084～086（DONE，09d085e；TASK-085 P3 修复 d6c5255），B32 的 087～089（DONE，addb5df），及 B13 前的独立修复；恢复控制流（批准→执行→核对→验证→结果迁移→启动恢复）已闭合，真实场景验收待 TASK-105～109
-未完成 / 未执行验证：待用户授权提交及回填 SHA；非阻塞 P3 详见 B33-R2；本 Reviewer 未重跑完整 clean verify 或变异检查；真实注入器/Gate（093～095）NOT RUN；Fault Harness 日志源分离 NOT VERIFIED；05 §45～§48 独立 GET 无归属 Task（待确认）；真实浏览器 EventSource 重连、代理空闲断开、真实 Provider 恢复采样与 S3 端到端 NOT RUN/NOT VERIFIED；CCG 门禁工具本机缺失；其余见 PROGRESS 待处理问题；Redis < 7.2、MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
+未完成 / 未执行验证：B33-R2 非阻塞 P3（Reset/注入竞争测试稳定性，见 PROGRESS「B33」）；真实注入器/Gate（093～095）NOT RUN；Fault Harness 日志源分离 NOT VERIFIED；05 §45～§48 独立 GET 无归属 Task（待确认）；真实浏览器 EventSource 重连、代理空闲断开、真实 Provider 恢复采样与 S3 端到端 NOT RUN/NOT VERIFIED；CCG 门禁工具本机缺失；其余见 PROGRESS 待处理问题；Redis < 7.2、MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
 未提交文件（含既有无关修改）：无（本交接卡与 PROGRESS 回填随 docs(progress) 提交）
 共同验证及独立 Review 证据编号：B33-V2（exit 0）、B33-R1 NEEDS CHANGES → B33-R2 PASS
 下一步具体动作：
