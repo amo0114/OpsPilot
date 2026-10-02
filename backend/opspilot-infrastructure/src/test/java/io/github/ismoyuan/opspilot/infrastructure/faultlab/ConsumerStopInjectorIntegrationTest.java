@@ -129,7 +129,7 @@ class ConsumerStopInjectorIntegrationTest {
                 .isEqualTo(Instant.parse(inspected.getState().getFinishedAt()))
                 .isAfter(beforeInject);
 
-        Instant detectedAt = injector.verifyInjected(TARGET);
+        Instant detectedAt = injector.verifyInjected(TARGET).detectedAt();
         assertThat(detectedAt).isAfterOrEqualTo(injection.startedAt()).isBeforeOrEqualTo(Instant.now());
         // Gate：末次 lag ≥ 基线 lag + 20（基线 lag ≥ 0）
         assertThat(lag()).isGreaterThanOrEqualTo(20);

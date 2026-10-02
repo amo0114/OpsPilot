@@ -3,6 +3,7 @@ package io.github.ismoyuan.opspilot;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.ismoyuan.opspilot.application.dispatch.WorkDispatcher;
+import io.github.ismoyuan.opspilot.application.faultlab.FaultConfirmation;
 import io.github.ismoyuan.opspilot.application.faultlab.FaultInjection;
 import io.github.ismoyuan.opspilot.application.faultlab.FaultInjector;
 import io.github.ismoyuan.opspilot.application.faultlab.FaultTarget;
@@ -35,7 +36,10 @@ import tools.jackson.databind.json.JsonMapper;
  * 真实 HTTP＋真实 MySQL（demo Seed）上的 Fault Lab API（05 §68～§73、§93～§94，08 TASK-092）。redis-latency 由测试注入器确认生效
  * （真实注入器属 TASK-094），mysql-slow-query 没有注入器；statistics-consumer-stop 的真实注入器（TASK-093）已装配，但这里不调用。响应与故障详情都不含 Ground Truth；没有 Ground Truth 读取接口。
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+// demo profile 的真实 redis-latency 注入器与本测试的同场景注入器互斥：关闭真实注入器
+@SpringBootTest(
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = "opspilot.fault-lab.redis-latency.enabled=false")
 @ActiveProfiles("demo")
 @Testcontainers
 class FaultLabApiContractTest {
@@ -76,8 +80,8 @@ class FaultLabApiContractTest {
                 }
 
                 @Override
-                public Instant verifyInjected(FaultTarget target) {
-                    return Instant.now();
+                public FaultConfirmation verifyInjected(FaultTarget target) {
+                    return FaultConfirmation.detectedAt(Instant.now());
                 }
 
                 @Override

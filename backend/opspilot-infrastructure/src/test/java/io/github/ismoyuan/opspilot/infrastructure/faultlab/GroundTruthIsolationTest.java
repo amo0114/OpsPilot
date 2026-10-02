@@ -156,6 +156,11 @@ class GroundTruthIsolationTest {
         injectors.stream()
                 .filter(injector -> injector.scenarioKey().equals("statistics-consumer-stop"))
                 .forEach(injector -> injector.stoppedContainerId = stoppedContainer);
+        // S1 的 Ground Truth 在确认生效时补上 Gate 实测（09 §33）；其字段同样不得进入调查请求
+        injectors.stream()
+                .filter(injector -> injector.scenarioKey().equals("redis-latency"))
+                .forEach(injector -> injector.redisLatencyGate = new FaultGroundTruthV1.RedisLatencyGate(
+                        FaultGroundTruthV1.SymptomBranch.BOTH, 600, 612, 9, 2_345, 0.0, 0.25));
         for (FaultScenario scenario : catalog.all()) {
             InjectFaultResult injected =
                     faultLab.inject(new InjectFaultCommand(scenario.scenarioKey(), "shortlink-platform", "demo-user"));
@@ -166,6 +171,11 @@ class GroundTruthIsolationTest {
             if (groundTruth.containerId() != null) {
                 assertThat(groundTruth.containerId()).isEqualTo(stoppedContainer);
                 markers.add(stoppedContainer);
+            }
+            if (groundTruth.redisLatencyGate() != null) {
+                assertThat(groundTruth.redisLatencyGate().symptomBranch())
+                        .isEqualTo(FaultGroundTruthV1.SymptomBranch.BOTH);
+                markers.addAll(List.of("redislatencygate", "symptombranch", "pingmedianms", "faultp99ms", "2345"));
             }
             long incidentId = jdbc.queryForObject(
                     "SELECT id FROM incident WHERE incident_key = ?",

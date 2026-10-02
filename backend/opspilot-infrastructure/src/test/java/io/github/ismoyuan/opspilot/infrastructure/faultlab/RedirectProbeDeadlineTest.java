@@ -136,7 +136,8 @@ class RedirectProbeDeadlineTest {
         injector.inject(StatisticsConsumerStopInjectorTest.TARGET);
         mode = Mode.HANG_BODY;
 
-        Instant detected = injector.verifyInjected(StatisticsConsumerStopInjectorTest.TARGET);
+        Instant detected = injector.verifyInjected(StatisticsConsumerStopInjectorTest.TARGET)
+                .detectedAt();
 
         assertThat(detected).isBeforeOrEqualTo(fake.finishedAt.plus(SETTINGS.gateTimeout()));
     }

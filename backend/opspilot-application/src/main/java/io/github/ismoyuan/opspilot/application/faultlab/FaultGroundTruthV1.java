@@ -10,6 +10,7 @@ import java.util.Objects;
  * @param latencyMs 只有 REDIS_NETWORK_LATENCY 有，其余为空
  * @param containerId 只有 STATISTICS_CONSUMER_STOPPED 有：被停止的消费者容器 id（09 §63）；插入实验时尚未注入为空，确认生效后写入
  * @param consumerStoppedAt 与 containerId 同时出现：消费者真正停止的时间（09 §63）
+ * @param redisLatencyGate 只有 REDIS_NETWORK_LATENCY 有：确认生效时 Gate 的所达症状分支与真实数值（09 §33、ACC-S1-003）；插入时为空
  */
 public record FaultGroundTruthV1(
         String schemaName,
@@ -17,7 +18,8 @@ public record FaultGroundTruthV1(
         FaultCause cause,
         Integer latencyMs,
         String containerId,
-        Instant consumerStoppedAt) {
+        Instant consumerStoppedAt,
+        RedisLatencyGate redisLatencyGate) {
 
     public static final String SCHEMA_NAME = "fault-lab.ground-truth";
     public static final int SCHEMA_VERSION = 1;
@@ -42,14 +44,61 @@ public record FaultGroundTruthV1(
         if (containerId != null && containerId.isBlank()) {
             throw new IllegalArgumentException("containerId must not be blank");
         }
+        if (redisLatencyGate != null) {
+            if (cause != FaultCause.REDIS_NETWORK_LATENCY) {
+                throw new IllegalArgumentException("redisLatencyGate belongs to REDIS_NETWORK_LATENCY only");
+            }
+            if (!latencyMs.equals(redisLatencyGate.injectedLatencyMs())) {
+                throw new IllegalArgumentException("latencyMs must be the injected latency");
+            }
+        }
+    }
+
+    /** S1 HTTP 症状的达标分支（09 §33）。 */
+    public enum SymptomBranch {
+        LATENCY,
+        ERROR_RATE,
+        BOTH
+    }
+
+    /**
+     * S1 Gate 的实测（09 §33）：经业务同一代理的 PING 中位数，以及跳转在基线窗口与故障期的 P99、错误率（0～1）。
+     *
+     * @param injectedLatencyMs 实际注入的 downstream 延迟
+     */
+    public record RedisLatencyGate(
+            SymptomBranch symptomBranch,
+            int injectedLatencyMs,
+            long pingMedianMs,
+            long baselineP99Ms,
+            long faultP99Ms,
+            double baselineErrorRate,
+            double faultErrorRate) {
+
+        public RedisLatencyGate {
+            Objects.requireNonNull(symptomBranch, "symptomBranch");
+            if (injectedLatencyMs < 1 || pingMedianMs < 0 || baselineP99Ms < 0 || faultP99Ms < 0) {
+                throw new IllegalArgumentException("measurements must not be negative");
+            }
+            if (baselineErrorRate < 0 || baselineErrorRate > 1 || faultErrorRate < 0 || faultErrorRate > 1) {
+                throw new IllegalArgumentException("error rates are ratios in [0, 1]");
+            }
+        }
     }
 
     public static FaultGroundTruthV1 of(FaultCause cause, Integer latencyMs) {
-        return new FaultGroundTruthV1(SCHEMA_NAME, SCHEMA_VERSION, cause, latencyMs, null, null);
+        return new FaultGroundTruthV1(SCHEMA_NAME, SCHEMA_VERSION, cause, latencyMs, null, null, null);
     }
 
     /** 补上被停止的消费者（确认生效时）。 */
     public FaultGroundTruthV1 withStoppedConsumer(String stoppedContainerId, Instant stoppedAt) {
-        return new FaultGroundTruthV1(schemaName, schemaVersion, cause, latencyMs, stoppedContainerId, stoppedAt);
+        return new FaultGroundTruthV1(
+                schemaName, schemaVersion, cause, latencyMs, stoppedContainerId, stoppedAt, redisLatencyGate);
+    }
+
+    /** 补上 S1 Gate 实测（确认生效时）；latencyMs 取实际注入值。 */
+    public FaultGroundTruthV1 withRedisLatencyGate(RedisLatencyGate gate) {
+        return new FaultGroundTruthV1(
+                schemaName, schemaVersion, cause, gate.injectedLatencyMs(), containerId, consumerStoppedAt, gate);
     }
 }

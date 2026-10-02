@@ -1,9 +1,16 @@
 package io.github.ismoyuan.opspilot.application.faultlab;
 
+import static io.github.ismoyuan.opspilot.application.faultlab.FaultSampling.loadRate;
+import static io.github.ismoyuan.opspilot.application.faultlab.FaultSampling.max;
+import static io.github.ismoyuan.opspilot.application.faultlab.FaultSampling.min;
+import static io.github.ismoyuan.opspilot.application.faultlab.FaultSampling.multiply;
+import static io.github.ismoyuan.opspilot.application.faultlab.FaultSampling.pause;
+
 import io.github.ismoyuan.opspilot.application.faultlab.ConsumerStopEnvironment.ConsumerContainer;
-import io.github.ismoyuan.opspilot.application.faultlab.ConsumerStopEnvironment.RedirectProbe;
 import io.github.ismoyuan.opspilot.application.faultlab.ConsumerStopEnvironment.RuntimeState;
 import io.github.ismoyuan.opspilot.application.faultlab.ConsumerStopEnvironment.StreamSnapshot;
+import io.github.ismoyuan.opspilot.application.faultlab.FaultSampling.Probes;
+import io.github.ismoyuan.opspilot.application.faultlab.FaultSampling.Sample;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -54,9 +61,6 @@ public final class StatisticsConsumerStopInjector implements FaultInjector {
     private final Map<Long, Stopped> stopped = new ConcurrentHashMap<>();
 
     private record Stopped(String containerId, Instant stoppedAt, long baselineLag, Duration baselineP99) {}
-
-    /** 一次 Stream 采样及其之前已发出的跳转探测次数（用于扣除探测写入的消息）。 */
-    private record Sample(StreamSnapshot stream, long probesBefore) {}
 
     /**
      * @param systemKey 本注入器控制的系统（Demo 靶场所属的 ManagedSystem）
@@ -119,7 +123,7 @@ public final class StatisticsConsumerStopInjector implements FaultInjector {
     }
 
     @Override
-    public Instant verifyInjected(FaultTarget target) {
+    public FaultConfirmation verifyInjected(FaultTarget target) {
         requireControlled(target);
         Stopped state = stopped.remove(target.experimentId());
         if (state == null) {
@@ -159,7 +163,7 @@ public final class StatisticsConsumerStopInjector implements FaultInjector {
             }
             if (unmet == null) {
                 log.info("Fault lab confirmed the statistics consumer stop: experimentId={}", target.experimentId());
-                return now;
+                return FaultConfirmation.detectedAt(now);
             }
             pause(min(settings.sampleInterval(), Duration.between(now, deadline)));
         }
@@ -227,24 +231,6 @@ public final class StatisticsConsumerStopInjector implements FaultInjector {
         return new Baseline(last.stream().lag(), probes.p99());
     }
 
-    /**
-     * 两次采样之间扣除跳转探测之后每秒新写入的条目数。每次探测按至多写入一条统计消息全额扣除（不论成功与否，取保守上限）；Redis 不提供
-     * 累计写入数时无法证明负载，按 0 处理（不估算）。
-     */
-    private static double loadRate(Sample from, Sample to) {
-        double seconds =
-                Duration.between(from.stream().observedAt(), to.stream().observedAt())
-                                .toNanos()
-                        / 1e9;
-        Long fromAdded = from.stream().entriesAdded();
-        Long toAdded = to.stream().entriesAdded();
-        if (fromAdded == null || toAdded == null || seconds <= 0) {
-            return 0;
-        }
-        long probesBetween = to.probesBefore() - from.probesBefore();
-        return (toAdded - fromAdded - probesBetween) / seconds;
-    }
-
     /** @return 第一个未满足的 Gate 条件；全部满足为空 */
     private String unmet(List<Sample> samples, Stopped state, Probes probes, Duration p99Limit) {
         int size = samples.size();
@@ -306,61 +292,6 @@ public final class StatisticsConsumerStopInjector implements FaultInjector {
     private void probe(Probes probes, Instant deadline) {
         for (int i = 0; i < settings.probesPerSample(); i++) {
             probes.add(environment.probeRedirect(deadline));
-        }
-    }
-
-    private static void pause(Duration duration) {
-        if (!duration.isPositive()) {
-            return;
-        }
-        try {
-            Thread.sleep(duration);
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            throw new FaultInjectionException("Fault lab action was interrupted");
-        }
-    }
-
-    private static Duration multiply(Duration duration, double factor) {
-        return Duration.ofNanos(Math.round(duration.toNanos() * factor));
-    }
-
-    private static Duration max(Duration a, Duration b) {
-        return a.compareTo(b) >= 0 ? a : b;
-    }
-
-    private static Duration min(Duration a, Duration b) {
-        return a.compareTo(b) <= 0 ? a : b;
-    }
-
-    /** 跳转探测的累计结果。 */
-    private static final class Probes {
-
-        private final List<Duration> latencies = new ArrayList<>();
-        private int failures;
-
-        void add(RedirectProbe probe) {
-            latencies.add(probe.latency());
-            if (!probe.succeeded()) {
-                failures++;
-            }
-        }
-
-        long count() {
-            return latencies.size();
-        }
-
-        boolean errorRateAtLeast(double limit) {
-            return !latencies.isEmpty() && (double) failures / latencies.size() >= limit;
-        }
-
-        /** 最近秩法 P99（含失败请求的耗时）。 */
-        Duration p99() {
-            if (latencies.isEmpty()) {
-                return Duration.ZERO;
-            }
-            List<Duration> sorted = latencies.stream().sorted().toList();
-            return sorted.get((int) Math.ceil(0.99 * sorted.size()) - 1);
         }
     }
 }

@@ -50,7 +50,7 @@ class StatisticsConsumerStopInjectorTest {
     void aStoppedConsumerWithGrowingLagIsConfirmed() {
         Instant before = Instant.now();
         FaultInjection injection = injector.inject(TARGET);
-        Instant detected = injector.verifyInjected(TARGET);
+        Instant detected = injector.verifyInjected(TARGET).detectedAt();
 
         assertThat(environment.calls).containsExactly("stop:" + CONTAINER + ":PT10S");
         assertThat(injection.stoppedContainerId()).isEqualTo(CONTAINER);

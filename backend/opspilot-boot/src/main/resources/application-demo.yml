@@ -21,3 +21,19 @@ opspilot:
       consumer-group: short-link:stats-stream:only-group
       # 逗号分隔的演示短链完整地址（scripts/demo/shortlink_s3.py prepare 输出）
       redirect-probe-urls: ${OPSPILOT_FAULTLAB_S3_PROBE_URLS:}
+    # S1 真实注入器（08 TASK-094）：在 ShortLink 与 OpsPilot 共用的 Redis Toxiproxy 代理上注入 downstream 延迟。
+    # 控制 API 只属于 Fault Lab；PING 经与业务相同的代理测量，统计 Stream 直连 Redis 读取。
+    redis-latency:
+      enabled: true
+      system-key: shortlink-platform
+      target-resource-key: shortlink-redis
+      toxiproxy-endpoint: ${OPSPILOT_FAULTLAB_TOXIPROXY_ENDPOINT:http://redis-proxy:8474}
+      proxy-name: shortlink-redis
+      proxy-redis-endpoint: ${OPSPILOT_FAULTLAB_PROXY_REDIS_ENDPOINT:redis://redis-proxy:6379}
+      redis-endpoint: ${OPSPILOT_FAULTLAB_REDIS_ENDPOINT:redis://redis:6379}
+      redis-username: ${OPSPILOT_FAULTLAB_REDIS_USERNAME:}
+      redis-password: ${OPSPILOT_FAULTLAB_REDIS_PASSWORD:}
+      stream-key: short-link:stats-stream
+      consumer-group: short-link:stats-stream:only-group
+      # 逗号分隔的演示短链完整地址（scripts/demo/shortlink_s3.py prepare 输出），未单独配置时沿用 S3 的
+      redirect-probe-urls: ${OPSPILOT_FAULTLAB_S1_PROBE_URLS:${OPSPILOT_FAULTLAB_S3_PROBE_URLS:}}

@@ -1,5 +1,6 @@
 package io.github.ismoyuan.opspilot.infrastructure.faultlab;
 
+import io.github.ismoyuan.opspilot.application.faultlab.RedisLatencyInjector;
 import io.github.ismoyuan.opspilot.application.faultlab.StatisticsConsumerStopInjector;
 import io.github.ismoyuan.opspilot.infrastructure.config.ProviderProperties;
 import io.github.ismoyuan.opspilot.infrastructure.provider.DemoControlClient;
@@ -11,7 +12,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Fault Lab 真实注入器装配（08 TASK-093）。只有显式启用（application-demo.yml）时才存在；默认与生产 profile 没有注入器，注入请求得到
+ * Fault Lab 真实注入器装配（08 TASK-093、TASK-094）。各注入器只有显式启用（application-demo.yml）时才存在；默认与生产 profile 没有注入器，注入请求得到
  * FAULT_INJECTION_FAILED / INJECTOR_NOT_AVAILABLE（PRODUCTION 系统仍先得到 FAULT_SCENARIO_NOT_ALLOWED）。配置缺项时启动失败。
  */
 @Configuration(proxyBeanMethods = false)
@@ -26,12 +27,13 @@ class FaultLabConfiguration {
     StatisticsConsumerStopInjector statisticsConsumerStopInjector(
             FaultLabProperties properties, ProviderProperties providers, ObjectProvider<Clock> clock) {
         FaultLabProperties.StatisticsConsumerStop config = properties.statisticsConsumerStop();
-        requireText(config.systemKey(), "system-key");
-        requireText(config.dockerEndpoint(), "docker-endpoint");
-        requireText(config.containerName(), "container-name");
-        requireText(config.redisEndpoint(), "redis-endpoint");
-        requireText(config.streamKey(), "stream-key");
-        requireText(config.consumerGroup(), "consumer-group");
+        String prefix = "opspilot.fault-lab.statistics-consumer-stop.";
+        requireText(config.systemKey(), prefix + "system-key");
+        requireText(config.dockerEndpoint(), prefix + "docker-endpoint");
+        requireText(config.containerName(), prefix + "container-name");
+        requireText(config.redisEndpoint(), prefix + "redis-endpoint");
+        requireText(config.streamKey(), prefix + "stream-key");
+        requireText(config.consumerGroup(), prefix + "consumer-group");
         Clock time = clock.getIfAvailable(Clock::systemUTC);
         return new StatisticsConsumerStopInjector(
                 new DemoConsumerStopEnvironment(new DemoControlClient(time, providers.responseLimit()), config, time),
@@ -41,9 +43,36 @@ class FaultLabConfiguration {
                 time);
     }
 
+    @Bean
+    @ConditionalOnProperty(prefix = "opspilot.fault-lab.redis-latency", name = "enabled", havingValue = "true")
+    RedisLatencyInjector redisLatencyInjector(
+            FaultLabProperties properties, ProviderProperties providers, ObjectProvider<Clock> clock) {
+        FaultLabProperties.RedisLatency config = properties.redisLatency();
+        String prefix = "opspilot.fault-lab.redis-latency.";
+        requireText(config.systemKey(), prefix + "system-key");
+        if (config.toxiproxyEndpoint() == null) {
+            throw new IllegalStateException(prefix + "toxiproxy-endpoint is required");
+        }
+        requireText(config.proxyRedisEndpoint(), prefix + "proxy-redis-endpoint");
+        requireText(config.redisEndpoint(), prefix + "redis-endpoint");
+        requireText(config.streamKey(), prefix + "stream-key");
+        requireText(config.consumerGroup(), prefix + "consumer-group");
+        Clock time = clock.getIfAvailable(Clock::systemUTC);
+        return new RedisLatencyInjector(
+                new DemoRedisLatencyEnvironment(
+                        new DemoControlClient(time, providers.responseLimit()),
+                        new ToxiproxyClient(config.toxiproxyEndpoint(), config.proxyNameOrDefault(), time),
+                        config,
+                        time),
+                config.settings(),
+                config.systemKey(),
+                config.targetResourceKeyOrDefault(),
+                time);
+    }
+
     private static void requireText(String value, String property) {
         if (value == null || value.isBlank()) {
-            throw new IllegalStateException("opspilot.fault-lab.statistics-consumer-stop." + property + " is required");
+            throw new IllegalStateException(property + " is required");
         }
     }
 }

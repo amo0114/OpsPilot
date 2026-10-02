@@ -37,7 +37,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  *       detected_at = 确认时间，须满足 started_at ≤ detected_at ≤ 此刻）并标 ACTIVE。未确认生效或 Incident 未创建，实验为 FAILED，不留下 Incident（05 §71）。
  *   <li>Reset：只恢复实验环境（05 §72），不改变 Incident；ACTIVE 或 FAILED 可 Reset，RESETTING 期间外部动作在事务外。
  * </ol>
- * Ground Truth 在插入时写入，确认生效时只补充注入器报告的事实（被停止的容器，09 §63）；本服务的返回值、Incident 的标题与影响、时间线都
+ * Ground Truth 在插入时写入，确认生效时只补充注入器报告的事实（被停止的容器 09 §63、S1 Gate 实测 09 §33）；本服务的返回值、Incident 的标题与影响、时间线都
  * 不含答案（09 §21）。
  */
 @Service
@@ -110,15 +110,16 @@ public class FaultLabApplicationService {
         long experimentId = target.experimentId();
 
         FaultInjection injection;
-        Instant detectedAt;
+        FaultConfirmation confirmation;
         try {
             injection = injector.inject(target);
-            detectedAt = injector.verifyInjected(target);
+            confirmation = injector.verifyInjected(target);
         } catch (RuntimeException ex) {
             fail(experimentId, FaultExperimentStatus.INJECTING, ex);
             throw injectionFailed(experimentId, "INJECTION_NOT_CONFIRMED");
         }
         Instant startedAt = injection == null ? null : injection.startedAt();
+        Instant detectedAt = confirmation == null ? null : confirmation.detectedAt();
         // 09 §19：started_at（故障生效）≤ detected_at（首次确认）≤ 此刻；不借用人工创建 Incident 的 5 分钟容差（B33-R1 P2）
         if (startedAt == null
                 || detectedAt == null
@@ -128,7 +129,7 @@ public class FaultLabApplicationService {
             throw injectionFailed(experimentId, "INJECTION_TIMES_INVALID");
         }
         try {
-            String groundTruth = completedGroundTruth(scenario, injection);
+            String groundTruth = completedGroundTruth(scenario, injection, confirmation);
             CreateIncidentResult incident = incidents.createIncident(
                     new CreateIncidentCommand(
                             target.systemKey(),
@@ -153,15 +154,24 @@ public class FaultLabApplicationService {
         }
     }
 
-    /** 注入器报告了被停止的容器时，Ground Truth 补上容器与停止时间（09 §63）；否则为空，保持插入时的内容。 */
-    private String completedGroundTruth(FaultScenario scenario, FaultInjection injection) {
-        if (injection.stoppedContainerId() == null) {
-            return null;
+    /**
+     * 注入器报告的事实补入 Ground Truth：被停止的容器与停止时间（09 §63）、S1 Gate 实测（09 §33）；都没有时为空，保持插入时的内容。
+     */
+    private String completedGroundTruth(
+            FaultScenario scenario, FaultInjection injection, FaultConfirmation confirmation) {
+        FaultGroundTruthV1 groundTruth = scenario.groundTruth();
+        boolean completed = false;
+        if (injection.stoppedContainerId() != null) {
+            groundTruth = groundTruth.withStoppedConsumer(injection.stoppedContainerId(), injection.startedAt());
+            completed = true;
         }
-        return codecs.encode(
-                FaultGroundTruthV1.SCHEMA_NAME,
-                FaultGroundTruthV1.SCHEMA_VERSION,
-                scenario.groundTruth().withStoppedConsumer(injection.stoppedContainerId(), injection.startedAt()));
+        if (confirmation.redisLatencyGate() != null) {
+            groundTruth = groundTruth.withRedisLatencyGate(confirmation.redisLatencyGate());
+            completed = true;
+        }
+        return completed
+                ? codecs.encode(FaultGroundTruthV1.SCHEMA_NAME, FaultGroundTruthV1.SCHEMA_VERSION, groundTruth)
+                : null;
     }
 
     /**

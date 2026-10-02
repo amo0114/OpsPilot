@@ -1,5 +1,7 @@
 package io.github.ismoyuan.opspilot.infrastructure.faultlab;
 
+import io.github.ismoyuan.opspilot.application.faultlab.FaultConfirmation;
+import io.github.ismoyuan.opspilot.application.faultlab.FaultGroundTruthV1;
 import io.github.ismoyuan.opspilot.application.faultlab.FaultInjection;
 import io.github.ismoyuan.opspilot.application.faultlab.FaultInjector;
 import io.github.ismoyuan.opspilot.application.faultlab.FaultTarget;
@@ -27,6 +29,8 @@ final class ScriptedFaultInjector implements FaultInjector {
     volatile Duration startedAgo = Duration.ofSeconds(5);
     /** 确认时间相对当前时间的偏移；大于 startedAgo 时确认时间早于生效时间（违反 started_at ≤ detected_at）。 */
     volatile Duration detectedAgo = Duration.ofSeconds(1);
+    /** 确认时报告的 S1 Gate 实测（写入 Ground Truth）；为空时不报告。 */
+    volatile FaultGroundTruthV1.RedisLatencyGate redisLatencyGate;
     /** 不控制的系统（controls 返回 false）。 */
     volatile Set<String> uncontrolledSystems = Set.of();
     /** 注入报告的被停止容器（写入 Ground Truth）；为空时不报告。 */
@@ -54,6 +58,7 @@ final class ScriptedFaultInjector implements FaultInjector {
         detectedAgo = Duration.ofSeconds(1);
         stoppedContainerId = null;
         uncontrolledSystems = Set.of();
+        redisLatencyGate = null;
         resetEntered = null;
         releaseReset = null;
         injectEntered = null;
@@ -86,7 +91,7 @@ final class ScriptedFaultInjector implements FaultInjector {
     }
 
     @Override
-    public Instant verifyInjected(FaultTarget target) {
+    public FaultConfirmation verifyInjected(FaultTarget target) {
         record("verify", target);
         Runnable action = onVerify;
         if (action != null) {
@@ -95,7 +100,7 @@ final class ScriptedFaultInjector implements FaultInjector {
         if (verifyFailure != null) {
             throw verifyFailure;
         }
-        return Instant.now().minus(detectedAgo);
+        return new FaultConfirmation(Instant.now().minus(detectedAgo), redisLatencyGate);
     }
 
     @Override

@@ -4,7 +4,9 @@ import io.github.ismoyuan.opspilot.application.capability.result.ServiceInspectR
 import io.github.ismoyuan.opspilot.application.capability.result.ServiceInspectResultV1.RuntimeState;
 import io.github.ismoyuan.opspilot.infrastructure.provider.RedisConnection.RedisErrorReply;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -13,8 +15,8 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Demo 靶场控制面的底层访问（08 TASK-093），只供 Fault Lab 注入器使用（结构测试保证）：经 Docker Engine API（unix socket）检查、停止与启动
- * 一个容器，经 Redis 读取一个 Stream 与消费组的统计量。复用调查 Provider 的 Docker/RESP 客户端、命令白名单与响应上限，但端点和凭据由
+ * Demo 靶场控制面的底层访问（08 TASK-093、TASK-094），只供 Fault Lab 注入器使用（结构测试保证）：经 Docker Engine API（unix socket）
+ * 检查、停止与启动一个容器，经 Redis 读取一个 Stream 与消费组的统计量、测量 PING 往返。复用调查 Provider 的 Docker/RESP 客户端、命令白名单与响应上限，但端点和凭据由
  * Fault Lab 自己的配置给出，与被调查资源的数据源连接无关；不经 Capability，不产生 Observation。
  *
  * <p>失败抛出 {@link DemoControlException}，说明固定且脱敏（不含端点、凭据或容器 id）。
@@ -149,6 +151,34 @@ public final class DemoControlClient {
                                 reply.mentions("no such key")
                                         ? "Redis stream does not exist"
                                         : "Redis rejected the stream statistics request");
+                    }
+                },
+                "Redis could not be reached");
+    }
+
+    /**
+     * 在同一连接上连续发出 {@code count} 次 PING（S1：经与业务相同的代理），返回每次往返耗时；认证在计时之外。
+     */
+    public List<Duration> pingLatencies(
+            String redisEndpoint, String username, String password, int count, Instant deadline) {
+        return call(
+                () -> {
+                    try (RedisConnection redis = RedisConnection.open(
+                            RedisConnection.address(redisEndpoint), deadline, clock, maxResponseBytes)) {
+                        if (password != null && !password.isEmpty()) {
+                            authenticate(redis, username, password, deadline);
+                        }
+                        List<Duration> latencies = new ArrayList<>(count);
+                        for (int i = 0; i < count; i++) {
+                            long started = System.nanoTime();
+                            if (!"PONG".equals(redis.call(RedisCommand.PING, deadline))) {
+                                throw new DemoControlException("Redis did not answer PING");
+                            }
+                            latencies.add(Duration.ofNanos(System.nanoTime() - started));
+                        }
+                        return latencies;
+                    } catch (RedisErrorReply reply) {
+                        throw new DemoControlException("Redis rejected PING");
                     }
                 },
                 "Redis could not be reached");

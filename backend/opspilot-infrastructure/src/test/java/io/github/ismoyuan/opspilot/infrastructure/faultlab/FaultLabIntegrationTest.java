@@ -183,6 +183,22 @@ class FaultLabIntegrationTest {
                 .isEqualTo(time(incident.get("started_at")).truncatedTo(ChronoUnit.MILLIS));
     }
 
+    /** S1 确认生效时 Ground Truth 补上 Gate 实测（所达分支与真实数值，09 §33、ACC-S1-003），latencyMs 为实际注入值。 */
+    @Test
+    void aConfirmedRedisLatencyRecordsItsGateInTheGroundTruth() {
+        FaultGroundTruthV1.RedisLatencyGate gate = new FaultGroundTruthV1.RedisLatencyGate(
+                FaultGroundTruthV1.SymptomBranch.ERROR_RATE, 600, 603, 12, 640, 0.0, 0.4);
+        redisLatencyInjector.redisLatencyGate = gate;
+
+        InjectFaultResult result = inject("redis-latency", SYSTEM);
+
+        FaultGroundTruthV1 groundTruth = evaluation.groundTruth(result.experimentId());
+        assertThat(groundTruth.cause()).isEqualTo(FaultCause.REDIS_NETWORK_LATENCY);
+        assertThat(groundTruth.latencyMs()).isEqualTo(600);
+        assertThat(groundTruth.redisLatencyGate()).isEqualTo(gate);
+        assertThat(groundTruth.containerId()).isNull();
+    }
+
     /** 没有报告被停止容器的注入（及注入失败）保持插入时的 Ground Truth。 */
     @Test
     void theGroundTruthStaysAsInsertedWithoutInjectionFacts() {
