@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-10-02（B36 REVIEW，Base 27d2f10，R2-01 已修复待 B36-R3，未提交）
+> 最近更新：2026-10-02（B36 DONE，OpsPilot commit b436fe7、ShortLink opspilot-demo commit 9a87b40；B37 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -102,7 +102,7 @@
 | TASK-092 | B33 | Fault Inject / Reset API | DONE | commit e296fd6（B33，Base 0afaecc） | B33-V2 verify exit 0（R1 修复后）＋FaultLabIntegrationTest 13/13＋FaultLabApiContractTest 3/3（HTTP 契约、错误码）＋变异检查；B33-R2 PASS（R1 三项已解决；独立 36/36；非阻塞 P3 见批次记录），待提交 |
 | TASK-093 | B34 | Statistics Consumer Stop Injector | DONE | commit c8b7904（B34，Base 2e4adeb）；ShortLink 分支 opspilot-demo commit 5310a70（基线 da887dc） | B34-V3 verify exit 0（domain 43、infrastructure 910、web 52、boot 19）＋B34-E1～E3 真实 ShortLink 注入/Gate/Reset；B34-R1/R2 NEEDS CHANGES 均已修复，B34-R3 PASS（独立 107/107）；含 TASK-092 Reset/失败记录锁序死锁修复 |
 | TASK-094 | B35 | Redis Latency Injector | DONE | commit 6bdea83（B35，Base 210bbbd；ShortLink 无改动） | B35-V2 verify exit 0（domain 43、infrastructure 929、web 52、boot 20）＋真实 Toxiproxy＋Redis 集成与真实 HTTP Reset 回归、变异检查＋B35-E1/E2 真实 ShortLink 注入/Gate/Reset；B35-R1 NEEDS CHANGES 已修复，B35-R2 PASS |
-| TASK-095 | B36 | MySQL Slow Query Injector | REVIEW | 未提交（B36，Base 27d2f10；ShortLink opspilot-demo 5310a70＋4 个文件） | B36-R3 PASS：R1-01/R1-02/R2-01 均关闭；独立 verify 41/41＋真实 MySQL 超时/中断后无迟到清理；B36-V4 verify exit 0（infrastructure 947）＋复用 B36-E2 真实 ShortLink（R2 修复后未重跑）；待用户提交授权 |
+| TASK-095 | B36 | MySQL Slow Query Injector | DONE | commit b436fe7（B36，Base 27d2f10；ShortLink opspilot-demo commit 9a87b40，Base 5310a70） | B36-V4 verify exit 0（domain 43、infrastructure 947、web 52、boot 20）＋真实 MySQL＋Hikari 集成、取消交接与迟到清理回归、变异检查＋B36-E1/E2 真实 ShortLink 注入/Gate/Reset；B36-R1/R2 NEEDS CHANGES 已修复，B36-R3 PASS |
 | TASK-096 | B37 | Web 基础壳 | TODO | — | NOT RUN |
 | TASK-097 | B37 | Systems 页面 | TODO | — | NOT RUN |
 | TASK-098 | B37 | Incident List | TODO | — | NOT RUN |
@@ -1095,7 +1095,7 @@
 
 ### B36 — S2 MySQL Slow Query 真实注入
 
-- 状态：REVIEW（B36-R3 PASS，全部提交前阻塞项已关闭；待用户授权分别提交双仓库，未提交）
+- 状态：DONE（B36-R3 PASS，已提交 OpsPilot b436fe7、ShortLink opspilot-demo 9a87b40）
 - 成员及顺序：TASK-095；批外前置：TASK-094 DONE（6bdea83，B35-R2 PASS）
 - Base SHA：OpsPilot 27d2f100df0ebab8067bcebd2ce4b4c1f7432584；ShortLink 分支 opspilot-demo 5310a70e9aaaa3afad1e2cea80e69eb64f659179（两仓库干净）
 - 范围：
@@ -1116,7 +1116,7 @@
   - ⑥ application/faultlab/MysqlSlowQueryInjector（端口 MysqlSlowQueryEnvironment、参数 MysqlSlowQuerySettings）：Preflight＝负载未运行、慢语句摘要无残留执行；Baseline（默认 60 秒/2 秒）＝每次 pending 0 且 active < 7、创建错误率 < 1%、扣除探测后创建速率 ≥ 2.5/s；注入＝启动 8×3000ms 刷新负载；Gate（60 秒整体期限、迟到采样拒绝）＝负载仍在运行、连续 3 次 active ≥ 7、≥ 2 次 pending > 0、慢语句摘要平均或最大 ≥ 2000ms、创建 LATENCY（P99 ≥ max(基线×5, 2000ms)）或 ERROR_RATE（≥ max(基线+0.05, 0.05)），记录分支与实测；Reset＝停止并等实际工作结束 → 等负载无进行中、pending 0、active < 7 → 以控制账号清理摘要 → 创建探测全部成功且 P99 ≤ 500ms（显式健康上限，与 S1 一致不依赖内存基线）；期限截断统一报告 Reset 失败；只控制 shortlink-platform/shortlink-mysql
   - ⑦ infrastructure：faultlab/DemoMysqlSlowQueryEnvironment（管理端口 HTTP＋Actuator 指标解析；JDBC 以控制账号读取 `CALL \`refresh_link_statistics_snapshot\`%` 摘要的 SUM(COUNT_STAR)、SUM(SUM_TIMER_WAIT)/次数、MAX(MAX_TIMER_WAIT)（皮秒换算毫秒），connectTimeout/socketTimeout/queryTimeout 裁剪到期限；创建探测为真实 POST，带演示用户名与分组、普通 User-Agent，成功＝HTTP 200 且业务码 "0"，默认超时 10 秒）；faultlab/BoundedHttp（期限内整体完成否则取消的 HTTP，ToxiproxyClient 改用它，说明前缀统一为 “Demo environment:”）；FaultLabProperties.MysqlSlowQuery 与 FaultLabConfiguration（enabled 时才装配，必填项缺失启动失败）；application-demo.yml 启用，控制账号密码只来自 OPSPILOT_FAULTLAB_MYSQL_CONTROL_PASSWORD
   - ⑧ deploy/demo Compose：mysql-demo-objects 服务；project-api 发布 127.0.0.1:18081（管理端口）、SHORTLINK_SNAPSHOT_WORKLOAD_ENABLED=true；两个 ShortLink 容器健康检查改为 8081；scripts/demo/shortlink_s3.py 增加 create-load（唯一 URL、并发上限 64，09 §49）
-- 成员进度：TASK-095 REVIEW（实现与针对性验证、真实 ShortLink 校准与端到端 B36-E1、批尾 B36-V1 完成）
+- 成员进度：TASK-095 DONE（实现与针对性验证、真实 ShortLink 校准与端到端 B36-E1/E2、R1/R2 修复、批尾 B36-V4 完成，B36-R3 PASS 后提交）
 - 针对性验证（backend/，JDK 21＋Docker 29.1.3，Demo Compose 已停止，2026-10-02）：`-pl opspilot-boot -am` 运行 15 个相关测试类全部通过（infrastructure 136、boot 7）：
   - MysqlSlowQueryInjectorTest 9/9（脚本化靶场）：饱和＋pending＋慢摘要＋慢创建 → LATENCY 且记录全部实测；创建失败 → ERROR_RATE；逐一缺少 pending／饱和／慢摘要／HTTP 症状时 Gate 以对应原因超时；负载被停止 → 立即失败；期限后完成的采样不被接受；Preflight 拒绝（负载已运行、摘要残留、Pool 已争用、负载不足、创建失败）且均未启动负载；其他系统 inject/verify/reset 无环境调用；Reset 顺序为 stop → 等实际工作结束 → clear → 创建恢复（慢创建期间继续等），始终慢则失败
   - MysqlSlowQueryInjectorIntegrationTest 2/2（真实 mysql:8.4.11，库对象由 deploy/demo/mysql/demo-objects.sql 原样执行；“project-api”替身以真实 HikariDataSource（上限 8）提供相同形状的刷新负载端点、hikaricp/http.server.requests 指标与经该池 INSERT 的创建接口，约 5 req/s 持续创建）：Gate 确认 maxActive 8、连续饱和 ≥ 3、pending 采样 ≥ 2、摘要 `CALL \`refresh_link_statistics_snapshot\` (?)` ≥ 2000ms、创建 P99 ≥ max(基线×5, 2000ms)；Reset 后负载停止、无进行中、等待者 0、摘要中无该 CALL，也无控制账号的 TRUNCATE/汇总读取；只读调查形状账号 TRUNCATE 被拒（denied），控制账号可 TRUNCATE 但不能读业务表。首轮两处测试自身错误：断言把本测试 root 查询摘要表的语句当作控制痕迹；受限账号连接 URL 带默认库 link（无权限）
@@ -1171,7 +1171,7 @@
   - 独立验证：backend/；`./mvnw -B -o verify -pl opspilot-boot -am -Dtest=MysqlSlowQueryInjectorTest,MysqlSlowQueryInjectorIntegrationTest,JdbcHandoffTest,FaultLabIntegrationTest,GroundTruthIsolationTest,DemoFaultInjectorWiringTest -Dsurefire.failIfNoSpecifiedTests=false`；2026-10-02 21:05:37 +08:00 完成，耗时 02:34，exit 0，**41/41（infrastructure 40、boot 1），0 failures/errors/skipped**，六模块 Enforcer、Spotless check 均执行。基础设施源码与测试均重新编译；覆盖取消交接 2000 次竞态、真实 MySQL 迟到清理、缺失池指标、正常 S2 Gate/Reset、Ground Truth 隔离与装配。日志 `/tmp/b36-r3-targeted.log`。双仓库 `git diff --check HEAD`、Compose `config -q` 与负载脚本 Python AST 检查通过。
   - 证据复用与限制：直接核验 `/tmp/claude-0/b36-v4.log` 的 BUILD SUCCESS、43/947/52/20 测试统计、六模块门禁与 20:51:52 +08:00 完成时点。现存 Surefire 文件被 V4 之后的变异测试覆盖，不能用其混合统计证明 V4；本轮重新编译恢复后的源码并独立验证通过。已核验变异日志，不独立重复源码变异；V3 中止不作证据。本轮完整 clean verify、R2 修复后的真实 ShortLink 全场景、ShortLink 自身门禁、真实 LLM、TASK-105～109 完整验收 **NOT RUN**。B36-E2 的真实 Gate/Reset 数值仍只属于当时受测版本；本次取消修复不改变正常场景逻辑，正常路径由本轮真实 MySQL 集成回归覆盖，接受复用既有场景证据。
   - 受审代码清单 `/tmp/b36-r3-opspilot.sha256`（24 文件，清单 SHA-256 `dd390998ba3e01a92511771687525ed597092746492967c3b2773756c73bbb9f`）、`/tmp/b36-r3-shortlink.sha256`（4 文件，`b745f45cb7772ae5b9b9ffb25bbc98f4fae885dd49c6168dda02c33edbaf6414`）。最终含两份记录文档的 OpsPilot 提交核对清单：`/tmp/b36-r3-reviewed-files.sha256`（26 文件，在本条与 CURRENT 写入后生成）。本轮只改 PROGRESS/CURRENT，未修改实现、仓库测试或 ShortLink；新增依赖、Migration：无。**Commit Recommendation：可按用户授权分别提交 ShortLink opspilot-demo 与 OpsPilot，并回填真实 SHA；当前未提交/推送，B36/TASK-095 保持 REVIEW，不提前标 DONE。**
-- 提交：未提交（OpsPilot 与 ShortLink 均待 Review 结论与用户授权）；范围外问题：见待处理问题
+- 提交：ShortLink opspilot-demo 9a87b4076f89ff33ece2692387a3919c4f905d87（feat(project): 增加 Demo 慢查询负载端点与连接池配置，4 文件）；OpsPilot 代码提交 b436fe754d110564d6c72afb8609bbb682b05f20（feat(faultlab): real S2 mysql slow query injector through the app pool (TASK-095)，26 文件，含 docs/dev 批次证据）；提交前双仓库清单 /tmp/b36-r3-shortlink.sha256（4）、/tmp/b36-r3-opspilot.sha256（24）、/tmp/b36-r3-reviewed-files.sha256（26）逐项 sha256sum -c 一致，且与 Git 实际变更集合相同；前端原型在仓库外，未纳入；SHA 回填为后续 docs 提交；未推送；范围外问题：见待处理问题
 
 ### B35 — S1 Redis Latency 真实注入
 
