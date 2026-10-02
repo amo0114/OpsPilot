@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-10-02（B35 REVIEW，Base 210bbbd，B35-R2 PASS，待用户授权提交）
+> 最近更新：2026-10-02（B35 DONE，commit 6bdea83；B36 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -101,7 +101,7 @@
 | TASK-091 | B33 | Ground Truth Isolation | DONE | commit e296fd6（B33，Base 0afaecc） | B33-V2 verify exit 0（R1 修复后）＋GroundTruthIsolationTest 3/3（类依赖、Mapper SQL、三场景真实上下文序列化无答案标记）＋变异检查；B33-R2 PASS（R1 三项已解决；独立 36/36；非阻塞 P3 见批次记录），待提交 |
 | TASK-092 | B33 | Fault Inject / Reset API | DONE | commit e296fd6（B33，Base 0afaecc） | B33-V2 verify exit 0（R1 修复后）＋FaultLabIntegrationTest 13/13＋FaultLabApiContractTest 3/3（HTTP 契约、错误码）＋变异检查；B33-R2 PASS（R1 三项已解决；独立 36/36；非阻塞 P3 见批次记录），待提交 |
 | TASK-093 | B34 | Statistics Consumer Stop Injector | DONE | commit c8b7904（B34，Base 2e4adeb）；ShortLink 分支 opspilot-demo commit 5310a70（基线 da887dc） | B34-V3 verify exit 0（domain 43、infrastructure 910、web 52、boot 19）＋B34-E1～E3 真实 ShortLink 注入/Gate/Reset；B34-R1/R2 NEEDS CHANGES 均已修复，B34-R3 PASS（独立 107/107）；含 TASK-092 Reset/失败记录锁序死锁修复 |
-| TASK-094 | B35 | Redis Latency Injector | REVIEW | 未提交（B35，Base 210bbbd；ShortLink 无改动） | B35-R2 PASS，R1-01 关闭；独立 verify 127/127、真实 HTTP 慢成功拒绝/恢复后完成及无内存基线 Reset 复测通过；B35-V2/E2 证据已核验；待用户授权提交 |
+| TASK-094 | B35 | Redis Latency Injector | DONE | commit 6bdea83（B35，Base 210bbbd；ShortLink 无改动） | B35-V2 verify exit 0（domain 43、infrastructure 929、web 52、boot 20）＋真实 Toxiproxy＋Redis 集成与真实 HTTP Reset 回归、变异检查＋B35-E1/E2 真实 ShortLink 注入/Gate/Reset；B35-R1 NEEDS CHANGES 已修复，B35-R2 PASS |
 | TASK-095 | B36 | MySQL Slow Query Injector | TODO | — | NOT RUN |
 | TASK-096 | B37 | Web 基础壳 | TODO | — | NOT RUN |
 | TASK-097 | B37 | Systems 页面 | TODO | — | NOT RUN |
@@ -1095,7 +1095,7 @@
 
 ### B35 — S1 Redis Latency 真实注入
 
-- 状态：REVIEW（B35-R2 PASS，R1-01 关闭，无剩余提交前阻塞项；待用户授权提交）
+- 状态：DONE（B35-R2 PASS，已提交 6bdea83）
 - 成员及顺序：TASK-094；批外前置：TASK-093 DONE（c8b7904，B34-R3 PASS）
 - Base SHA：OpsPilot 210bbbda03d556e9765f947c5cfe56bed3464ba9；靶场仓库 /root/projects/shortlink 分支 opspilot-demo 5310a70e9aaaa3afad1e2cea80e69eb64f659179（干净）
 - 范围：
@@ -1151,7 +1151,7 @@
   - 独立验证（backend/，JDK 21＋真实 Testcontainers MySQL 8.4.11/Redis 7.4.5/Toxiproxy 2.12.0/Docker）：`./mvnw -B -o verify -pl opspilot-boot -am -Dtest=RedisLatencyResetRecoveryTest,RedisLatencyInjectorTest,RedisLatencyInjectorIntegrationTest,StatisticsConsumerStopInjectorTest,ConsumerStopInjectorIntegrationTest,RedirectProbeDeadlineTest,GroundTruthIsolationTest,FaultLabIntegrationTest,ShortLinkDemoSeedTest,JacksonSchemaCodecRegistryTest,FaultLabApiContractTest,ApplicationWiringTest,DemoFaultInjectorWiringTest -Dsurefire.failIfNoSpecifiedTests=false`；2026-10-02 16:23:08 +08:00 完成，耗时 03:47；exit 0，**127/127，0 failures/errors/skipped**（infrastructure 120、boot 7），6 模块 Enforcer/Spotless 均执行，无跳过工程门禁参数。日志 `/tmp/b35-r2-targeted.log`。`git diff --check HEAD`、`SHORTLINK_REPO=/root/projects/shortlink docker compose -f deploy/demo/docker-compose.yml config -q` 通过。
   - B35-V2/E2 核验：实际 `/tmp/claude-0/b35-v2.log` BUILD SUCCESS、6 模块门禁执行；独立运行前 Surefire XML 为 43/929/52/20，零失败/错误/跳过。本轮完整 clean verify **NOT RUN**，复用覆盖最终代码的 B35-V2。`opspilot-e2e-b35.log` 的 16:14:31.625 注入、16:14:56.668 BOTH 确认、16:15:16.902 Reset 与记录相符；`load-s1r.log` 的 Reset 所在窗口仍含积压请求（P99 2408ms），之后完整窗口实际范围 **6.3～21.7ms**，均低于 300ms（比实施记录选取的 7.2～15.8ms 范围更完整）。完整 ShortLink 场景、实际 JVM 重启、源码变异本轮 **NOT RUN**；S1 调查验收（107）、OpsPilot 入 Compose/调查 Provider 同路径/Prometheus/Loki/ACL（105/106）、完整 S3（109）、真实 LLM **NOT RUN/NOT VERIFIED**。
   - 受审清单 `/tmp/b35-r2.sha256`（30 文件，覆盖除两份进度文档外全部 tracked/untracked 变化；清单 SHA-256 `63828a6641094b65e272ce92f7bdb37724845daf8ecd492e156b262c947de59b`）。本轮仅更新 PROGRESS/CURRENT，未改实现、配置、仓库测试或 ShortLink；新增依赖：无；Migration：无。Commit Recommendation：可按用户授权提交 OpsPilot 并回填真实 SHA；当前未提交/推送，B35/TASK-094 保持 REVIEW，未标 DONE，不开始 B36。
-- 提交：未提交；范围外问题：见待处理问题（Toxiproxy 删除 latency toxic 会阻塞到积压排空、S1 症状下 ShortLink Redisson 超时重试放大、S1 期间统计消费者也经代理导致积压）
+- 提交：OpsPilot 代码提交 6bdea836c02568c5ac6cd35b215d9d30ab67989a（feat(faultlab): real S1 redis latency injector through toxiproxy (TASK-094)，含 docs/dev 批次证据）；提交前 30 个受审文件与 B35-R2 清单 /tmp/b35-r2.sha256 逐项一致、文件集合相同；ShortLink 无改动、不提交；SHA 回填为后续 docs 提交；未推送；范围外问题：见待处理问题（Toxiproxy 删除 latency toxic 会阻塞到积压排空、S1 症状下 ShortLink Redisson 超时重试放大、S1 期间统计消费者也经代理导致积压）
 
 ### B34 — S3 Consumer Stop 真实注入
 
