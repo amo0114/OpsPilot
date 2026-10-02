@@ -11,7 +11,7 @@
 当前成员及位置：无进行中批次
 已实现并针对性验证的成员：B01～B36 全部 DONE；S1、S2、S3 真实注入/Gate/Reset 已在真实 ShortLink 靶场运行（B34-E1～E3、B35-E1/E2、B36-E1/E2），场景验收待 TASK-107～109
 未完成 / 未执行验证：S1/S2 调查验收（107/108）、S3 完整闭环（109）、OpsPilot 入 Compose、Prometheus/Loki 与调查只读账号/Redis ACL（105/106）NOT RUN/NOT VERIFIED；B36 R2 修复后真实 ShortLink 场景与 ShortLink 自身门禁 NOT RUN；B33-R2 非阻塞 P3；05 §45～§48 独立 GET 无归属 Task（待确认）；真实浏览器 EventSource 重连、代理空闲断开、真实 Provider 恢复采样 NOT RUN；其余见 PROGRESS 待处理问题；Redis < 7.2、MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
-未提交文件（含既有无关修改）：无（CURRENT 与 PROGRESS 的 GitHub 推送记录随独立 docs(progress) 提交同步）；前端原型在仓库外 /root/projects/opspilot-ui-prototype/，不属于任何已提交批次
+未提交文件（含既有无关修改）：无
 共同验证及独立 Review 证据编号：B36-V4（exit 0）、B36-E2；B36-R1/R2 NEEDS CHANGES → B36-R3 PASS
 下一步具体动作：
 1. B37（TASK-096～098）是前端批次，开工前先征得用户确认；按 BATCH-PLAN 固定基线，遵循下方 UI 约定
