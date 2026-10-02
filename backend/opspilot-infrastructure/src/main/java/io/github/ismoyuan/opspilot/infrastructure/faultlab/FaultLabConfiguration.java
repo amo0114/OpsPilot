@@ -1,5 +1,6 @@
 package io.github.ismoyuan.opspilot.infrastructure.faultlab;
 
+import io.github.ismoyuan.opspilot.application.faultlab.MysqlSlowQueryInjector;
 import io.github.ismoyuan.opspilot.application.faultlab.RedisLatencyInjector;
 import io.github.ismoyuan.opspilot.application.faultlab.StatisticsConsumerStopInjector;
 import io.github.ismoyuan.opspilot.infrastructure.config.ProviderProperties;
@@ -12,7 +13,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Fault Lab 真实注入器装配（08 TASK-093、TASK-094）。各注入器只有显式启用（application-demo.yml）时才存在；默认与生产 profile 没有注入器，注入请求得到
+ * Fault Lab 真实注入器装配（08 TASK-093～095）。各注入器只有显式启用（application-demo.yml）时才存在；默认与生产 profile 没有注入器，注入请求得到
  * FAULT_INJECTION_FAILED / INJECTOR_NOT_AVAILABLE（PRODUCTION 系统仍先得到 FAULT_SCENARIO_NOT_ALLOWED）。配置缺项时启动失败。
  */
 @Configuration(proxyBeanMethods = false)
@@ -64,6 +65,28 @@ class FaultLabConfiguration {
                         new ToxiproxyClient(config.toxiproxyEndpoint(), config.proxyNameOrDefault(), time),
                         config,
                         time),
+                config.settings(),
+                config.systemKey(),
+                config.targetResourceKeyOrDefault(),
+                time);
+    }
+
+    @Bean
+    @ConditionalOnProperty(prefix = "opspilot.fault-lab.mysql-slow-query", name = "enabled", havingValue = "true")
+    MysqlSlowQueryInjector mysqlSlowQueryInjector(FaultLabProperties properties, ObjectProvider<Clock> clock) {
+        FaultLabProperties.MysqlSlowQuery config = properties.mysqlSlowQuery();
+        String prefix = "opspilot.fault-lab.mysql-slow-query.";
+        requireText(config.systemKey(), prefix + "system-key");
+        if (config.managementEndpoint() == null || config.shortlinkEndpoint() == null) {
+            throw new IllegalStateException(prefix + "management-endpoint and shortlink-endpoint are required");
+        }
+        requireText(config.controlJdbcUrl(), prefix + "control-jdbc-url");
+        requireText(config.controlUsername(), prefix + "control-username");
+        requireText(config.createUsername(), prefix + "create-username");
+        requireText(config.createGroupId(), prefix + "create-group-id");
+        Clock time = clock.getIfAvailable(Clock::systemUTC);
+        return new MysqlSlowQueryInjector(
+                new DemoMysqlSlowQueryEnvironment(config, time),
                 config.settings(),
                 config.systemKey(),
                 config.targetResourceKeyOrDefault(),

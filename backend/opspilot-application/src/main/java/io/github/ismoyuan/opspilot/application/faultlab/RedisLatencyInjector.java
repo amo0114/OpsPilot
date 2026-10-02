@@ -181,7 +181,8 @@ public final class RedisLatencyInjector implements FaultInjector {
                                 state.baselineP99().toMillis(),
                                 fault.p99().toMillis(),
                                 state.baselineErrorRate(),
-                                fault.errorRate()));
+                                fault.errorRate()),
+                        null);
             }
             pause(min(settings.sampleInterval(), Duration.between(now, deadline)));
         }

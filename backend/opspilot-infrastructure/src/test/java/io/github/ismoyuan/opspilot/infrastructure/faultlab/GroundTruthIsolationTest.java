@@ -161,6 +161,23 @@ class GroundTruthIsolationTest {
                 .filter(injector -> injector.scenarioKey().equals("redis-latency"))
                 .forEach(injector -> injector.redisLatencyGate = new FaultGroundTruthV1.RedisLatencyGate(
                         FaultGroundTruthV1.SymptomBranch.BOTH, 600, 612, 9, 2_345, 0.0, 0.25));
+        // S2 的 Ground Truth 在确认生效时补上 Gate 实测（09 §51）；其字段同样不得进入调查请求
+        injectors.stream()
+                .filter(injector -> injector.scenarioKey().equals("mysql-slow-query"))
+                .forEach(injector -> injector.mysqlSlowQueryGate = new FaultGroundTruthV1.MysqlSlowQueryGate(
+                        FaultGroundTruthV1.SymptomBranch.LATENCY,
+                        8,
+                        3000,
+                        8,
+                        9,
+                        7,
+                        43,
+                        3001,
+                        3004,
+                        31,
+                        9_876,
+                        0.0,
+                        0.0));
         for (FaultScenario scenario : catalog.all()) {
             InjectFaultResult injected =
                     faultLab.inject(new InjectFaultCommand(scenario.scenarioKey(), "shortlink-platform", "demo-user"));
@@ -171,6 +188,10 @@ class GroundTruthIsolationTest {
             if (groundTruth.containerId() != null) {
                 assertThat(groundTruth.containerId()).isEqualTo(stoppedContainer);
                 markers.add(stoppedContainer);
+            }
+            if (groundTruth.mysqlSlowQueryGate() != null) {
+                assertThat(groundTruth.mysqlSlowQueryGate().faultP99Ms()).isEqualTo(9_876);
+                markers.addAll(List.of("mysqlslowquerygate", "slowstatementavgms", "saturatedsamples", "9876"));
             }
             if (groundTruth.redisLatencyGate() != null) {
                 assertThat(groundTruth.redisLatencyGate().symptomBranch())

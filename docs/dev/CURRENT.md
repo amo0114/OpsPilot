@@ -1,22 +1,22 @@
 # 当前工作
 
-更新时间：2026-10-02（本地，B35 DONE）
+更新时间：2026-10-02（本地，B36-R3 PASS，待提交授权）
 仓库/分支：/root/projects/OpsPilot-V0.1-IMPLEMENTATION，main；无 remote。靶场仓库 /root/projects/shortlink，Demo 改动在本地分支 opspilot-demo（5310a70，不推送）
-当前批次/状态：B35 DONE（代码 6bdea83，B35-R2 PASS）；B36 未开始
-成员 Task 及顺序：B35 = TASK-094（DONE）；下一批 B36 = TASK-095（S2 MySQL Slow Query 真实注入）
-固定 Base SHA：B35 为 OpsPilot 210bbbda03d556e9765f947c5cfe56bed3464ba9（ShortLink 5310a70 未改）；B36 开工时读取当时 HEAD（ShortLink 以 opspilot-demo 当时 HEAD 为基线）
-批外前置核实：B36 开工时按 08 核对（TASK-094 已 DONE，6bdea83）
-允许目录 / 明确不做 / 关键不变量：B36 开工时按 BATCH-PLAN 与 08 固定
-本批规格章节及 PROGRESS 记录：最近完成：PROGRESS「B35」
-当前成员及位置：无进行中批次
-已实现并针对性验证的成员：B01～B35 全部 DONE；S1、S3 真实注入/Gate/Reset 已在真实 ShortLink 靶场运行（B34-E1～E3、B35-E1/E2），场景验收待 TASK-107/109
-未完成 / 未执行验证：S1 调查验收（TASK-107）、S3 完整闭环（TASK-109）、OpsPilot 入 Compose 与 cache.inspect 经代理的真实调用、Loki 选择器层面的控制日志分离（TASK-105）、Prometheus/Loki 与 Redis ACL（105/106）NOT RUN/NOT VERIFIED；B33-R2 非阻塞 P3；05 §45～§48 独立 GET 无归属 Task（待确认）；真实浏览器 EventSource 重连、代理空闲断开、真实 Provider 恢复采样 NOT RUN；其余见 PROGRESS 待处理问题；Redis < 7.2、MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
-未提交文件（含既有无关修改）：无（本交接卡与 PROGRESS 回填随 docs(progress) 提交）
-共同验证及独立 Review 证据编号：B35-V2（exit 0）、B35-E2；B35-R1 NEEDS CHANGES → B35-R2 PASS
+当前批次/状态：B36 REVIEW（B36-R3 PASS，全部提交前阻塞项已关闭；待用户提交授权，未提交）
+成员 Task 及顺序：B36 = TASK-095（S2 MySQL Slow Query 真实注入）
+固定 Base SHA：OpsPilot 27d2f100df0ebab8067bcebd2ce4b4c1f7432584；ShortLink opspilot-demo 5310a70e9aaaa3afad1e2cea80e69eb64f659179
+批外前置核实：TASK-094 DONE（6bdea83，B35-R2 PASS）
+允许目录 / 明确不做 / 关键不变量：见 PROGRESS「B36」范围
+本批规格章节及 PROGRESS 记录：08 TASK-095；09 §13～§22、§42～§59；PROGRESS「B36」
+当前成员及位置：TASK-095 REVIEW；R1-01/R1-02/R2-01 已关闭，独立 Review PASS；提交后才标 DONE
+已实现并针对性验证的成员：TASK-095（R2 修复后 B36-V4 verify exit 0，infrastructure 947；B36-E2 真实 ShortLink；R1/R2 回归与变异检查）；B01～B35 全部 DONE
+未完成 / 未执行验证：待用户授权提交双仓库与回填 SHA；R3 完整 clean verify、R2 修复后真实 ShortLink 场景与 ShortLink 自身门禁 NOT RUN（核验复用 B36-V4/E2，V3 中止不作证据）；S1/S2 调查验收（107/108）、S3 完整闭环（109）、OpsPilot 入 Compose、Prometheus/Loki 与调查只读账号/Redis ACL（105/106）NOT RUN/NOT VERIFIED；B33-R2 非阻塞 P3；05 §45～§48 独立 GET 无归属 Task（待确认）；真实浏览器 EventSource 重连、代理空闲断开、真实 Provider 恢复采样 NOT RUN；Redis < 7.2、MySQL 8.0.16、Windows mvnw.cmd NOT VERIFIED
+未提交文件（含既有无关修改）：OpsPilot——见 PROGRESS「B36」修改文件（backend、deploy/demo、scripts/demo、docs/dev 两份）；ShortLink opspilot-demo——project/pom.xml、SentinelRuleConfig.java、application-demo.yaml、demo/SnapshotWorkloadEndpoint.java。前端原型已在仓库外 /root/projects/opspilot-ui-prototype/；当前 Git 未跟踪清单中已无 prototype/，原型不属于 B36，本轮未触及
+共同验证及独立 Review 证据编号：B36-V4（exit 0，/tmp/claude-0/b36-v4.log）、B36-E2；B36-R3 PASS（独立 verify 41/41、六模块门禁；/tmp/b36-r3-targeted.log）；真实 MySQL 超时/中断后无迟到清理 /tmp/b36-r3-jdbc-cancellation.log；双仓库受审代码哈希见 PROGRESS，最终含文档提交清单 /tmp/b36-r3-reviewed-files.sha256
 下一步具体动作：
-1. 开始 B36（TASK-095 S2 MySQL Slow Query：Demo Profile 慢任务经 project-api 自身 Hikari Pool、maxPool 8/slowWorkers 7/约 3 秒/5 RPS 初始配方按 09 Gate 校准、Performance Schema 清理只用 Demo 控制凭证），按 BATCH-PLAN 固定基线；涉及 ShortLink opspilot-demo 分支与 deploy/demo，开工前核对环境
-2. 复现 S1/S3：`SHORTLINK_REPO=/root/projects/shortlink docker compose -f deploy/demo/docker-compose.yml up -d --build --wait`（先在靶场打包 project）→ `python3 scripts/demo/shortlink_s3.py prepare` / `load --rate 15|10` → OpsPilot demo profile，设 OPSPILOT_FAULTLAB_REDIS_ENDPOINT=redis://127.0.0.1:16380、OPSPILOT_FAULTLAB_PROXY_REDIS_ENDPOINT=redis://127.0.0.1:16381、OPSPILOT_FAULTLAB_TOXIPROXY_ENDPOINT=http://127.0.0.1:18474、OPSPILOT_FAULTLAB_S3_PROBE_URLS=<prepare 输出的短链>；运行 Maven 测试前先 Compose down（本机内存不足以同时承载）
-3. 不推送
+1. 待用户提交授权；提交前核对 R3 哈希清单与 Git 实际变更，排除任何后续批外改动
+2. 获授权后分别提交 ShortLink opspilot-demo 分支与 OpsPilot，回填两个真实 SHA，再将 B36/TASK-095 标 DONE；不推送
+3. 复现 S2：先在靶场 `docker compose -f compose.dev.yaml --profile tools run --rm build mvn -B -ntp -Dspotless.apply.skip=true -Dspotless.check.skip=true -DskipTests -pl project -am clean package` → `SHORTLINK_REPO=/root/projects/shortlink docker compose -f deploy/demo/docker-compose.yml up -d --build --wait` → `python3 scripts/demo/shortlink_s3.py prepare` / `create-load --rate 5` → OpsPilot demo profile，设 OPSPILOT_FAULTLAB_SHORTLINK_MANAGEMENT_ENDPOINT=http://127.0.0.1:18081、OPSPILOT_FAULTLAB_SHORTLINK_ENDPOINT=http://localhost:18001、OPSPILOT_FAULTLAB_MYSQL_CONTROL_URL=jdbc:mysql://127.0.0.1:13317/、OPSPILOT_FAULTLAB_MYSQL_CONTROL_PASSWORD=fault_control_local_only（S1/S3 的变量见 PROGRESS B34/B35）；运行 Maven 测试前先 Compose down；长时间负载用 setsid 脱离调用 shell（工具 600 秒超时会连带终止）
 
 本地启动 Demo 配置：在 OPSPILOT_DB_* 环境变量基础上加 --spring.profiles.active=demo
 

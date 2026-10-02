@@ -31,6 +31,8 @@ final class ScriptedFaultInjector implements FaultInjector {
     volatile Duration detectedAgo = Duration.ofSeconds(1);
     /** 确认时报告的 S1 Gate 实测（写入 Ground Truth）；为空时不报告。 */
     volatile FaultGroundTruthV1.RedisLatencyGate redisLatencyGate;
+    /** 确认时报告的 S2 Gate 实测；为空时不报告。 */
+    volatile FaultGroundTruthV1.MysqlSlowQueryGate mysqlSlowQueryGate;
     /** 不控制的系统（controls 返回 false）。 */
     volatile Set<String> uncontrolledSystems = Set.of();
     /** 注入报告的被停止容器（写入 Ground Truth）；为空时不报告。 */
@@ -59,6 +61,7 @@ final class ScriptedFaultInjector implements FaultInjector {
         stoppedContainerId = null;
         uncontrolledSystems = Set.of();
         redisLatencyGate = null;
+        mysqlSlowQueryGate = null;
         resetEntered = null;
         releaseReset = null;
         injectEntered = null;
@@ -100,7 +103,7 @@ final class ScriptedFaultInjector implements FaultInjector {
         if (verifyFailure != null) {
             throw verifyFailure;
         }
-        return new FaultConfirmation(Instant.now().minus(detectedAgo), redisLatencyGate);
+        return new FaultConfirmation(Instant.now().minus(detectedAgo), redisLatencyGate, mysqlSlowQueryGate);
     }
 
     @Override

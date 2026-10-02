@@ -36,10 +36,13 @@ import tools.jackson.databind.json.JsonMapper;
  * 真实 HTTP＋真实 MySQL（demo Seed）上的 Fault Lab API（05 §68～§73、§93～§94，08 TASK-092）。redis-latency 由测试注入器确认生效
  * （真实注入器属 TASK-094），mysql-slow-query 没有注入器；statistics-consumer-stop 的真实注入器（TASK-093）已装配，但这里不调用。响应与故障详情都不含 Ground Truth；没有 Ground Truth 读取接口。
  */
-// demo profile 的真实 redis-latency 注入器与本测试的同场景注入器互斥：关闭真实注入器
+// demo profile 的真实 redis-latency 注入器与本测试的同场景注入器互斥；mysql-slow-query 用于“无注入器”契约：两者都关闭
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = "opspilot.fault-lab.redis-latency.enabled=false")
+        properties = {
+            "opspilot.fault-lab.redis-latency.enabled=false",
+            "opspilot.fault-lab.mysql-slow-query.enabled=false"
+        })
 @ActiveProfiles("demo")
 @Testcontainers
 class FaultLabApiContractTest {

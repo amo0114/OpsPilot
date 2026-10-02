@@ -1,4 +1,5 @@
-# OpsPilot Demo 靶场（09 §4～§9）。本文件目前含 S3（统计消费者停止，08 TASK-093）与 S1（Redis 延迟，TASK-094）所需的运行单元：
+# OpsPilot Demo 靶场（09 §4～§9）。本文件目前含 S3（统计消费者停止，08 TASK-093）、S1（Redis 延迟，TASK-094）与 S2（MySQL 慢查询，TASK-095）
+# 所需的运行单元：
 #   同一个 ShortLink project 产物跑成 project-api（创建/跳转/写统计 Stream）与 statistics-consumer（只消费统计）两个容器；
 #   二者的 Redis 流量都经 Toxiproxy（redis-proxy）到达 Redis，OpsPilot 的 cache.inspect 走同一代理（09 §29）。
 # Prometheus、Loki、负载发生器与 OpsPilot 自身由 TASK-105 加入；ShortLink 原有的 compose.dev.yaml 不受影响。
@@ -22,12 +23,13 @@ x-shortlink-project: &shortlink-project
     SHORTLINK_DOMAIN: ${SHORTLINK_DOMAIN:-localhost:18001}
     TZ: Asia/Shanghai
   depends_on:
-    mysql:
-      condition: service_healthy
+    mysql-demo-objects:
+      condition: service_completed_successfully
     redis-proxy:
       condition: service_healthy
   healthcheck:
-    test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8001/actuator/health | grep -q '\"status\":\"UP\"'"]
+    # Demo Profile 的 Actuator 在独立管理端口 8081
+    test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8081/actuator/health | grep -q '\"status\":\"UP\"'"]
     interval: 5s
     timeout: 3s
     retries: 30
@@ -54,6 +56,17 @@ services:
       timeout: 5s
       retries: 40
       start_period: 30s
+
+  mysql-demo-objects:
+    # 一次性初始化：幂等创建 Demo 专用存储过程与控制账号（deploy/demo/mysql/demo-objects.sql），已有数据卷同样生效
+    image: mysql:8.4.11
+    command: ["sh", "-c", "MYSQL_PWD=shortlink_local_root mysql --protocol=TCP -h mysql -uroot < /demo/demo-objects.sql"]
+    volumes:
+      - ./mysql/demo-objects.sql:/demo/demo-objects.sql:ro
+    networks: [target]
+    depends_on:
+      mysql:
+        condition: service_healthy
 
   redis:
     # Consumer Group 的 lag 需要 Redis 7.0+，XINFO CONSUMERS 的 inactive 需要 7.2+（09 §10）
@@ -101,8 +114,12 @@ services:
     environment:
       <<: *shortlink-env
       SHORTLINK_STATS_CONSUMER_ENABLED: "false"
+      # S2：Demo 统计快照刷新负载只在 project-api 开启，经其自身连接池执行（09 §45～§46）
+      SHORTLINK_SNAPSHOT_WORKLOAD_ENABLED: "true"
     ports:
       - "127.0.0.1:18001:8001"
+      # 管理端口（健康、指标、Demo 负载控制）只给本机 Fault Lab 使用
+      - "127.0.0.1:18081:8081"
     networks: [target, edge]
 
   statistics-consumer:

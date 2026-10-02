@@ -169,6 +169,10 @@ public class FaultLabApplicationService {
             groundTruth = groundTruth.withRedisLatencyGate(confirmation.redisLatencyGate());
             completed = true;
         }
+        if (confirmation.mysqlSlowQueryGate() != null) {
+            groundTruth = groundTruth.withMysqlSlowQueryGate(confirmation.mysqlSlowQueryGate());
+            completed = true;
+        }
         return completed
                 ? codecs.encode(FaultGroundTruthV1.SCHEMA_NAME, FaultGroundTruthV1.SCHEMA_VERSION, groundTruth)
                 : null;

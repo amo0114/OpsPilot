@@ -9,16 +9,11 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
@@ -118,24 +113,7 @@ final class ToxiproxyClient {
     }
 
     private HttpResponse<byte[]> send(HttpRequest.Builder request, Instant deadline) {
-        Duration timeout = Duration.between(clock.instant(), deadline);
-        if (!timeout.isPositive()) {
-            throw DemoTrafficObserver.deadlineReached();
-        }
-        CompletableFuture<HttpResponse<byte[]>> exchange =
-                http.sendAsync(request.timeout(timeout).build(), HttpResponse.BodyHandlers.ofByteArray());
-        try {
-            return exchange.get(timeout.toNanos(), TimeUnit.NANOSECONDS);
-        } catch (TimeoutException ex) {
-            exchange.cancel(true);
-            throw new FaultInjectionException("Demo environment: Toxiproxy did not answer before the deadline");
-        } catch (ExecutionException ex) {
-            throw new FaultInjectionException("Demo environment: Toxiproxy could not be reached");
-        } catch (InterruptedException ex) {
-            exchange.cancel(true);
-            Thread.currentThread().interrupt();
-            throw new FaultInjectionException("Fault lab action was interrupted");
-        }
+        return BoundedHttp.send(http, request, deadline, clock, "Toxiproxy");
     }
 
     private URI uri(String path) {

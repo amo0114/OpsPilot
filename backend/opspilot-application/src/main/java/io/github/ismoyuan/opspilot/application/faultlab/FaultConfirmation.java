@@ -8,14 +8,18 @@ import java.util.Objects;
  *
  * @param detectedAt 首次确认预期异常的时间（Incident.detected_at，09 §19）
  * @param redisLatencyGate S1 的 Gate 实测：所达症状分支与真实基线/故障数值（09 §33、ACC-S1-003）；其他场景为空
+ * @param mysqlSlowQueryGate S2 的 Gate 实测（09 §51、ACC-S2-001～005）；其他场景为空
  */
-public record FaultConfirmation(Instant detectedAt, FaultGroundTruthV1.RedisLatencyGate redisLatencyGate) {
+public record FaultConfirmation(
+        Instant detectedAt,
+        FaultGroundTruthV1.RedisLatencyGate redisLatencyGate,
+        FaultGroundTruthV1.MysqlSlowQueryGate mysqlSlowQueryGate) {
 
     public FaultConfirmation {
         Objects.requireNonNull(detectedAt, "detectedAt");
     }
 
     public static FaultConfirmation detectedAt(Instant detectedAt) {
-        return new FaultConfirmation(detectedAt, null);
+        return new FaultConfirmation(detectedAt, null, null);
     }
 }

@@ -1,6 +1,7 @@
 package io.github.ismoyuan.opspilot.infrastructure.faultlab;
 
 import io.github.ismoyuan.opspilot.application.faultlab.ConsumerStopSettings;
+import io.github.ismoyuan.opspilot.application.faultlab.MysqlSlowQuerySettings;
 import io.github.ismoyuan.opspilot.application.faultlab.RedisLatencySettings;
 import java.net.URI;
 import java.time.Duration;
@@ -8,11 +9,12 @@ import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * Fault Lab 真实注入器的 Demo 控制面配置（08 TASK-093、TASK-094）。只在 demo profile 中给出并启用（application-demo.yml）；默认与生产配置没有
+ * Fault Lab 真实注入器的 Demo 控制面配置（08 TASK-093～095）。只在 demo profile 中给出并启用（application-demo.yml）；默认与生产配置没有
  * 这些值，也就没有注入器（05 §68）。端点与凭据属于 Fault Lab 自己，与被调查资源的数据源连接分开。
  */
 @ConfigurationProperties("opspilot.fault-lab")
-public record FaultLabProperties(StatisticsConsumerStop statisticsConsumerStop, RedisLatency redisLatency) {
+public record FaultLabProperties(
+        StatisticsConsumerStop statisticsConsumerStop, RedisLatency redisLatency, MysqlSlowQuery mysqlSlowQuery) {
 
     /**
      * {@code opspilot.fault-lab.statistics-consumer-stop.*}：S3。Gate 参数未配置时取 {@link ConsumerStopSettings#DEFAULTS}。
@@ -188,6 +190,100 @@ public record FaultLabProperties(StatisticsConsumerStop statisticsConsumerStop, 
                     StatisticsConsumerStop.or(errorRateIncrease, d.errorRateIncrease()),
                     StatisticsConsumerStop.or(errorRateFloor, d.errorRateFloor()),
                     StatisticsConsumerStop.or(gateTimeout, d.gateTimeout()),
+                    StatisticsConsumerStop.or(resetTimeout, d.resetTimeout()));
+        }
+    }
+
+    /**
+     * {@code opspilot.fault-lab.mysql-slow-query.*}：S2。配方与 Gate 参数未配置时取 {@link MysqlSlowQuerySettings#DEFAULTS}。
+     *
+     * @param systemKey 这套 Demo 靶场所属的 ManagedSystem；注入器只控制它
+     * @param targetResourceKey 该系统中的目标资源，默认 shortlink-mysql
+     * @param managementEndpoint project-api 管理端口（Demo 刷新负载端点与 Actuator 指标），http://host:port
+     * @param shortlinkEndpoint project-api 业务端口（创建探测），http://host:port
+     * @param poolName project-api 应用连接池名（hikaricp 指标的 pool 标签），默认 HikariPool-1
+     * @param controlJdbcUrl Demo MySQL 的 JDBC 地址（Demo 控制账号读取/清理语句摘要）
+     * @param controlUsername Demo 控制账号（只能读取并清理 events_statements_summary_by_digest）
+     * @param createUsername 创建探测使用的演示用户名（ShortLink 按请求头 username 识别）
+     * @param createGroupId 创建探测使用的演示分组
+     * @param probeTimeout 单次创建探测超时，默认 10 秒（须大于 LATENCY 分支下限 2 秒才能测到退化）
+     */
+    public record MysqlSlowQuery(
+            boolean enabled,
+            String systemKey,
+            String targetResourceKey,
+            URI managementEndpoint,
+            URI shortlinkEndpoint,
+            String poolName,
+            String controlJdbcUrl,
+            String controlUsername,
+            String controlPassword,
+            String createUsername,
+            String createGroupId,
+            Duration probeTimeout,
+            Integer workers,
+            Integer statementMillis,
+            Duration baselineDuration,
+            Duration sampleInterval,
+            Integer probesPerSample,
+            Double minLoadRate,
+            Double maxBaselineErrorRate,
+            Integer saturatedActive,
+            Integer saturatedSamples,
+            Integer pendingSamples,
+            Duration slowStatementMillis,
+            Double p99Factor,
+            Duration p99Floor,
+            Double errorRateIncrease,
+            Double errorRateFloor,
+            Duration gateTimeout,
+            Duration healthyCreateP99,
+            Duration resetTimeout) {
+
+        public static final String DEFAULT_TARGET_RESOURCE_KEY = "shortlink-mysql";
+
+        public static final String DEFAULT_POOL_NAME = "HikariPool-1";
+
+        public static final Duration DEFAULT_PROBE_TIMEOUT = Duration.ofSeconds(10);
+
+        public String targetResourceKeyOrDefault() {
+            return targetResourceKey == null || targetResourceKey.isBlank()
+                    ? DEFAULT_TARGET_RESOURCE_KEY
+                    : targetResourceKey;
+        }
+
+        public String poolNameOrDefault() {
+            return poolName == null || poolName.isBlank() ? DEFAULT_POOL_NAME : poolName;
+        }
+
+        public Duration probeTimeoutOrDefault() {
+            return probeTimeout == null ? DEFAULT_PROBE_TIMEOUT : probeTimeout;
+        }
+
+        public int statementMillisOrDefault() {
+            return statementMillis == null ? MysqlSlowQuerySettings.DEFAULTS.statementMillis() : statementMillis;
+        }
+
+        MysqlSlowQuerySettings settings() {
+            MysqlSlowQuerySettings d = MysqlSlowQuerySettings.DEFAULTS;
+            return new MysqlSlowQuerySettings(
+                    StatisticsConsumerStop.or(workers, d.workers()),
+                    StatisticsConsumerStop.or(statementMillis, d.statementMillis()),
+                    StatisticsConsumerStop.or(baselineDuration, d.baselineDuration()),
+                    StatisticsConsumerStop.or(sampleInterval, d.sampleInterval()),
+                    StatisticsConsumerStop.or(probesPerSample, d.probesPerSample()),
+                    StatisticsConsumerStop.or(minLoadRate, d.minLoadRate()),
+                    StatisticsConsumerStop.or(maxBaselineErrorRate, d.maxBaselineErrorRate()),
+                    StatisticsConsumerStop.or(saturatedActive, d.saturatedActive()),
+                    StatisticsConsumerStop.or(saturatedSamples, d.saturatedSamples()),
+                    StatisticsConsumerStop.or(pendingSamples, d.pendingSamples()),
+                    StatisticsConsumerStop.or(slowStatementMillis, d.slowStatementMillis()),
+                    StatisticsConsumerStop.or(p99Factor, d.p99Factor()),
+                    StatisticsConsumerStop.or(p99Floor, d.p99Floor()),
+                    StatisticsConsumerStop.or(errorRateIncrease, d.errorRateIncrease()),
+                    StatisticsConsumerStop.or(errorRateFloor, d.errorRateFloor()),
+                    StatisticsConsumerStop.or(gateTimeout, d.gateTimeout()),
+                    StatisticsConsumerStop.or(healthyCreateP99, d.healthyCreateP99()),
                     StatisticsConsumerStop.or(resetTimeout, d.resetTimeout()));
         }
     }

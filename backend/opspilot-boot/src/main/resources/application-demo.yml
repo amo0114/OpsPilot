@@ -37,3 +37,17 @@ opspilot:
       consumer-group: short-link:stats-stream:only-group
       # 逗号分隔的演示短链完整地址（scripts/demo/shortlink_s3.py prepare 输出），未单独配置时沿用 S3 的
       redirect-probe-urls: ${OPSPILOT_FAULTLAB_S1_PROBE_URLS:${OPSPILOT_FAULTLAB_S3_PROBE_URLS:}}
+    # S2 真实注入器（08 TASK-095）：经 project-api 管理端口的 Demo-only 刷新负载占用其自身 Hikari Pool；语句摘要只用 Demo 控制账号读取/清理，
+    # 该账号的密码只来自环境变量（与调查只读账号分开，调查账号无清理权限）。
+    mysql-slow-query:
+      enabled: true
+      system-key: shortlink-platform
+      target-resource-key: shortlink-mysql
+      management-endpoint: ${OPSPILOT_FAULTLAB_SHORTLINK_MANAGEMENT_ENDPOINT:http://project-api:8081}
+      shortlink-endpoint: ${OPSPILOT_FAULTLAB_SHORTLINK_ENDPOINT:http://project-api:8001}
+      pool-name: HikariPool-1
+      control-jdbc-url: ${OPSPILOT_FAULTLAB_MYSQL_CONTROL_URL:jdbc:mysql://mysql:3306/}
+      control-username: opspilot_fault_control
+      control-password: ${OPSPILOT_FAULTLAB_MYSQL_CONTROL_PASSWORD:}
+      create-username: opspilot-demo
+      create-group-id: opspilotdemo

@@ -7,6 +7,7 @@ import io.github.ismoyuan.opspilot.application.ClockConfiguration;
 import io.github.ismoyuan.opspilot.application.error.ApplicationException;
 import io.github.ismoyuan.opspilot.application.faultlab.FaultCause;
 import io.github.ismoyuan.opspilot.application.faultlab.FaultExperimentInterruptionRecorder;
+import io.github.ismoyuan.opspilot.application.faultlab.FaultExperimentRepository;
 import io.github.ismoyuan.opspilot.application.faultlab.FaultGroundTruthV1;
 import io.github.ismoyuan.opspilot.application.faultlab.FaultInjectionException;
 import io.github.ismoyuan.opspilot.application.faultlab.FaultLabApplicationService;
@@ -16,6 +17,9 @@ import io.github.ismoyuan.opspilot.application.faultlab.InjectFaultResult;
 import io.github.ismoyuan.opspilot.application.faultlab.ResetFaultResult;
 import io.github.ismoyuan.opspilot.application.faultlab.evaluation.FaultEvaluationService;
 import io.github.ismoyuan.opspilot.application.incident.IncidentApplicationService;
+import io.github.ismoyuan.opspilot.application.schema.SchemaCodecRegistry;
+import io.github.ismoyuan.opspilot.application.system.ManagedResourceRepository;
+import io.github.ismoyuan.opspilot.application.system.ManagedSystemRepository;
 import io.github.ismoyuan.opspilot.domain.error.ErrorCode;
 import io.github.ismoyuan.opspilot.domain.faultlab.FaultExperimentStatus;
 import io.github.ismoyuan.opspilot.domain.incident.IncidentAction;
@@ -23,6 +27,7 @@ import io.github.ismoyuan.opspilot.domain.incident.IncidentStatus;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Timestamp;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -46,6 +51,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mysql.MySQLContainer;
@@ -113,6 +119,30 @@ class FaultLabIntegrationTest {
 
     @Autowired
     JdbcTemplate jdbc;
+
+    @Autowired
+    FaultScenarioCatalog catalog;
+
+    @Autowired
+    FaultExperimentRepository experimentRepository;
+
+    @Autowired
+    ManagedSystemRepository systems;
+
+    @Autowired
+    ManagedResourceRepository resources;
+
+    @Autowired
+    IncidentApplicationService incidents;
+
+    @Autowired
+    SchemaCodecRegistry codecs;
+
+    @Autowired
+    PlatformTransactionManager transactionManager;
+
+    @Autowired
+    Clock clock;
 
     @BeforeEach
     void reset() {
@@ -197,6 +227,33 @@ class FaultLabIntegrationTest {
         assertThat(groundTruth.latencyMs()).isEqualTo(600);
         assertThat(groundTruth.redisLatencyGate()).isEqualTo(gate);
         assertThat(groundTruth.containerId()).isNull();
+    }
+
+    /** S2 确认生效时 Ground Truth 补上 Gate 实测（实际配方、连接池/慢语句/HTTP 实测与分支，09 §51、ACC-S2-001～005）。 */
+    @Test
+    void aConfirmedMysqlSlowQueryRecordsItsGateInTheGroundTruth() {
+        FaultGroundTruthV1.MysqlSlowQueryGate gate = new FaultGroundTruthV1.MysqlSlowQueryGate(
+                FaultGroundTruthV1.SymptomBranch.BOTH, 8, 3000, 8, 6, 5, 40, 3000, 3002, 28, 12_000, 0.0, 0.2);
+        ScriptedFaultInjector slowQuery = new ScriptedFaultInjector("mysql-slow-query");
+        slowQuery.mysqlSlowQueryGate = gate;
+        FaultLabApplicationService withSlowQuery = new FaultLabApplicationService(
+                catalog,
+                List.of(slowQuery),
+                experimentRepository,
+                systems,
+                resources,
+                incidents,
+                codecs,
+                transactionManager,
+                clock);
+
+        InjectFaultResult result =
+                withSlowQuery.inject(new InjectFaultCommand("mysql-slow-query", SYSTEM, "demo-user"));
+
+        FaultGroundTruthV1 groundTruth = evaluation.groundTruth(result.experimentId());
+        assertThat(groundTruth.cause()).isEqualTo(FaultCause.MYSQL_SLOW_QUERY_POOL_EXHAUSTION);
+        assertThat(groundTruth.mysqlSlowQueryGate()).isEqualTo(gate);
+        assertThat(groundTruth.redisLatencyGate()).isNull();
     }
 
     /** 没有报告被停止容器的注入（及注入失败）保持插入时的 Ground Truth。 */
