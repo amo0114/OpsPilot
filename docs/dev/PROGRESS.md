@@ -118,6 +118,15 @@
 | TASK-108 | B43 | S2 Acceptance | TODO | — | NOT RUN |
 | TASK-109 | B44 | S3 Acceptance | TODO | — | NOT RUN |
 
+## GitHub 首次推送（2026-10-02）
+
+- 授权与范围：用户明确要求推送至 https://github.com/amo0114/OpsPilot.git；仅 OpsPilot main，包含本条与 CURRENT 的独立文档提交。ShortLink 与仓库外前端原型未推送；B36/TASK-095 保持 DONE，B37 未开始。
+- 远程与身份：目标为已有公开空仓库；新增 origin，HTTPS 认证账号 amo0114；保留既有提交历史与作者信息。仅推送 main，不 force、不 mirror、不额外推送 tags；未创建 Release 或执行生产部署。
+- 推送前检查：工作树干净，HEAD 为 8563beb529d595e8fd733b7e7b51e673c79f9fee；24 个 B36 受审代码文件与 R3 哈希一致；git diff --check HEAD 通过；git fsck --no-reflogs 通过（一个无害 dangling commit，未清理）；1505 个可达 blob 无文件达到 50 MiB。
+- 历史凭据检查：Gitleaks 8.30.1（官方下载包校验 SHA-256）扫描 HEAD 的全部 96 个提交，返回 3 条发现（exit 1）；人工核实均为测试样例：ai-runtime/tests/test_openai_compatible_client.py 的 API_KEY 常量，以及 LogPatternAggregatorTest.java 的两条合成 JWT，用于脱敏测试。未发现实际凭据，未新增忽略规则。脱敏报告 /tmp/opspilot-publish-gitleaks.json，日志 /tmp/opspilot-publish-gitleaks.log。
+- 推送与核对：git push --dry-run --porcelain origin main:refs/heads/main 通过；git push --set-upstream origin main:refs/heads/main 成功。2026-10-02 22:44 +08:00，git ls-remote --exit-code origin refs/heads/main 返回 8563beb529d595e8fd733b7e7b51e673c79f9fee，与本地 HEAD 一致；main 已跟踪 origin/main，工作树干净。本次推送记录随后以独立 docs(progress) 提交同步，不改写历史。
+- 验证边界：本次只发布现有代码与更新交接记录，未修改实现、依赖或 Migration；Maven/ShortLink 构建与真实场景本轮 NOT RUN，沿用已记录的 B36-V4、B36-R3 与 B36-E2 证据及其限制；不表示 TASK-107～109 或生产部署验收完成。
+
 ## 批次记录
 
 仅为已安排或启动的批次建记录，后续按 BATCH-PLAN 模板追加；不要提前生成虚假的基线、验证或 Review 结果。
