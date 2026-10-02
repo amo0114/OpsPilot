@@ -2,3 +2,22 @@ spring:
   flyway:
     # Demo profile 额外加载 ShortLink Demo 配置 Seed；默认与生产只加载核心迁移（07 §93）
     locations: classpath:db/migration,classpath:db/demo
+
+opspilot:
+  fault-lab:
+    # S3 真实注入器（08 TASK-093）只在 Demo profile 启用；默认与生产配置没有注入器。
+    # 控制面端点独立于被调查资源的数据源（deploy/demo/docker-compose.yml；默认值对应 Demo Compose 网络内的服务名）。
+    statistics-consumer-stop:
+      enabled: true
+      # 只控制这套靶场所属的系统与消费者资源；其他系统的注入/Reset 在任何外部动作之前被拒绝
+      system-key: shortlink-platform
+      target-resource-key: statistics-consumer
+      docker-endpoint: ${OPSPILOT_FAULTLAB_DOCKER_ENDPOINT:unix:///var/run/docker.sock}
+      container-name: shortlink-statistics-consumer
+      redis-endpoint: ${OPSPILOT_FAULTLAB_REDIS_ENDPOINT:redis://redis:6379}
+      redis-username: ${OPSPILOT_FAULTLAB_REDIS_USERNAME:}
+      redis-password: ${OPSPILOT_FAULTLAB_REDIS_PASSWORD:}
+      stream-key: short-link:stats-stream
+      consumer-group: short-link:stats-stream:only-group
+      # 逗号分隔的演示短链完整地址（scripts/demo/shortlink_s3.py prepare 输出）
+      redirect-probe-urls: ${OPSPILOT_FAULTLAB_S3_PROBE_URLS:}

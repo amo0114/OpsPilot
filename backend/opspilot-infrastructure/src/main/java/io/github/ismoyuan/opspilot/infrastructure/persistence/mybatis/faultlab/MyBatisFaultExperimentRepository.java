@@ -75,8 +75,9 @@ class MyBatisFaultExperimentRepository implements FaultExperimentRepository {
     }
 
     @Override
-    public boolean markActive(long experimentId, long incidentId, Instant injectedAt, Instant now) {
-        return mapper.markActive(experimentId, incidentId, utc(injectedAt), utc(now)) == 1;
+    public boolean markActive(
+            long experimentId, long incidentId, Instant injectedAt, String groundTruthPayload, Instant now) {
+        return mapper.markActive(experimentId, incidentId, utc(injectedAt), groundTruthPayload, utc(now)) == 1;
     }
 
     @Override

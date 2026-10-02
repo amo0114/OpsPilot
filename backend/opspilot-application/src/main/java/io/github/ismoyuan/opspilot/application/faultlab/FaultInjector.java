@@ -11,8 +11,14 @@ public interface FaultInjector {
     /** 所负责的场景键（{@link FaultScenarioCatalog}）。 */
     String scenarioKey();
 
-    /** 施加故障。@return 故障真正开始生效的时间（Incident.started_at） */
-    Instant inject(FaultTarget target);
+    /**
+     * 是否控制该系统的该目标资源。真实注入器只绑定配置的 Demo 靶场；不控制的系统在创建实验或 Reset 之前即被拒绝（B34-R1 P1），
+     * 不能因为资源同名就操作另一套环境。
+     */
+    boolean controls(String systemKey, String targetResourceKey);
+
+    /** 施加故障（真实注入器先完成 Preflight 与 Baseline，09 §13～§16）。@return 故障生效时间及写入 Ground Truth 的事实 */
+    FaultInjection inject(FaultTarget target);
 
     /**
      * 确认故障真的产生了预期症状（09 §18）；未达到时抛出异常，实验记为 FAILED 且不创建 Incident。

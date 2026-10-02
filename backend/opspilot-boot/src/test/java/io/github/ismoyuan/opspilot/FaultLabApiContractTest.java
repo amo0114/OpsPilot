@@ -3,8 +3,10 @@ package io.github.ismoyuan.opspilot;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.ismoyuan.opspilot.application.dispatch.WorkDispatcher;
+import io.github.ismoyuan.opspilot.application.faultlab.FaultInjection;
 import io.github.ismoyuan.opspilot.application.faultlab.FaultInjector;
 import io.github.ismoyuan.opspilot.application.faultlab.FaultTarget;
+import io.github.ismoyuan.opspilot.application.faultlab.StatisticsConsumerStopInjector;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -31,7 +33,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * 真实 HTTP＋真实 MySQL（demo Seed）上的 Fault Lab API（05 §68～§73、§93～§94，08 TASK-092）。redis-latency 由测试注入器确认生效
- * （真实注入器属 TASK-093～095），mysql-slow-query 没有注入器。响应与故障详情都不含 Ground Truth；没有 Ground Truth 读取接口。
+ * （真实注入器属 TASK-094），mysql-slow-query 没有注入器；statistics-consumer-stop 的真实注入器（TASK-093）已装配，但这里不调用。响应与故障详情都不含 Ground Truth；没有 Ground Truth 读取接口。
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("demo")
@@ -64,8 +66,13 @@ class FaultLabApiContractTest {
                 }
 
                 @Override
-                public Instant inject(FaultTarget target) {
-                    return Instant.now().minusSeconds(3);
+                public boolean controls(String systemKey, String targetResourceKey) {
+                    return true;
+                }
+
+                @Override
+                public FaultInjection inject(FaultTarget target) {
+                    return FaultInjection.startedAt(Instant.now().minusSeconds(3));
                 }
 
                 @Override
@@ -102,6 +109,18 @@ class FaultLabApiContractTest {
                 "incident")) {
             jdbc.update("DELETE FROM " + table);
         }
+    }
+
+    @Autowired
+    List<FaultInjector> injectors;
+
+    /** demo profile 装配真实的 S3 注入器（08 TASK-093）；本测试不调用它，以免触及本机 Docker。 */
+    @Test
+    void theDemoProfileWiresTheRealConsumerStopInjector() {
+        assertThat(injectors)
+                .extracting(FaultInjector::scenarioKey)
+                .containsExactlyInAnyOrder("redis-latency", "statistics-consumer-stop");
+        assertThat(injectors).anyMatch(StatisticsConsumerStopInjector.class::isInstance);
     }
 
     @Test

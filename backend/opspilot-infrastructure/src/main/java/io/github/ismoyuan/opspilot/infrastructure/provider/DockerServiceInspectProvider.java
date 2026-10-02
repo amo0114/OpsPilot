@@ -114,7 +114,7 @@ final class DockerServiceInspectProvider implements ObserveProvider {
     }
 
     /** 没有 Health（未配置健康检查）为 NOT_CONFIGURED；有 Health 却没有字符串 Status 是非法数据。 */
-    private static HealthStatus health(JsonNode health) {
+    static HealthStatus health(JsonNode health) {
         if (absent(health)) {
             return HealthStatus.NOT_CONFIGURED;
         }

@@ -3,7 +3,8 @@
 -- 可重复迁移：每次内容变化后在全部版本化迁移之后重跑；按唯一键 upsert，重跑收敛到本文件内容。
 -- 不使用已弃用的 VALUES()（且需兼容 8.0.16），ON DUPLICATE KEY UPDATE 引用 SELECT 派生表列。
 -- 本文件只 upsert，从这里移除的行不会被自动删除。
--- 端点、标签、容器名、Stream 键与 PromQL 模板为 Demo 约定值，TASK-052/105/106 按真实靶场校准。
+-- 端点、标签与 PromQL 模板为 Demo 约定值，TASK-052/105/106 按真实靶场校准。容器名与 Stream 键/消费组已按 ShortLink 实际实现校准（TASK-093：
+-- RedisKeyConstant 的 short-link:stats-stream / short-link:stats-stream:only-group，deploy/demo 的 shortlink-statistics-consumer）。
 -- 凭据只写 env:// 引用（03 §12、07 §63）；选择器使用 TASK-008 注册的 <provider>.resource.binding / 1。
 
 INSERT INTO managed_system (system_key, name, description, environment, status, created_at, updated_at)
@@ -95,7 +96,7 @@ FROM (SELECT 'redirect-service' AS resource_key, 'prometheus-local' AS connectio
       -- 缓存资源无需选择器
       UNION ALL SELECT 'shortlink-redis', 'redis-local', 'redis.resource.binding', JSON_OBJECT()
       UNION ALL SELECT 'statistics-stream', 'redis-local', 'redis.resource.binding',
-                       JSON_OBJECT('streamKey', 'shortlink:stats', 'consumerGroup', 'stats-consumer-group')
+                       JSON_OBJECT('streamKey', 'short-link:stats-stream', 'consumerGroup', 'short-link:stats-stream:only-group')
       UNION ALL SELECT 'shortlink-mysql', 'mysql-readonly', 'mysql.resource.binding',
                        JSON_OBJECT('databaseName', 'shortlink')) src
 JOIN managed_system s ON s.system_key = 'shortlink-platform'

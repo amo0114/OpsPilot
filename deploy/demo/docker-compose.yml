@@ -1,0 +1,106 @@
+# OpsPilot Demo 靶场（09 §4～§8）。本文件目前只含 S3（统计消费者停止，08 TASK-093）所需的 ShortLink 运行单元：
+#   同一个 ShortLink project 产物跑成 project-api（创建/跳转/写统计 Stream）与 statistics-consumer（只消费统计）两个容器。
+# Toxiproxy、Prometheus、Loki、负载发生器与 OpsPilot 自身由 TASK-105 加入；ShortLink 原有的 compose.dev.yaml 不受影响。
+#
+# 前置：SHORTLINK_REPO 指向 ShortLink 仓库（含 project/Dockerfile 与 application-demo.yaml），并已在该仓库打好 project 产物：
+#   docker compose -f compose.dev.yaml --profile tools run --rm build \
+#     mvn -B -ntp -Dspotless.apply.skip=true -Dspotless.check.skip=true -DskipTests -pl project -am package
+# 启动：SHORTLINK_REPO=/path/to/shortlink docker compose -f deploy/demo/docker-compose.yml up -d --build --wait
+#
+# 端口只绑定 127.0.0.1，供本机运行的 OpsPilot 与验证脚本使用；账号与 ShortLink 开发环境相同，只用于本机 Demo。
+name: opspilot-demo
+
+x-shortlink-project: &shortlink-project
+  # 只由 project-api 构建；statistics-consumer 直接使用同一个镜像（同一产物，09 §5）
+  image: opspilot-demo/shortlink-project:local
+  environment: &shortlink-env
+    SHORTLINK_REDIS_HOST: redis
+    SHORTLINK_REDIS_PORT: "6379"
+    # 短链完整地址的域名；访问时的 Host 必须与它一致（ShortLink README）
+    SHORTLINK_DOMAIN: ${SHORTLINK_DOMAIN:-localhost:18001}
+    TZ: Asia/Shanghai
+  depends_on:
+    mysql:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  healthcheck:
+    test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8001/actuator/health | grep -q '\"status\":\"UP\"'"]
+    interval: 5s
+    timeout: 3s
+    retries: 30
+    start_period: 30s
+
+services:
+  mysql:
+    image: mysql:8.4.11
+    environment:
+      MYSQL_ROOT_PASSWORD: shortlink_local_root
+      MYSQL_DATABASE: link
+      MYSQL_USER: shortlink
+      MYSQL_PASSWORD: shortlink_local_only
+      TZ: Asia/Shanghai
+    ports:
+      - "127.0.0.1:13317:3306"
+    networks: [target, edge]
+    volumes:
+      - shortlink-mysql-data:/var/lib/mysql
+      - ${SHORTLINK_REPO:?SHORTLINK_REPO must point to the ShortLink repository}/resources/database/link.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_PASSWORD mysql --protocol=TCP -h127.0.0.1 -u$$MYSQL_USER -D link -e 'SELECT 1 FROM t_link_0 LIMIT 0' >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 30s
+
+  redis:
+    # Consumer Group 的 lag 需要 Redis 7.0+，XINFO CONSUMERS 的 inactive 需要 7.2+（09 §10）
+    image: redis:7.4.5
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:16380:6379"
+    networks: [target, edge]
+    volumes:
+      - shortlink-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  project-api:
+    <<: *shortlink-project
+    build:
+      context: ${SHORTLINK_REPO:?SHORTLINK_REPO must point to the ShortLink repository}
+      dockerfile: project/Dockerfile
+    container_name: shortlink-project-api
+    environment:
+      <<: *shortlink-env
+      SHORTLINK_STATS_CONSUMER_ENABLED: "false"
+    ports:
+      - "127.0.0.1:18001:8001"
+    networks: [target, edge]
+
+  statistics-consumer:
+    <<: *shortlink-project
+    # 名称与 OpsPilot Demo Seed 的 docker.resource.binding 一致；S3 注入与 service.restart 都按它解析容器
+    container_name: shortlink-statistics-consumer
+    pull_policy: never
+    environment:
+      <<: *shortlink-env
+      SHORTLINK_STATS_CONSUMER_ENABLED: "true"
+    # 停止后只能由 Fault Lab Reset 或经审批的 service.restart 启动，不自动拉起
+    restart: "no"
+    # 只在内部网络：没有外网出口，地域解析立即失败并记为未知（ShortLink README），不因外呼超时拖慢消费
+    networks: [target]
+
+networks:
+  # 靶场内部网络，不提供外网出口
+  target:
+    internal: true
+  # 只用于把端口发布到 127.0.0.1
+  edge: {}
+
+volumes:
+  shortlink-mysql-data:
+  shortlink-redis-data:

@@ -7,6 +7,7 @@ import io.github.ismoyuan.opspilot.application.ai.protocol.v1.InvestigationStepR
 import io.github.ismoyuan.opspilot.application.capability.CapabilityAccess;
 import io.github.ismoyuan.opspilot.application.capability.CapabilityDescriptorBuilder;
 import io.github.ismoyuan.opspilot.application.capability.CapabilityProviderResolver;
+import io.github.ismoyuan.opspilot.application.faultlab.FaultGroundTruthV1;
 import io.github.ismoyuan.opspilot.application.faultlab.FaultLabApplicationService;
 import io.github.ismoyuan.opspilot.application.faultlab.FaultScenario;
 import io.github.ismoyuan.opspilot.application.faultlab.FaultScenarioCatalog;
@@ -131,6 +132,9 @@ class GroundTruthIsolationTest {
     FaultLabApplicationService faultLab;
 
     @Autowired
+    List<ScriptedFaultInjector> injectors;
+
+    @Autowired
     FaultScenarioCatalog catalog;
 
     @Autowired
@@ -147,10 +151,22 @@ class GroundTruthIsolationTest {
     @Test
     void theInvestigationContextOfAFaultLabIncidentHoldsNoAnswer() {
         AiProtocolCodec codec = new AiProtocolCodec();
+        // S3 的 Ground Truth 在确认生效时补上被停止的容器（09 §63）；它同样不得进入调查请求
+        String stoppedContainer = "fedcba9876543210".repeat(4);
+        injectors.stream()
+                .filter(injector -> injector.scenarioKey().equals("statistics-consumer-stop"))
+                .forEach(injector -> injector.stoppedContainerId = stoppedContainer);
         for (FaultScenario scenario : catalog.all()) {
             InjectFaultResult injected =
                     faultLab.inject(new InjectFaultCommand(scenario.scenarioKey(), "shortlink-platform", "demo-user"));
-            assertThat(evaluation.groundTruth(injected.experimentId())).isEqualTo(scenario.groundTruth());
+            FaultGroundTruthV1 groundTruth = evaluation.groundTruth(injected.experimentId());
+            assertThat(groundTruth.cause()).isEqualTo(scenario.groundTruth().cause());
+            assertThat(groundTruth.latencyMs()).isEqualTo(scenario.groundTruth().latencyMs());
+            List<String> markers = new ArrayList<>(ANSWER_MARKERS);
+            if (groundTruth.containerId() != null) {
+                assertThat(groundTruth.containerId()).isEqualTo(stoppedContainer);
+                markers.add(stoppedContainer);
+            }
             long incidentId = jdbc.queryForObject(
                     "SELECT id FROM incident WHERE incident_key = ?",
                     Long.class,
@@ -163,7 +179,7 @@ class GroundTruthIsolationTest {
 
             assertThat(request.incident().title()).isEqualTo(scenario.incidentTitle());
             String lower = json.toLowerCase(Locale.ROOT);
-            for (String marker : ANSWER_MARKERS) {
+            for (String marker : markers) {
                 assertThat(lower)
                         .as(scenario.scenarioKey() + " leaks " + marker)
                         .doesNotContain(marker.toLowerCase(Locale.ROOT));
@@ -218,7 +234,46 @@ class GroundTruthIsolationTest {
                 .containsExactly("FaultEvaluationService", "GroundTruthQuery", "MyBatisGroundTruthQuery");
     }
 
-    /** Mapper SQL：只有 Fault Lab 的 Mapper 访问 fault_experiment；ground_truth_payload 只在插入与 Evaluation 专用读取中出现。 */
+    /**
+     * Demo 控制面（停止/启动容器）只被 Fault Lab 使用：DemoControlClient 只被 infrastructure/faultlab 引用，Docker 客户端的 stop/start 只被
+     * DemoControlClient 调用（08 TASK-093；调查与执行仍只有 inspect 与 restart）。
+     */
+    @Test
+    void onlyTheFaultLabControlsDemoContainers() {
+        Map<String, byte[]> classes = classes();
+        String control = "io/github/ismoyuan/opspilot/infrastructure/provider/DemoControlClient";
+        assertThat(classes).containsKey(control);
+        List<String> users = new ArrayList<>();
+        classes.forEach((name, bytes) -> {
+            if (!name.startsWith(control) && contains(bytes, control)) {
+                users.add(name);
+            }
+        });
+        assertThat(users)
+                .isNotEmpty()
+                .allMatch(name -> name.startsWith("io/github/ismoyuan/opspilot/infrastructure/faultlab/"));
+
+        String engine = "io/github/ismoyuan/opspilot/infrastructure/provider/DockerEngineClient";
+        List<String> engineUsers = new ArrayList<>();
+        classes.forEach((name, bytes) -> {
+            if (!name.startsWith(engine) && contains(bytes, engine)) {
+                engineUsers.add(name);
+            }
+        });
+        assertThat(engineUsers).contains(control);
+        for (String user : engineUsers) {
+            // 常量池中完整等于 stop / start 的名字（方法引用）；restart、inspect 不会命中
+            boolean stops = hasUtf8Constant(classes.get(user), "stop");
+            boolean starts = hasUtf8Constant(classes.get(user), "start");
+            if (user.startsWith(control)) {
+                assertThat(stops && starts).as(user).isTrue();
+            } else {
+                assertThat(stops || starts).as(user).isFalse();
+            }
+        }
+    }
+
+    /** Mapper SQL：只有 Fault Lab 的 Mapper 访问 fault_experiment；ground_truth_payload 只在插入、确认生效时的补充与 Evaluation 专用读取中出现。 */
     @Test
     void onlyTheEvaluationStatementReadsTheGroundTruth() throws Exception {
         Map<String, String> mappers = mapperXml();
@@ -235,13 +290,15 @@ class GroundTruthIsolationTest {
                 .orElseThrow();
         Matcher statements = Pattern.compile("<(select|insert|update|delete) id=\"(\\w+)\"(.*?)</\\1>", Pattern.DOTALL)
                 .matcher(faultLab);
-        List<String> touching = new ArrayList<>();
+        List<String> reading = new ArrayList<>();
+        List<String> writing = new ArrayList<>();
         while (statements.find()) {
             if (statements.group(3).contains("ground_truth_payload")) {
-                touching.add(statements.group(2));
+                (statements.group(1).equals("select") ? reading : writing).add(statements.group(2));
             }
         }
-        assertThat(touching).containsExactlyInAnyOrder("insertInjecting", "selectGroundTruth");
+        assertThat(reading).containsExactly("selectGroundTruth");
+        assertThat(writing).containsExactlyInAnyOrder("insertInjecting", "markActive");
     }
 
     // ---------------------------------------------------------------- 扫描工具
@@ -308,5 +365,16 @@ class GroundTruthIsolationTest {
 
     private static boolean contains(byte[] bytes, String text) {
         return new String(bytes, StandardCharsets.ISO_8859_1).contains(text);
+    }
+
+    /** 类文件常量池中是否有内容恰为 text 的 CONSTANT_Utf8（tag 1、u2 长度、字节）。 */
+    private static boolean hasUtf8Constant(byte[] bytes, String text) {
+        byte[] value = text.getBytes(StandardCharsets.UTF_8);
+        byte[] entry = new byte[value.length + 3];
+        entry[0] = 1;
+        entry[1] = (byte) (value.length >> 8);
+        entry[2] = (byte) value.length;
+        System.arraycopy(value, 0, entry, 3, value.length);
+        return contains(bytes, new String(entry, StandardCharsets.ISO_8859_1));
     }
 }

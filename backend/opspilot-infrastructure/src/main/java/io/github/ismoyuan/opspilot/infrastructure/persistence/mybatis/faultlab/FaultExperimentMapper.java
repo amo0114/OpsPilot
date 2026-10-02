@@ -6,7 +6,7 @@ import org.apache.ibatis.annotations.Param;
 
 /**
  * fault_experiment 的生命周期语句（04 §63）。除 {@link #selectGroundTruth} 外没有语句读取 ground_truth_payload；该语句只由
- * {@link MyBatisGroundTruthQuery}（Evaluation 端口）调用（04 §64）。
+ * {@link MyBatisGroundTruthQuery}（Evaluation 端口）调用（04 §64）。写入只有插入与确认生效时的补充（{@link #markActive}）。
  */
 @Mapper
 interface FaultExperimentMapper {
@@ -25,6 +25,7 @@ interface FaultExperimentMapper {
             @Param("id") long id,
             @Param("incidentId") long incidentId,
             @Param("injectedAt") LocalDateTime injectedAt,
+            @Param("groundTruthPayload") String groundTruthPayload,
             @Param("now") LocalDateTime now);
 
     int markFailed(

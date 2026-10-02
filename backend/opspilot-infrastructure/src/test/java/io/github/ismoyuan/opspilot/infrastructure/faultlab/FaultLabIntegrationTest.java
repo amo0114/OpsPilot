@@ -27,9 +27,11 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -107,6 +109,8 @@ class FaultLabIntegrationTest {
     @Autowired
     ScriptedFaultInjector consumerStopInjector;
 
+    static final String STOPPED_CONTAINER = "0123456789abcdef".repeat(4);
+
     @Autowired
     JdbcTemplate jdbc;
 
@@ -129,10 +133,11 @@ class FaultLabIntegrationTest {
 
     /**
      * 确认生效后，CREATED Incident（FAULT_LAB、症状标题、started_at = 生效时间、detected_at = 确认时间、症状资源）与 ACTIVE 实验同时提交；
-     * 注入与确认都不在数据库事务中；Ground Truth 写入实验且只能经 Evaluation 读取。
+     * 注入与确认都不在数据库事务中；Ground Truth 写入实验并在确认生效时补上被停止的容器与停止时间（09 §63），只能经 Evaluation 读取。
      */
     @Test
     void aConfirmedInjectionCreatesTheIncidentWithTheActiveExperiment() {
+        consumerStopInjector.stoppedContainerId = STOPPED_CONTAINER;
         InjectFaultResult result = inject("statistics-consumer-stop", SYSTEM);
 
         assertThat(result.status()).isEqualTo(FaultExperimentStatus.ACTIVE);
@@ -171,6 +176,18 @@ class FaultLabIntegrationTest {
         assertThat(((Number) experiment.get("incident_id")).longValue())
                 .isEqualTo(((Number) incident.get("id")).longValue());
         assertThat(time(experiment.get("injected_at"))).isEqualTo(time(incident.get("started_at")));
+        FaultGroundTruthV1 groundTruth = evaluation.groundTruth(result.experimentId());
+        assertThat(groundTruth.cause()).isEqualTo(FaultCause.STATISTICS_CONSUMER_STOPPED);
+        assertThat(groundTruth.containerId()).isEqualTo(STOPPED_CONTAINER);
+        assertThat(groundTruth.consumerStoppedAt().truncatedTo(ChronoUnit.MILLIS))
+                .isEqualTo(time(incident.get("started_at")).truncatedTo(ChronoUnit.MILLIS));
+    }
+
+    /** 没有报告被停止容器的注入（及注入失败）保持插入时的 Ground Truth。 */
+    @Test
+    void theGroundTruthStaysAsInsertedWithoutInjectionFacts() {
+        InjectFaultResult result = inject("statistics-consumer-stop", SYSTEM);
+
         assertThat(evaluation.groundTruth(result.experimentId()))
                 .isEqualTo(FaultGroundTruthV1.of(FaultCause.STATISTICS_CONSUMER_STOPPED, null));
     }
@@ -263,6 +280,38 @@ class FaultLabIntegrationTest {
                 .isZero();
         assertThat(inject("statistics-consumer-stop", "test-platform").status())
                 .isEqualTo(FaultExperimentStatus.ACTIVE);
+    }
+
+    /**
+     * 注入器只控制绑定的系统（B34-R1 P1）：另一个 TEST 系统即使资源同名也在创建实验之前得到 422，不调用注入器；已有实验所属系统不再受
+     * 控制时 Reset 同样 422，状态不变、不调用 reset。
+     */
+    @Test
+    void anInjectorOnlyControlsItsBoundSystem() {
+        // 先在受控时留下 test-platform 上的 FAILED 实验，随后该系统不再受控
+        consumerStopInjector.verifyFailure = new FaultInjectionException("Gate failed: not met");
+        long failed = ((Number)
+                        injectFails("statistics-consumer-stop", "test-platform", ErrorCode.FAULT_INJECTION_FAILED)
+                                .details()
+                                .get("experimentId"))
+                .longValue();
+        consumerStopInjector.verifyFailure = null;
+        consumerStopInjector.calls.clear();
+        consumerStopInjector.uncontrolledSystems = Set.of("test-platform");
+
+        assertThat(injectFails("statistics-consumer-stop", "test-platform", ErrorCode.FAULT_SCENARIO_NOT_ALLOWED)
+                        .details())
+                .containsEntry("reason", "INJECTOR_NOT_BOUND_TO_SYSTEM");
+        assertThat(assertThrows(() -> faultLab.reset(failed), ErrorCode.FAULT_SCENARIO_NOT_ALLOWED)
+                        .details())
+                .containsEntry("reason", "INJECTOR_NOT_BOUND_TO_SYSTEM");
+        assertThat(consumerStopInjector.calls).isEmpty();
+        assertThat(experiment(failed)).containsEntry("status", "FAILED");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM fault_experiment", Integer.class))
+                .isEqualTo(1);
+        assertThat(incidentCount()).isZero();
+        // 绑定的系统不受影响
+        assertThat(inject("statistics-consumer-stop", SYSTEM).status()).isEqualTo(FaultExperimentStatus.ACTIVE);
     }
 
     /** 场景与系统不存在、场景所需资源不在该系统、场景没有注入器：都在创建实验之前拒绝。 */
@@ -379,6 +428,109 @@ class FaultLabIntegrationTest {
         assertThat(outcomes)
                 .filteredOn(outcome -> outcome instanceof InjectFaultResult || outcome instanceof ResetFaultResult)
                 .hasSize(1);
+    }
+
+    /**
+     * B34 修复（TASK-092 死锁）：Reset 的收尾事务先取系统行锁。另一事务持有系统行锁并当前读进行中实验（注入/Reset 准入的做法）时，收尾
+     * 只在系统行锁上等待、未触及实验行，当前读立即返回；修复前收尾的 UPDATE 先锁住 (system, status) 索引记录、再因外键检查等系统行 S 锁，
+     * 与当前读成环被 InnoDB 判为死锁。
+     */
+    @Test
+    void finishingAResetWaitsForTheSystemLockWithoutDeadlock() throws Exception {
+        long experimentId = inject("statistics-consumer-stop", SYSTEM).experimentId();
+        consumerStopInjector.resetEntered = new CountDownLatch(1);
+        consumerStopInjector.releaseReset = new CountDownLatch(1);
+        CompletableFuture<Object> reset = outcome(() -> faultLab.reset(experimentId));
+        assertThat(consumerStopInjector.resetEntered.await(10, TimeUnit.SECONDS))
+                .isTrue();
+
+        try (Connection holder = holderConnection();
+                Connection observer = observerConnection()) {
+            lockSystemRow(holder);
+            consumerStopInjector.releaseReset.countDown();
+            awaitStatusWriterWaiting(observer);
+            assertThat(countInProgressForShare(holder)).isEqualTo(1);
+            holder.commit();
+        }
+        assertThat(reset.get(10, TimeUnit.SECONDS)).isInstanceOf(ResetFaultResult.class);
+        assertThat(experiment(experimentId)).containsEntry("status", "RESET");
+    }
+
+    /** 同上，注入未确认时记录 FAILED 的事务也先取系统行锁。 */
+    @Test
+    void recordingAFailedInjectionWaitsForTheSystemLockWithoutDeadlock() throws Exception {
+        try (Connection holder = holderConnection();
+                Connection observer = observerConnection()) {
+            CountDownLatch holderLocked = new CountDownLatch(1);
+            consumerStopInjector.onVerify = () -> {
+                lockSystemRow(holder);
+                holderLocked.countDown();
+            };
+            consumerStopInjector.verifyFailure = new FaultInjectionException("Gate failed: not met");
+            CompletableFuture<Object> injected = outcome(() -> inject("statistics-consumer-stop", SYSTEM));
+
+            // 准入事务已提交（INJECTING）、确认期间他人取得系统行锁之后，失败记录才开始
+            assertThat(holderLocked.await(10, TimeUnit.SECONDS)).isTrue();
+            awaitStatusWriterWaiting(observer);
+            assertThat(countInProgressForShare(holder)).isEqualTo(1);
+            holder.commit();
+            assertThat(injected.get(10, TimeUnit.SECONDS)).isEqualTo(ErrorCode.FAULT_INJECTION_FAILED);
+        }
+        assertThat(jdbc.queryForObject("SELECT status FROM fault_experiment", String.class))
+                .isEqualTo("FAILED");
+    }
+
+    private static Connection holderConnection() throws Exception {
+        Connection holder = DriverManager.getConnection(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword());
+        holder.setAutoCommit(false);
+        return holder;
+    }
+
+    /** processlist 需要 PROCESS 权限（Testcontainers 的 root 与应用用户同密码）。 */
+    private static Connection observerConnection() throws Exception {
+        return DriverManager.getConnection(MYSQL.getJdbcUrl(), "root", MYSQL.getPassword());
+    }
+
+    private static void lockSystemRow(Connection holder) {
+        try (var lock = holder.prepareStatement("SELECT id FROM managed_system WHERE system_key = ? FOR UPDATE")) {
+            lock.setString(1, SYSTEM);
+            lock.executeQuery().close();
+        } catch (java.sql.SQLException ex) {
+            throw new IllegalStateException(ex);
+        }
+    }
+
+    /** 与注入/Reset 准入相同的当前读（FOR SHARE）。 */
+    private static int countInProgressForShare(Connection holder) throws Exception {
+        try (var count = holder.prepareStatement("SELECT COUNT(*) FROM fault_experiment f JOIN managed_system s"
+                + " ON s.id = f.managed_system_id WHERE s.system_key = ?"
+                + " AND f.status IN ('INJECTING', 'ACTIVE', 'RESETTING') FOR SHARE OF f")) {
+            count.setString(1, SYSTEM);
+            try (var rs = count.executeQuery()) {
+                rs.next();
+                return rs.getInt(1);
+            }
+        }
+    }
+
+    /** 等到状态收尾事务在锁上等待：修复后停在系统行锁，修复前停在 UPDATE fault_experiment。 */
+    private static void awaitStatusWriterWaiting(Connection observer) throws Exception {
+        long deadline = System.nanoTime() + Duration.ofSeconds(10).toNanos();
+        while (true) {
+            try (var statement = observer.createStatement();
+                    var rs = statement.executeQuery("SELECT COUNT(*) FROM information_schema.processlist"
+                            + " WHERE (info LIKE 'SELECT id FROM managed_system WHERE id = % FOR UPDATE'"
+                            + " OR info LIKE '%UPDATE fault_experiment%') AND id <> CONNECTION_ID()")) {
+                rs.next();
+                if (rs.getInt(1) > 0) {
+                    return;
+                }
+            }
+            assertThat(System.nanoTime())
+                    .as("status writer waits for a lock: " + statements(observer))
+                    .isLessThan(deadline);
+            Thread.sleep(20);
+        }
     }
 
     /**

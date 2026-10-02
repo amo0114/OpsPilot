@@ -37,7 +37,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  *       detected_at = 确认时间，须满足 started_at ≤ detected_at ≤ 此刻）并标 ACTIVE。未确认生效或 Incident 未创建，实验为 FAILED，不留下 Incident（05 §71）。
  *   <li>Reset：只恢复实验环境（05 §72），不改变 Incident；ACTIVE 或 FAILED 可 Reset，RESETTING 期间外部动作在事务外。
  * </ol>
- * Ground Truth 只在插入时写入；本服务的返回值、Incident 的标题与影响、时间线都不含答案（09 §21）。
+ * Ground Truth 在插入时写入，确认生效时只补充注入器报告的事实（被停止的容器，09 §63）；本服务的返回值、Incident 的标题与影响、时间线都
+ * 不含答案（09 §21）。
  */
 @Service
 public class FaultLabApplicationService {
@@ -49,6 +50,9 @@ public class FaultLabApplicationService {
 
     /** 与 fault_experiment.error_message 列长度一致。 */
     static final int ERROR_MESSAGE_MAX = 1000;
+
+    /** 注入器不控制该系统或目标（B34-R1 P1）。 */
+    static final String NOT_CONTROLLED = "INJECTOR_NOT_BOUND_TO_SYSTEM";
 
     static final String INTERRUPTED_MESSAGE = "Java process exited before the fault lab action finished";
 
@@ -102,18 +106,19 @@ public class FaultLabApplicationService {
                         "Fault scenario not found",
                         Map.of("scenarioKey", String.valueOf(command.scenarioKey()))));
         FaultInjector injector = injectors.get(scenario.scenarioKey());
-        FaultTarget target = transaction.execute(status -> prepare(scenario, command.systemKey(), injector != null));
+        FaultTarget target = transaction.execute(status -> prepare(scenario, command.systemKey(), injector));
         long experimentId = target.experimentId();
 
-        Instant startedAt;
+        FaultInjection injection;
         Instant detectedAt;
         try {
-            startedAt = injector.inject(target);
+            injection = injector.inject(target);
             detectedAt = injector.verifyInjected(target);
         } catch (RuntimeException ex) {
             fail(experimentId, FaultExperimentStatus.INJECTING, ex);
             throw injectionFailed(experimentId, "INJECTION_NOT_CONFIRMED");
         }
+        Instant startedAt = injection == null ? null : injection.startedAt();
         // 09 §19：started_at（故障生效）≤ detected_at（首次确认）≤ 此刻；不借用人工创建 Incident 的 5 分钟容差（B33-R1 P2）
         if (startedAt == null
                 || detectedAt == null
@@ -123,6 +128,7 @@ public class FaultLabApplicationService {
             throw injectionFailed(experimentId, "INJECTION_TIMES_INVALID");
         }
         try {
+            String groundTruth = completedGroundTruth(scenario, injection);
             CreateIncidentResult incident = incidents.createIncident(
                     new CreateIncidentCommand(
                             target.systemKey(),
@@ -135,7 +141,7 @@ public class FaultLabApplicationService {
                             command.actor()),
                     detectedAt,
                     created -> {
-                        if (!experiments.markActive(experimentId, created.id(), startedAt, now())) {
+                        if (!experiments.markActive(experimentId, created.id(), startedAt, groundTruth, now())) {
                             throw new IllegalStateException("experiment is no longer INJECTING: " + experimentId);
                         }
                     });
@@ -145,6 +151,17 @@ public class FaultLabApplicationService {
             fail(experimentId, FaultExperimentStatus.INJECTING, ex);
             throw injectionFailed(experimentId, "INCIDENT_NOT_CREATED");
         }
+    }
+
+    /** 注入器报告了被停止的容器时，Ground Truth 补上容器与停止时间（09 §63）；否则为空，保持插入时的内容。 */
+    private String completedGroundTruth(FaultScenario scenario, FaultInjection injection) {
+        if (injection.stoppedContainerId() == null) {
+            return null;
+        }
+        return codecs.encode(
+                FaultGroundTruthV1.SCHEMA_NAME,
+                FaultGroundTruthV1.SCHEMA_VERSION,
+                scenario.groundTruth().withStoppedConsumer(injection.stoppedContainerId(), injection.startedAt()));
     }
 
     /**
@@ -162,6 +179,7 @@ public class FaultLabApplicationService {
                     Map.of("experimentId", experimentId, "status", FaultExperimentStatus.FAILED.name()));
         }
         transaction.executeWithoutResult(status -> {
+            lockSystemOf(experimentId);
             if (!experiments.markReset(experimentId, now())) {
                 throw new IllegalStateException("experiment is no longer RESETTING: " + experimentId);
             }
@@ -176,8 +194,11 @@ public class FaultLabApplicationService {
         return marked == null ? 0 : marked;
     }
 
-    /** 校验顺序：系统 → 环境（05 §68，先于注入器可用性，B33-R1 P2）→ 资源 → 注入器 → 系统行锁与进行中实验 → 插入。 */
-    private FaultTarget prepare(FaultScenario scenario, String systemKey, boolean injectorAvailable) {
+    /**
+     * 校验顺序：系统 → 环境（05 §68，先于注入器可用性，B33-R1 P2）→ 资源 → 注入器可用且控制该系统与目标（B34-R1 P1）→ 系统行锁与进行中
+     * 实验 → 插入。
+     */
+    private FaultTarget prepare(FaultScenario scenario, String systemKey, FaultInjector injector) {
         ManagedSystem system = systems.findBySystemKey(systemKey)
                 .orElseThrow(() -> new ApplicationException(
                         ErrorCode.SYSTEM_NOT_FOUND,
@@ -194,11 +215,14 @@ public class FaultLabApplicationService {
                 throw notAllowed(scenario, system.systemKey(), "AFFECTED_RESOURCE_NOT_AVAILABLE");
             }
         }
-        if (!injectorAvailable) {
+        if (injector == null) {
             throw new ApplicationException(
                     ErrorCode.FAULT_INJECTION_FAILED,
                     "No injector for the scenario",
                     Map.of("scenarioKey", scenario.scenarioKey(), "reason", "INJECTOR_NOT_AVAILABLE"));
+        }
+        if (!injector.controls(system.systemKey(), target.resourceKey())) {
+            throw notAllowed(scenario, system.systemKey(), NOT_CONTROLLED);
         }
         experiments.lockSystem(system.id());
         if (experiments.existsInProgress(system.id(), null)) {
@@ -247,6 +271,18 @@ public class FaultLabApplicationService {
                     ErrorCode.FAULT_RESET_FAILED,
                     "No injector for the scenario",
                     Map.of("experimentId", experimentId, "reason", "INJECTOR_NOT_AVAILABLE"));
+        }
+        if (!injector.controls(experiment.systemKey(), experiment.targetResourceKey())) {
+            throw new ApplicationException(
+                    ErrorCode.FAULT_SCENARIO_NOT_ALLOWED,
+                    "Fault scenario does not apply to the system",
+                    Map.of(
+                            "experimentId",
+                            experimentId,
+                            "systemKey",
+                            experiment.systemKey(),
+                            "reason",
+                            NOT_CONTROLLED));
         }
         if (!experiments.markResetting(experimentId, experiment.status(), now())) {
             throw new IllegalStateException("experiment changed under its row lock: " + experimentId);
@@ -308,13 +344,27 @@ public class FaultLabApplicationService {
         String bounded = message.codePointCount(0, message.length()) > ERROR_MESSAGE_MAX
                 ? message.substring(0, message.offsetByCodePoints(0, ERROR_MESSAGE_MAX))
                 : message;
-        Boolean marked = transaction.execute(status -> experiments.markFailed(experimentId, from, bounded, now()));
+        Boolean marked = transaction.execute(status -> {
+            lockSystemOf(experimentId);
+            return experiments.markFailed(experimentId, from, bounded, now());
+        });
         log.warn(
                 "Fault lab experiment failed: experimentId={} from={} recorded={} exception={}",
                 experimentId,
                 from,
                 marked,
                 cause.getClass().getSimpleName());
+    }
+
+    /**
+     * 在系统 → 实验锁序下更新实验状态（B34 修复 TASK-092 死锁）：状态变化会改写 (managed_system_id, status) 索引，外键检查随之对
+     * managed_system 行加 S 锁；若不先取系统行锁，就会与已持有系统行锁、正在当前读进行中实验的注入/Reset 形成环。markActive 所在的创建
+     * Incident 事务在插入 Incident 时已先对系统行取得 S 锁，不在此列。
+     */
+    private void lockSystemOf(long experimentId) {
+        experiments.lockSystem(experiments
+                .findSystemId(experimentId)
+                .orElseThrow(() -> new IllegalStateException("fault experiment disappeared: " + experimentId)));
     }
 
     private Instant now() {

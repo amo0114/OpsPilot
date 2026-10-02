@@ -1,17 +1,19 @@
 package io.github.ismoyuan.opspilot.infrastructure.faultlab;
 
+import io.github.ismoyuan.opspilot.application.faultlab.FaultInjection;
 import io.github.ismoyuan.opspilot.application.faultlab.FaultInjector;
 import io.github.ismoyuan.opspilot.application.faultlab.FaultTarget;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 测试用注入器：按用例设定成功、失败或阻塞，并记录每次调用时是否处在数据库事务中。只用于测试 Fault Lab 的控制流；真实注入器属
- * TASK-093～095。
+ * 测试用注入器：按用例设定成功、失败或阻塞，并记录每次调用时是否处在数据库事务中。只用于测试 Fault Lab 的控制流；真实注入器见
+ * StatisticsConsumerStopInjector（TASK-093）及 TASK-094～095。
  */
 final class ScriptedFaultInjector implements FaultInjector {
 
@@ -25,10 +27,16 @@ final class ScriptedFaultInjector implements FaultInjector {
     volatile Duration startedAgo = Duration.ofSeconds(5);
     /** 确认时间相对当前时间的偏移；大于 startedAgo 时确认时间早于生效时间（违反 started_at ≤ detected_at）。 */
     volatile Duration detectedAgo = Duration.ofSeconds(1);
+    /** 不控制的系统（controls 返回 false）。 */
+    volatile Set<String> uncontrolledSystems = Set.of();
+    /** 注入报告的被停止容器（写入 Ground Truth）；为空时不报告。 */
+    volatile String stoppedContainerId;
 
     /** 确认时先执行的动作（模拟确认期间环境变化）。 */
     volatile Runnable onVerify;
 
+    volatile CountDownLatch resetEntered;
+    volatile CountDownLatch releaseReset;
     volatile CountDownLatch injectEntered;
     volatile CountDownLatch releaseInject;
 
@@ -44,6 +52,10 @@ final class ScriptedFaultInjector implements FaultInjector {
         resetFailure = null;
         startedAgo = Duration.ofSeconds(5);
         detectedAgo = Duration.ofSeconds(1);
+        stoppedContainerId = null;
+        uncontrolledSystems = Set.of();
+        resetEntered = null;
+        releaseReset = null;
         injectEntered = null;
         releaseInject = null;
         onVerify = null;
@@ -55,7 +67,12 @@ final class ScriptedFaultInjector implements FaultInjector {
     }
 
     @Override
-    public Instant inject(FaultTarget target) {
+    public boolean controls(String systemKey, String targetResourceKey) {
+        return !uncontrolledSystems.contains(systemKey);
+    }
+
+    @Override
+    public FaultInjection inject(FaultTarget target) {
         record("inject", target);
         CountDownLatch entered = injectEntered;
         if (entered != null) {
@@ -65,7 +82,7 @@ final class ScriptedFaultInjector implements FaultInjector {
         if (injectFailure != null) {
             throw injectFailure;
         }
-        return Instant.now().minus(startedAgo);
+        return new FaultInjection(Instant.now().minus(startedAgo), stoppedContainerId);
     }
 
     @Override
@@ -84,6 +101,11 @@ final class ScriptedFaultInjector implements FaultInjector {
     @Override
     public void reset(FaultTarget target) {
         record("reset", target);
+        CountDownLatch entered = resetEntered;
+        if (entered != null) {
+            entered.countDown();
+            await(releaseReset);
+        }
         if (resetFailure != null) {
             throw resetFailure;
         }

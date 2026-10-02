@@ -230,7 +230,8 @@ class ShortLinkDemoSeedTest {
                         entry("shortlink-redis->redis-local", new RedisResourceBindingV1(null, null)),
                         entry(
                                 "statistics-stream->redis-local",
-                                new RedisResourceBindingV1("shortlink:stats", "stats-consumer-group")),
+                                new RedisResourceBindingV1(
+                                        "short-link:stats-stream", "short-link:stats-stream:only-group")),
                         entry("shortlink-mysql->mysql-readonly", new MySqlResourceBindingV1("shortlink")));
     }
 

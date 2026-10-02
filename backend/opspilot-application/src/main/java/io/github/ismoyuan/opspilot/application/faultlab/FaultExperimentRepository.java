@@ -5,8 +5,8 @@ import java.time.Instant;
 import java.util.Optional;
 
 /**
- * fault_experiment 的生命周期端口（04 §63）。状态只按期望来源状态条件推进。本端口的读取结果不含 Ground Truth：Ground Truth 只在插入时
- * 写入，读取只经 {@link io.github.ismoyuan.opspilot.application.faultlab.evaluation.GroundTruthQuery}（04 §64）。
+ * fault_experiment 的生命周期端口（04 §63）。状态只按期望来源状态条件推进。本端口的读取结果不含 Ground Truth：Ground Truth 在插入时
+ * 写入、确认生效时可补充注入事实，读取只经 {@link io.github.ismoyuan.opspilot.application.faultlab.evaluation.GroundTruthQuery}（04 §64）。
  */
 public interface FaultExperimentRepository {
 
@@ -37,8 +37,13 @@ public interface FaultExperimentRepository {
 
     Optional<FaultExperimentRecord> findForUpdate(long experimentId);
 
-    /** INJECTING → ACTIVE，同时写入 Incident 与故障生效时间。@return 是否由本次推进 */
-    boolean markActive(long experimentId, long incidentId, Instant injectedAt, Instant now);
+    /**
+     * INJECTING → ACTIVE，同时写入 Incident 与故障生效时间。
+     *
+     * @param groundTruthPayload 补充了注入事实的完整 fault-lab.ground-truth / 1 JSON；为空时保留插入时的 Ground Truth
+     * @return 是否由本次推进
+     */
+    boolean markActive(long experimentId, long incidentId, Instant injectedAt, String groundTruthPayload, Instant now);
 
     /** {@code from}（INJECTING 或 RESETTING）→ FAILED，写入脱敏的错误信息。@return 是否由本次推进 */
     boolean markFailed(long experimentId, FaultExperimentStatus from, String errorMessage, Instant now);

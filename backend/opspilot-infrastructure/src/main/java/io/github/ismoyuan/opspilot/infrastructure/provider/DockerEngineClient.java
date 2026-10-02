@@ -20,9 +20,10 @@ import java.util.Locale;
 import java.util.regex.Pattern;
 
 /**
- * 经本机 unix socket 访问 Docker Engine API 的最小客户端（08 TASK-057、TASK-070）：只能发出两种请求——只读的
- * {@code GET /containers/{name}/json}，以及唯一的写操作 {@code POST /containers/{id}/restart}（只接受准入时解析出的容器 id）；没有创建、
- * 删除、exec 或其他路径，不经 CLI、shell 或子进程。一次调用一个连接（Connection: close）、不重试。unix socket 通道没有读超时，由看门狗
+ * 经本机 unix socket 访问 Docker Engine API 的最小客户端（08 TASK-057、TASK-070、TASK-093）：调查与执行只能发出两种请求——只读的
+ * {@code GET /containers/{name}/json}，以及唯一的写操作 {@code POST /containers/{id}/restart}（只接受准入时解析出的容器 id）；另有只供
+ * Demo Fault Lab 控制面（{@link DemoControlClient}）使用的 {@code POST /containers/{id}/stop} 与 {@code start}。没有创建、删除、exec 或
+ * 其他路径，不经 CLI、shell 或子进程。一次调用一个连接（Connection: close）、不重试。unix socket 通道没有读超时，由看门狗
  * 在调用期限处关闭通道（记 TIMEOUT）；响应体（分块或定长）超过上限即停止（RESULT_TOO_LARGE）。请求开始写出之后的失败带
  * requestSent 标记：写操作此时结果未知，不能当作未发送（04 §82）。
  */
@@ -100,6 +101,34 @@ final class DockerEngineClient {
                 "POST /containers/" + containerId + "/restart?t=" + stopTimeoutSeconds + " HTTP/1.1\r\n"
                         + "Host: docker\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
                 deadline);
+    }
+
+    /** 停止一个容器（SIGTERM，{@code graceSeconds} 后强制结束）；只供 {@link DemoControlClient}。成功 204，已停止 304。 */
+    Response stop(Path socket, String containerId, int graceSeconds, Instant deadline) {
+        return post(socket, containerId, "stop?t=" + requireNonNegative(graceSeconds), deadline);
+    }
+
+    /** 启动一个已停止的容器；只供 {@link DemoControlClient}。成功 204，已在运行 304。 */
+    Response start(Path socket, String containerId, Instant deadline) {
+        return post(socket, containerId, "start", deadline);
+    }
+
+    private Response post(Path socket, String containerId, String action, Instant deadline) {
+        if (!CONTAINER_ID.matcher(containerId).matches()) {
+            throw new ProviderCallException(ErrorCode.INVALID_BINDING, "Container id is invalid");
+        }
+        return exchange(
+                socket,
+                "POST /containers/" + containerId + "/" + action + " HTTP/1.1\r\n"
+                        + "Host: docker\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                deadline);
+    }
+
+    private static int requireNonNegative(int seconds) {
+        if (seconds < 0) {
+            throw new IllegalArgumentException("seconds must not be negative");
+        }
+        return seconds;
     }
 
     private Response exchange(Path socket, String request, Instant deadline) {

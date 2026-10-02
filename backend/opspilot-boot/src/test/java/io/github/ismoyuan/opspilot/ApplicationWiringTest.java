@@ -7,11 +7,13 @@ import io.github.ismoyuan.opspilot.application.dispatch.InvestigationWorker;
 import io.github.ismoyuan.opspilot.application.dispatch.RecoveryVerificationWorker;
 import io.github.ismoyuan.opspilot.application.dispatch.WorkDispatcher;
 import io.github.ismoyuan.opspilot.application.execution.ActionExecutionService;
+import io.github.ismoyuan.opspilot.application.faultlab.FaultInjector;
 import io.github.ismoyuan.opspilot.application.recovery.RecoveryVerificationService;
 import io.github.ismoyuan.opspilot.infrastructure.dispatch.InProcessWorkDispatcher;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.ApplicationContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.junit.jupiter.Container;
@@ -48,6 +50,9 @@ class ApplicationWiringTest {
     @Autowired
     RecoveryVerificationWorker verifications;
 
+    @Autowired
+    ApplicationContext context;
+
     /** 应用以真实派发器与真实 Worker 启动（上下文加载即证明没有创建环）。 */
     @Test
     void theRealDispatcherStartsWithTheRealWorkers() {
@@ -55,5 +60,11 @@ class ApplicationWiringTest {
         assertThat(executions).isInstanceOf(ActionExecutionService.class);
         assertThat(verifications).isInstanceOf(RecoveryVerificationService.class);
         assertThat(investigations.getClass().getSimpleName()).doesNotStartWith("Unwired");
+    }
+
+    /** 默认（生产）配置没有任何 Fault Lab 注入器（08 TASK-093：生产 Profile 禁用 Fault Hook）。 */
+    @Test
+    void theDefaultProfileHasNoFaultInjector() {
+        assertThat(context.getBeansOfType(FaultInjector.class)).isEmpty();
     }
 }

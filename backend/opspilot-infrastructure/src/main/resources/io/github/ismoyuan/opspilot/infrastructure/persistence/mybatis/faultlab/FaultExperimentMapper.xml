@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<!-- fault_experiment（04 §63）。状态只按来源状态条件推进；ground_truth_payload 只由 selectGroundTruth 读取（04 §64）。 -->
+<!-- fault_experiment（04 §63）。状态只按来源状态条件推进；ground_truth_payload 只由 selectGroundTruth 读取（04 §64），只在插入与 markActive（补充注入事实，09 §63）时写入。 -->
 <mapper namespace="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.faultlab.FaultExperimentMapper">
 
     <resultMap id="experimentRow" type="io.github.ismoyuan.opspilot.infrastructure.persistence.mybatis.faultlab.FaultExperimentMapper$ExperimentRow">
@@ -69,7 +69,11 @@
 
     <update id="markActive">
         UPDATE fault_experiment
-        SET status = 'ACTIVE', incident_id = #{incidentId}, injected_at = #{injectedAt}, updated_at = #{now}
+        SET status = 'ACTIVE', incident_id = #{incidentId}, injected_at = #{injectedAt},
+        <if test="groundTruthPayload != null">
+            ground_truth_payload = #{groundTruthPayload},
+        </if>
+            updated_at = #{now}
         WHERE id = #{id} AND status = 'INJECTING'
     </update>
 
