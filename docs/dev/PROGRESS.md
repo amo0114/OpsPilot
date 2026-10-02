@@ -3,7 +3,7 @@
 > 编号与名称取自 docs/specs/08-implementation-plan.md 的 TASK 标题；范围、前置依赖与完成标准只以 08 为准，本表不复制任务正文、不维护第二份依赖图。
 > 状态：TODO / READY / IN_PROGRESS / REVIEW / BLOCKED / DONE（08 §31 开发任务状态，与 IncidentStatus 无关）。批外依赖全部 DONE 才能开批；批内前置实现且针对性验证完成后可推进，整批通过 Review 并提交后成员一起 DONE。FROZEN 只表示规格定稿。
 > 交付定位：已提交写真实 commit；未提交写“未提交＋变更文件”。验证摘要只写实际执行过的检查，未执行写 NOT RUN。
-> 最近更新：2026-10-02（B34 REVIEW，Base 2e4adeb，B34-R3 PASS，待用户授权提交）
+> 最近更新：2026-10-02（B34 DONE，commit c8b7904；ShortLink 5310a70；B35 未开始）
 > 批次映射与记录模板见 [BATCH-PLAN](BATCH-PLAN.md)；共同验证/Review 记本文件“批次记录”，Task 行引用证据编号。
 
 | Task | 批次 | 名称 | 状态 | 交付定位 | 验证摘要 |
@@ -100,7 +100,7 @@
 | TASK-090 | B33 | Fault Lab 基础模型 | DONE | commit e296fd6（B33，Base 0afaecc） | B33-V2 verify exit 0（R1 修复后）＋FaultLabIntegrationTest（V007 约束 9 例、生命周期）＋变异检查；B33-R2 PASS（R1 三项已解决；独立 36/36；非阻塞 P3 见批次记录），待提交 |
 | TASK-091 | B33 | Ground Truth Isolation | DONE | commit e296fd6（B33，Base 0afaecc） | B33-V2 verify exit 0（R1 修复后）＋GroundTruthIsolationTest 3/3（类依赖、Mapper SQL、三场景真实上下文序列化无答案标记）＋变异检查；B33-R2 PASS（R1 三项已解决；独立 36/36；非阻塞 P3 见批次记录），待提交 |
 | TASK-092 | B33 | Fault Inject / Reset API | DONE | commit e296fd6（B33，Base 0afaecc） | B33-V2 verify exit 0（R1 修复后）＋FaultLabIntegrationTest 13/13＋FaultLabApiContractTest 3/3（HTTP 契约、错误码）＋变异检查；B33-R2 PASS（R1 三项已解决；独立 36/36；非阻塞 P3 见批次记录），待提交 |
-| TASK-093 | B34 | Statistics Consumer Stop Injector | REVIEW | 未提交（B34，Base 2e4adeb；ShortLink 分支 opspilot-demo，基线 da887dc） | B34-R3 PASS：R2-01 关闭，R1 四项与 TASK-092 死锁修复均已复核通过；独立 verify 107/107＋真实 HTTP 超时/中断复测；B34-V3 完整 verify 及 B34-E3 证据已核验；待用户授权分别提交两个仓库 |
+| TASK-093 | B34 | Statistics Consumer Stop Injector | DONE | commit c8b7904（B34，Base 2e4adeb）；ShortLink 分支 opspilot-demo commit 5310a70（基线 da887dc） | B34-V3 verify exit 0（domain 43、infrastructure 910、web 52、boot 19）＋B34-E1～E3 真实 ShortLink 注入/Gate/Reset；B34-R1/R2 NEEDS CHANGES 均已修复，B34-R3 PASS（独立 107/107）；含 TASK-092 Reset/失败记录锁序死锁修复 |
 | TASK-094 | B35 | Redis Latency Injector | TODO | — | NOT RUN |
 | TASK-095 | B36 | MySQL Slow Query Injector | TODO | — | NOT RUN |
 | TASK-096 | B37 | Web 基础壳 | TODO | — | NOT RUN |
@@ -1095,7 +1095,7 @@
 
 ### B34 — S3 Consumer Stop 真实注入
 
-- 状态：REVIEW（B34-R3 PASS；R1 四项、R2-01 与 TASK-092 死锁修复均已复核通过；待用户授权提交，未提交）
+- 状态：DONE（B34-R3 PASS，已提交 OpsPilot c8b7904、ShortLink 5310a70）
 - 成员及顺序：TASK-093；批外前置：TASK-092 DONE（e296fd6，B33-R2 PASS）
 - Base SHA：OpsPilot 2e4adebaea37bc15ab89f396b9ed782f26c41e29；靶场仓库 /root/projects/shortlink 基线 da887dc54ddd023e4e772251715e84d0fd4af17a（main，干净）
 - 范围（用户 2026-10-02 确认：ShortLink 改动放本地新分支 opspilot-demo、提交不推送；S3 Compose 放 OpsPilot deploy/demo，由 TASK-105 扩充）：
@@ -1185,7 +1185,7 @@
   - 两仓库 `git diff --check <base>`、`SHORTLINK_REPO=/root/projects/shortlink docker compose -f deploy/demo/docker-compose.yml config -q` 均通过。S3 调查→审批→重启→恢复（TASK-109）、OpsPilot 入 Compose 与 Loki 部署隔离（TASK-105）、真实 LLM 本轮 **NOT RUN/NOT VERIFIED**；未重复源码变异检查。上述后续范围不计为本批完成证据。
   - 受审清单 `/tmp/b34-r3-opspilot.sha256`（30 文件；清单 SHA-256 `a6dffed943d07398b9d3c901a67d908068e0ae7ecd50262d5d495887903d962a`）、`/tmp/b34-r3-shortlink.sha256`（5 文件；`1b375b4f0c8c801fe246c1e03051d20bf30bd6e3a28e02cd4c7b4b6603963f84`），已核对覆盖除两份进度文档外的所有 tracked/untracked 变更。审查仅更新 PROGRESS/CURRENT；实现、配置、仓库测试、ShortLink 未改。新增依赖：无；Migration：无。
   - Commit Recommendation：可按用户授权分别提交 ShortLink 分支与 OpsPilot，再回填两个真实 SHA；当前没有提交授权，两仓库未提交/推送。B34 与 TASK-093 保持 REVIEW，未标 DONE，不开始 B35。
-- 提交：未提交（OpsPilot 与 ShortLink 均已通过 B34-R3，待用户授权）；范围外问题：见待处理问题（ShortLink User-Agent 空指针、停止顺序与消费者条目、探测流量计入 PV、非 S3 Seed 映射、Docker socket 写权限、Compose 待 TASK-105 扩充）
+- 提交：OpsPilot 代码提交 c8b790450c638606f9677f6e33d787de08153639（feat(faultlab): real S3 statistics consumer stop injector with demo target (TASK-093)，含 docs/dev 批次证据）；ShortLink 靶场分支 opspilot-demo 提交 5310a70e9aaaa3afad1e2cea80e69eb64f659179（feat(project): 增加 OpsPilot Demo 运行单元配置与镜像）；提交前两仓库受审文件与 B34-R3 哈希清单逐项一致（/tmp/b34-r3-opspilot.sha256 30 个、/tmp/b34-r3-shortlink.sha256 5 个）；SHA 回填为后续 docs 提交；均未推送；范围外问题：见待处理问题（ShortLink User-Agent 空指针、停止顺序与消费者条目、探测流量计入 PV、非 S3 Seed 映射、Docker socket 写权限、Compose 待 TASK-105 扩充）
 
 ### B33 — Fault Lab 模型、Ground Truth 隔离与 API
 
